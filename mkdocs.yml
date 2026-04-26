@@ -1,0 +1,56 @@
+site_name: Cassocial Documentation
+site_description: Self-hosted link aggregator and social profile landing page
+site_author: casapps
+site_url: https://casapps-cassocial.readthedocs.io
+
+repo_name: casapps/cassocial
+repo_url: https://github.com/casapps/cassocial
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Dark mode (default)
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+
+extra_css:
+  - stylesheets/dark.css
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - Admin Panel: admin.md
+  - API Reference: api.md
+  - Development: development.md

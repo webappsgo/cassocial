@@ -1,0 +1,25 @@
+name: cassocial-test
+
+services:
+  cassocial:
+    image: ghcr.io/casapps/cassocial:latest
+    container_name: cassocial-test
+    restart: "no"
+    environment:
+      - MODE=development
+      - DEBUG=true
+      - TZ=America/New_York
+    ports:
+      - "64581:80"
+    volumes:
+      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
+      # NEVER run from project directory - always use temp dir workflow
+      - ./rootfs/config:/config
+      - ./rootfs/data:/data
+    networks:
+      - cassocial-test
+
+networks:
+  cassocial-test:
+    name: cassocial-test
+    external: false

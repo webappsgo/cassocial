@@ -1,0 +1,120 @@
+name: Docker Build
+
+on:
+  push:
+    branches: ['**']  # ALL branches
+    tags:
+      - 'v*'
+      - '*.*.*'
+  workflow_dispatch:
+
+env:
+  PROJECTNAME: cassocial
+  IMAGE_NAME: ${{ gitea.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set registry from server URL
+        run: |
+          # Extract registry from Gitea server URL (works with self-hosted)
+          # Example: https://git.example.com -> git.example.com
+          SERVER_URL="${{ gitea.server_url }}"
+          REGISTRY="${SERVER_URL#https://}"
+          REGISTRY="${REGISTRY#http://}"
+          echo "REGISTRY=${REGISTRY}" >> $GITEA_ENV
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Set build info
+        run: |
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+          echo "YYMM=$(date +"%y%m")" >> $GITEA_ENV
+          if [[ "${{ gitea.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITEA_REF_NAME}"
+            echo "VERSION=${VERSION#v}" >> $GITEA_ENV  # Strip 'v' prefix
+            echo "IS_TAG=true" >> $GITEA_ENV
+          else
+            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+            echo "IS_TAG=false" >> $GITEA_ENV
+          fi
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+
+      - name: Determine tags
+        id: tags
+        run: |
+          # Use self-hosted registry URL
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+
+          if [[ "${{ env.IS_TAG }}" == "true" ]]; then
+            # Release tag - version, latest, YYMM
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.YYMM }}"
+          else
+            # All pushes get devel tag
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
+
+            # Beta branch also gets beta tag
+            if [[ "${{ gitea.ref }}" == refs/heads/beta ]]; then
+              TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
+            fi
+          fi
+
+          echo "tags=$TAGS" >> $GITEA_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            COMMIT_ID=${{ env.COMMIT_ID }}
+          labels: |
+            org.opencontainers.image.vendor=casapps
+            org.opencontainers.image.authors=casapps
+            org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
+            org.opencontainers.image.description=Containerized version of ${{ env.PROJECTNAME }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.revision=${{ env.COMMIT_ID }}
+            org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
+          annotations: |
+            manifest:org.opencontainers.image.vendor=casapps
+            manifest:org.opencontainers.image.authors=casapps
+            manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.description=Containerized version of ${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.licenses=MIT
+            manifest:org.opencontainers.image.version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
+            manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
+            manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
+            manifest:org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
