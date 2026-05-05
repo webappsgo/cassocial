@@ -34,8 +34,8 @@ https://cassocial.casapps.us
 docker run -d \
   --name cassocial \
   -p 64580:80 \
-  -v ./rootfs/config:/config:z \
-  -v ./rootfs/data:/data:z \
+  -v ./volumes/config:/config:z \
+  -v ./volumes/data:/data:z \
   ghcr.io/casapps/cassocial:latest
 ```
 
