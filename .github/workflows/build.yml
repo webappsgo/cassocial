@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches:
+      - main
+      - master
+      - devel
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
+
+permissions:
+  contents: read
+
+env:
+  PROJECTNAME: cassocial
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    container: golang:alpine
+
+    steps:
+      - name: Install git
+        run: apk add --no-cache git
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+
+      - name: Set build info
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=0.0.0-dev" >> $GITHUB_ENV
+          fi
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build server
+        env:
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" ./src
+
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" ./src/client
+
+      - name: Test
+        env:
+          CGO_ENABLED: 0
+        run: go test -v -cover ./...
+
+  validate:
+    name: Repo Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+
+      - name: Check release.txt exists
+        run: |
+          if [ ! -f release.txt ]; then
+            echo "ERROR: release.txt is required"
+            exit 1
+          fi
+          echo "release.txt: $(cat release.txt)"
+
+      - name: Validate go.mod
+        run: |
+          if [ ! -f go.mod ]; then
+            echo "ERROR: go.mod is required"
+            exit 1
+          fi
+
+      - name: Check src/client exists
+        run: |
+          if [ ! -d src/client ]; then
+            echo "ERROR: src/client/ is required (PART 33)"
+            exit 1
+          fi
+
+      - name: Check CLAUDE.md exists
+        run: |
+          if [ ! -f CLAUDE.md ]; then
+            echo "ERROR: CLAUDE.md is required"
+            exit 1
+          fi

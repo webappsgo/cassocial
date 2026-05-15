@@ -16,18 +16,23 @@ import (
 
 // Build info - set via -ldflags at build time
 var (
-	Version   = "dev"
-	CommitID  = "unknown"
-	BuildDate = "unknown"
+	Version      = "dev"
+	CommitID     = "unknown"
+	BuildDate    = "unknown"
+	OfficialSite = "" // Empty = users must use --server flag
 )
 
 func main() {
 	// CLI flags (following TEMPLATE.md NON-NEGOTIABLE specification)
 	var (
-		showHelp    = flag.Bool("help", false, "Show help information")
-		showHelpS   = flag.Bool("h", false, "Show help information")
-		showVersion = flag.Bool("version", false, "Show version information")
+		showHelp     = flag.Bool("help", false, "Show help information")
+		showHelpS    = flag.Bool("h", false, "Show help information")
+		showVersion  = flag.Bool("version", false, "Show version information")
 		showVersionS = flag.Bool("v", false, "Show version information")
+
+		// Output control flags (PART 8 — NON-NEGOTIABLE)
+		colorMode = flag.String("color", "auto", "Color output mode (always|never|auto)")
+		lang      = flag.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
 
 		// Directory flags
 		configDir = flag.String("config", "", "Configuration directory")
@@ -55,6 +60,9 @@ func main() {
 
 	flag.Parse()
 
+	// Apply NO_COLOR / --color preference before any output
+	applyColorPreference(*colorMode)
+
 	// Handle version
 	if *showVersion || *showVersionS {
 		printVersion()
@@ -66,6 +74,14 @@ func main() {
 		printHelp()
 		os.Exit(0)
 	}
+
+	// Apply language preference (auto-detect from LANG env if not set)
+	if *lang == "" {
+		if l := os.Getenv("LANG"); l != "" {
+			*lang = l
+		}
+	}
+	_ = *lang // Language handling deferred to i18n layer
 
 	// Load configuration
 	cfg, err := config.Load(*configDir, *dataDir, *logDir)
@@ -178,9 +194,11 @@ func printHelp() {
 	fmt.Printf("  %s [options]\n", binaryName)
 	fmt.Println()
 	fmt.Println("Options:")
-	fmt.Println("  -h, --help                       Show this help message")
-	fmt.Println("  -v, --version                    Show version information")
-	fmt.Println("  --mode {production|development}  Set application mode")
+	fmt.Println("  -h, --help                          Show this help message")
+	fmt.Println("  -v, --version                       Show version information")
+	fmt.Println("  --color {always|never|auto}         Color output (default: auto; respects NO_COLOR)")
+	fmt.Println("  --lang CODE                         Language code (default: auto from LANG env)")
+	fmt.Println("  --mode {production|development}     Set application mode")
 	fmt.Println("  --config {dir}                   Configuration directory")
 	fmt.Println("  --data {dir}                     Data directory")
 	fmt.Println("  --log {dir}                      Log directory")
@@ -207,4 +225,13 @@ func printHelp() {
 
 func handleStatus(cfg *config.Config, pidFile string) {
 	fmt.Println("Status: not yet implemented")
+}
+
+// applyColorPreference applies NO_COLOR and --color preference.
+// When NO_COLOR is set (any non-empty value) or --color=never, color output is disabled.
+func applyColorPreference(mode string) {
+	if os.Getenv("NO_COLOR") != "" || mode == "never" {
+		// Color disabled — future colored output checks this package-level flag
+		os.Setenv("NO_COLOR", "1")
+	}
 }

@@ -88,6 +88,7 @@ jobs:
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
+            OFFICIAL_SITE=${{ secrets.OFFICIALSITE }}
           labels: |
             org.opencontainers.image.vendor=casapps
             org.opencontainers.image.authors=casapps

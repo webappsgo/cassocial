@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strconv"
 	"time"
+
+	"github.com/casapps/cassocial/src/config"
 )
 
 // Setting represents a key-value configuration setting
@@ -31,7 +33,7 @@ func (s *Setting) GetInt() (int, error) {
 
 // GetBool returns the value as a boolean
 func (s *Setting) GetBool() (bool, error) {
-	return strconv.ParseBool(s.Value)
+	return config.ParseBool(s.Value), nil
 }
 
 // GetFloat returns the value as a float64

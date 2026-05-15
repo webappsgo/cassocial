@@ -7,8 +7,12 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
 ARG COMMIT_ID
+ARG OFFICIAL_SITE=
 
 WORKDIR /build
+
+# Install build dependencies (git for version info, bash for scripts)
+RUN apk add --no-cache git bash
 
 # Copy go.mod first for layer caching
 COPY go.mod go.sum ./
@@ -17,8 +21,8 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}'" \
-    -o /build/binary/cassocial ./src/main.go
+    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
+    -o /build/binary/cassocial ./src
 
 # =============================================================================
 # Runtime Stage - Minimal Alpine image
@@ -58,9 +62,6 @@ RUN apk add --no-cache \
     tini \
     tor
 
-# Create directories with proper structure
-RUN mkdir -p /config /config/security /data/db /data/logs /data/tor /data/backup
-
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /build/binary/cassocial /usr/local/bin/cassocial
 
@@ -77,7 +78,8 @@ RUN chmod 755 /usr/local/bin/*
 # Set environment
 # Note: Tor auto-enabled because tor binary is installed above
 ENV MODE=development \
-    TZ=America/New_York
+    TZ=America/New_York \
+    DATABASE_DIR=/data/db/sqlite
 
 # Expose internal port (always 80)
 EXPOSE 80

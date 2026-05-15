@@ -2,73 +2,145 @@
 PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
 PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
-# Version: env var > release.txt > default
-VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
+# Version precedence: release.txt > env/default fallback
+VERSION := $(shell [ -f release.txt ] && cat release.txt || echo "${VERSION:-0.1.0}")
 
 # Build info - use TZ env var or system timezone
 # Format: "Thu Dec 17, 2025 at 18:19:24 EST"
 BUILD_DATE := $(shell date +"%a %b %d, %Y at %H:%M:%S %Z")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
+# Official site URL (OPTIONAL - never guess or assume)
+# Sources (in order of precedence):
+#   1. File: site.txt in project root (single line, URL only)
+#   2. Environment variable: OFFICIALSITE=https://example.com
+#   3. Empty (self-hosted projects - users must use --server flag)
+# NEVER infer from project name, domain, or any other source
+OFFICIALSITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}")
+
 # Linker flags to embed build info
 LDFLAGS := -s -w \
 	-X 'main.Version=$(VERSION)' \
 	-X 'main.CommitID=$(COMMIT_ID)' \
-	-X 'main.BuildDate=$(BUILD_DATE)'
+	-X 'main.BuildDate=$(BUILD_DATE)' \
+	-X 'main.OfficialSite=$(OFFICIALSITE)'
 
 # Directories
 BINDIR := binaries
 RELDIR := releases
 
-# Go module cache (persistent across builds)
-GOCACHE := $(HOME)/.cache/go-build
-GOMODCACHE := $(HOME)/go/pkg/mod
+# Go directories (persistent across builds)
+GODIR := $(HOME)/.local/share/go
+GOCACHE := $(HOME)/.local/share/go/build
 
 # Build targets
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
 
-# Docker
-REGISTRY := ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
+# Docker - Set REGISTRY based on your platform (ghcr.io, registry.gitlab.com, git.example.com)
+REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 GO_DOCKER := docker run --rm \
 	-v $(PWD):/build \
 	-v $(GOCACHE):/root/.cache/go-build \
-	-v $(GOMODCACHE):/go/pkg/mod \
+	-v $(GODIR):/go \
 	-w /build \
 	-e CGO_ENABLED=0 \
 	golang:alpine
 
-.PHONY: build release docker test dev clean
+.PHONY: build local release docker test dev clean
 
 # =============================================================================
-# BUILD - Build all platforms + host binary (via Docker with cached modules)
+# BUILD - Build all platforms + local binary (via Docker with cached modules)
 # =============================================================================
 build: clean
 	@mkdir -p $(BINDIR)
 	@echo "Building version $(VERSION)..."
-	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	@mkdir -p $(GOCACHE) $(GODIR)
 
-	# Download modules first (cached)
-	@echo "Downloading Go modules..."
+	# Tidy and download modules
+	@echo "Tidying and downloading Go modules..."
+	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
 
-	# Build for host OS/ARCH
-	@echo "Building host binary..."
+	# Build for local OS/ARCH
+	@echo "Building local binary..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src/main.go"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
 
-	# Build all platforms
+	# Build server for all platforms
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
 		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
-		echo "Building $$OS/$$ARCH..."; \
+		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
 			go build -ldflags \"$(LDFLAGS)\" \
-			-o $$OUTPUT ./src/main.go" || exit 1; \
+			-o $$OUTPUT ./src" || exit 1; \
 	done
 
+	# Build CLI for all platforms (if exists)
+	@if [ -d "src/client" ]; then \
+		for platform in $(PLATFORMS); do \
+			OS=$${platform%/*}; \
+			ARCH=$${platform#*/}; \
+			OUTPUT=$(BINDIR)/$(PROJECTNAME)-cli-$$OS-$$ARCH; \
+			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+			echo "Building CLI $$OS/$$ARCH..."; \
+			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
+				go build -ldflags \"$(LDFLAGS)\" \
+				-o $$OUTPUT ./src/client" || exit 1; \
+		done; \
+	fi
+
+	# Build agent for all platforms (if exists)
+	@if [ -d "src/agent" ]; then \
+		for platform in $(PLATFORMS); do \
+			OS=$${platform%/*}; \
+			ARCH=$${platform#*/}; \
+			OUTPUT=$(BINDIR)/$(PROJECTNAME)-agent-$$OS-$$ARCH; \
+			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+			echo "Building agent $$OS/$$ARCH..."; \
+			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
+				go build -ldflags \"$(LDFLAGS)\" \
+				-o $$OUTPUT ./src/agent" || exit 1; \
+		done; \
+	fi
+
 	@echo "Build complete: $(BINDIR)/"
+
+# =============================================================================
+# LOCAL - Build local binaries only (fast development builds)
+# =============================================================================
+local: clean
+	@mkdir -p $(BINDIR)
+	@echo "Building local binaries version $(VERSION)..."
+	@mkdir -p $(GOCACHE) $(GODIR)
+
+	# Tidy and download modules
+	@echo "Tidying and downloading Go modules..."
+	@$(GO_DOCKER) go mod tidy
+	@$(GO_DOCKER) go mod download
+
+	# Build server binary
+	@echo "Building $(PROJECTNAME)..."
+	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
+
+	# Build CLI binary (if exists)
+	@if [ -d "src/client" ]; then \
+		echo "Building $(PROJECTNAME)-cli..."; \
+		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
+			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli ./src/client"; \
+	fi
+
+	# Build agent binary (if exists)
+	@if [ -d "src/agent" ]; then \
+		echo "Building $(PROJECTNAME)-agent..."; \
+		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
+			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-agent ./src/agent"; \
+	fi
+
+	@echo "Local build complete: $(BINDIR)/"
 
 # =============================================================================
 # RELEASE - Manual local release (stable only)
@@ -106,7 +178,7 @@ release: build
 	@echo "Release complete: $(VERSION)"
 
 # =============================================================================
-# DOCKER - Build and push container to ghcr.io
+# DOCKER - Build and push container to registry (set REGISTRY env var)
 # =============================================================================
 # Uses multi-stage Dockerfile - Go compilation happens inside Docker
 # No pre-built binaries needed
@@ -127,6 +199,7 @@ docker:
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
 		--build-arg COMMIT_ID="$(COMMIT_ID)" \
+		--build-arg OFFICIAL_SITE="$(OFFICIALSITE)" \
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
 		--push \
@@ -135,25 +208,41 @@ docker:
 	@echo "Docker push complete: $(REGISTRY):$(VERSION)"
 
 # =============================================================================
-# TEST - Run all tests (via Docker with cached modules)
+# TEST - Run all tests with coverage enforcement (via Docker)
 # =============================================================================
 test:
-	@echo "Running tests in Docker..."
-	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	@echo "Running tests with coverage..."
+	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod download
-	@$(GO_DOCKER) go test -v -cover ./...
-	@echo "Tests complete"
+	@$(GO_DOCKER) go test -v -cover -coverprofile=coverage.out ./...
+	@COVERAGE=$$($(GO_DOCKER) go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	if [ $$(echo "$$COVERAGE < 100" | bc -l) -eq 1 ]; then \
+		echo "ERROR: Coverage is $$COVERAGE%, must be 100%"; \
+		exit 1; \
+	fi
+	@echo "Tests complete - Coverage: 100% ✓"
 
 # =============================================================================
 # DEV - Quick build for local development/testing (to random temp dir)
 # =============================================================================
-# Fast: host platform only, no ldflags, random temp dir for isolation
+# Fast: local platform only, no ldflags, random temp dir for isolation
+# Builds server + CLI + agent (if they exist)
 dev:
-	@mkdir -p $(GOCACHE) $(GOMODCACHE)
-	@BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG).XXXXXX") && \
-		echo "Quick dev build..." && \
-		$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME) ./src/main.go && \
+	@mkdir -p $(GOCACHE) $(GODIR)
+	@$(GO_DOCKER) go mod tidy
+	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
+		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
+		echo "Quick dev build to $$BUILD_DIR..." && \
+		$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME) ./src && \
 		echo "Built: $$BUILD_DIR/$(PROJECTNAME)" && \
+		if [ -d "src/client" ]; then \
+			$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME)-cli ./src/client && \
+			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-cli"; \
+		fi && \
+		if [ -d "src/agent" ]; then \
+			$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME)-agent ./src/agent && \
+			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-agent"; \
+		fi && \
 		echo "Test:  docker run --rm -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
 
 # =============================================================================
