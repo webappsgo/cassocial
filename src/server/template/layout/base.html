@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#282a36" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  {{if .MetaTitle}}<title>{{.MetaTitle}} | {{.SiteName}}</title>{{else}}<title>{{.SiteName}}</title>{{end}}
+  {{if .MetaDescription}}<meta name="description" content="{{.MetaDescription}}">{{end}}
+  {{if .OgImageURL}}<meta property="og:image" content="{{.OgImageURL}}">{{end}}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{.SiteName}}">
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/themes.css">
+  <link rel="icon" href="/static/images/logo.svg" type="image/svg+xml">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('cassocial-theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  {{template "header" .}}
+
+  <main id="main-content">
+    {{template "content" .}}
+  </main>
+
+  {{template "footer" .}}
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="profile-card">
+  {{if .Profile.HeaderImageURL}}
+  <img src="{{.Profile.HeaderImageURL}}"
+       alt=""
+       class="profile-header-image"
+       aria-hidden="true">
+  {{end}}
+
+  {{if .Profile.AvatarURL}}
+  <img src="{{.Profile.AvatarURL}}"
+       alt="{{.Profile.DisplayName}} avatar"
+       class="profile-avatar">
+  {{else}}
+  <div class="profile-avatar"
+       style="background-color: var(--accent-primary); display:flex; align-items:center; justify-content:center; font-size:3rem; color:#fff;"
+       aria-hidden="true">
+    {{if .Profile.DisplayName}}{{slice .Profile.DisplayName 0 1}}{{else}}?{{end}}
+  </div>
+  {{end}}
+
+  <h1 class="profile-display-name">
+    {{if .Profile.DisplayName}}{{.Profile.DisplayName}}{{else}}@{{.Profile.Slug}}{{end}}
+  </h1>
+
+  {{if .Profile.Bio}}
+  <p class="profile-bio">{{.Profile.Bio}}</p>
+  {{end}}
+
+  {{if .Links}}
+  <section aria-label="Links" class="profile-links">
+    {{range .Links}}
+    {{template "link_card" .}}
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if .Profile.QRCodeEnabled}}
+  <div class="qr-container mt-4" aria-label="QR code for this profile">
+    <img src="/{{.Profile.Slug}}/qr"
+         alt="QR code linking to {{.Profile.DisplayName}}"
+         class="qr-code"
+         width="200"
+         height="200">
+  </div>
+  {{end}}
+</div>
+{{end}}

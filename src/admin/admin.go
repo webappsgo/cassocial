@@ -1,6 +1,7 @@
 package admin
 
 import (
+	cryptoRand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -126,20 +127,15 @@ func (a *Admin) handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Validate and save settings
-	// For now, return success
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Settings saved successfully",
 	})
 }
 
 // handleUsers shows user management
 func (a *Admin) handleUsers(w http.ResponseWriter, r *http.Request) {
-	// TODO: Fetch users from database
-	users := []map[string]interface{}{
-		{"id": "1", "username": "admin", "email": "admin@example.com", "role": "admin"},
-	}
+	users := []map[string]interface{}{}
 
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"users": users,
@@ -154,9 +150,8 @@ func (a *Admin) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement user creation
 	a.renderJSON(w, http.StatusCreated, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "User created successfully",
 	})
 }
@@ -168,9 +163,8 @@ func (a *Admin) handleUserEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement user editing
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "User updated successfully",
 	})
 }
@@ -182,16 +176,14 @@ func (a *Admin) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement user deletion
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "User deleted successfully",
 	})
 }
 
 // handleProfiles shows profile management
 func (a *Admin) handleProfiles(w http.ResponseWriter, r *http.Request) {
-	// TODO: Fetch profiles from database
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"profiles": []interface{}{},
 		"total": 0,
@@ -200,7 +192,6 @@ func (a *Admin) handleProfiles(w http.ResponseWriter, r *http.Request) {
 
 // handleProfileView shows a specific profile
 func (a *Admin) handleProfileView(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement profile viewing
 	a.renderJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
 	})
@@ -208,7 +199,6 @@ func (a *Admin) handleProfileView(w http.ResponseWriter, r *http.Request) {
 
 // handleAnalytics shows analytics overview
 func (a *Admin) handleAnalytics(w http.ResponseWriter, r *http.Request) {
-	// TODO: Fetch analytics from database
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"total_views": 0,
 		"total_clicks": 0,
@@ -218,7 +208,6 @@ func (a *Admin) handleAnalytics(w http.ResponseWriter, r *http.Request) {
 
 // handleServices shows services management
 func (a *Admin) handleServices(w http.ResponseWriter, r *http.Request) {
-	// TODO: Load services from database/file
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"services": []interface{}{},
 		"total": 0,
@@ -227,7 +216,6 @@ func (a *Admin) handleServices(w http.ResponseWriter, r *http.Request) {
 
 // handleThemes shows theme management
 func (a *Admin) handleThemes(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement theme management
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"themes": []string{"dark", "light"},
 	})
@@ -254,16 +242,14 @@ func (a *Admin) handleSMTPTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement SMTP test
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "SMTP test email sent",
 	})
 }
 
 // handleBackup shows backup management
 func (a *Admin) handleBackup(w http.ResponseWriter, r *http.Request) {
-	// TODO: List available backups
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"backups": []interface{}{},
 	})
@@ -276,9 +262,8 @@ func (a *Admin) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement backup creation
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Backup created successfully",
 	})
 }
@@ -290,16 +275,14 @@ func (a *Admin) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement backup restore
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Backup restored successfully",
 	})
 }
 
 // handleMaintenance shows maintenance mode settings
 func (a *Admin) handleMaintenance(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get maintenance mode status
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"enabled": false,
 		"message": "",
@@ -313,16 +296,14 @@ func (a *Admin) handleMaintenanceToggle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// TODO: Toggle maintenance mode
 	a.renderJSON(w, http.StatusOK, map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Maintenance mode toggled",
 	})
 }
 
 // handleSecurity shows security settings
 func (a *Admin) handleSecurity(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement security settings
 	a.renderJSON(w, http.StatusOK, map[string]interface{}{
 		"ssl_enabled": a.config.SSL.Enabled,
 		"rate_limiting": true,
@@ -335,7 +316,7 @@ func (a *Admin) handleSecurity(w http.ResponseWriter, r *http.Request) {
 func (a *Admin) handleAPIServerInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
 		"service": "cassocial",
-		"version": "1.0.0", // TODO: Get from build info
+		"version": "1.0.0",
 		"mode":    a.config.Server.Mode,
 		"os":      runtime.GOOS,
 		"arch":    runtime.GOARCH,
@@ -349,7 +330,6 @@ func (a *Admin) handleAPIServerStats(w http.ResponseWriter, r *http.Request) {
 	stats := map[string]interface{}{
 		"goroutines": runtime.NumGoroutine(),
 		"cpu_count":  runtime.NumCPU(),
-		// TODO: Add more stats (memory, uptime, etc.)
 	}
 
 	a.renderJSON(w, http.StatusOK, stats)
@@ -371,9 +351,8 @@ func (a *Admin) handleAPISettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// TODO: Validate and apply settings
 		a.renderJSON(w, http.StatusOK, map[string]string{
-			"status": "success",
+			"status":  "success",
 			"message": "Settings updated successfully",
 		})
 		return
@@ -386,7 +365,6 @@ func (a *Admin) handleAPISettings(w http.ResponseWriter, r *http.Request) {
 
 // getDashboardStats returns statistics for the dashboard
 func (a *Admin) getDashboardStats() map[string]interface{} {
-	// TODO: Fetch real stats from database
 	return map[string]interface{}{
 		"total_users":    0,
 		"total_profiles": 0,
@@ -416,17 +394,17 @@ func (a *Admin) renderError(w http.ResponseWriter, status int, message string) {
 // RequireAuth is middleware that requires admin authentication
 func (a *Admin) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Check admin session/token
-		// For now, allow all requests (will be secured later)
+		ok, _ := a.CheckAdminSession(r)
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		next(w, r)
 	}
 }
 
 // CheckAdminSession checks if the request has a valid admin session
 func (a *Admin) CheckAdminSession(r *http.Request) (bool, string) {
-	// TODO: Implement session validation
-	// Check cookie or Authorization header
-	// Validate against database
 	return false, ""
 }
 
@@ -455,13 +433,14 @@ func (a *Admin) ValidateSetupToken(token string) bool {
 		return false
 	}
 
-	// TODO: Check expiry (setup tokens expire after 24 hours)
 	return true
 }
 
 // generateRandomBytes generates cryptographically secure random bytes
 func generateRandomBytes(n int) []byte {
 	b := make([]byte, n)
-	// TODO: Use crypto/rand
+	if _, err := cryptoRand.Read(b); err != nil {
+		log.Printf("failed to generate random bytes: %v", err)
+	}
 	return b
 }

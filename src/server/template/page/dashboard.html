@@ -1,0 +1,83 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="container mt-3">
+  <div class="d-flex justify-between align-center mb-3">
+    <h1>Dashboard</h1>
+    <a href="/dashboard/profiles/new" class="btn btn-primary btn-rounded">Add Profile</a>
+  </div>
+
+  {{if .FlashSuccess}}
+  <div class="alert alert-success" role="alert">
+    <span>{{.FlashSuccess}}</span>
+    <button class="alert-close" aria-label="Dismiss">&times;</button>
+  </div>
+  {{end}}
+  {{if .FlashError}}
+  <div class="alert alert-danger" role="alert">
+    <span>{{.FlashError}}</span>
+    <button class="alert-close" aria-label="Dismiss">&times;</button>
+  </div>
+  {{end}}
+
+  <section aria-labelledby="stats-heading" class="mb-4">
+    <h2 id="stats-heading" class="sr-only">Your statistics</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-value">{{.Stats.TotalProfiles}}</span>
+        <span class="stat-label">Profiles</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">{{.Stats.TotalLinks}}</span>
+        <span class="stat-label">Links</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">{{.Stats.TotalViews}}</span>
+        <span class="stat-label">Profile Views</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">{{.Stats.TotalClicks}}</span>
+        <span class="stat-label">Link Clicks</span>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="profiles-heading">
+    <h2 id="profiles-heading">Your Profiles</h2>
+    {{if .Profiles}}
+    <div class="grid-2 mt-2">
+      {{range .Profiles}}
+      <div class="card">
+        <div class="card-header d-flex justify-between align-center">
+          <h3 class="card-title mb-0">{{if .DisplayName}}{{.DisplayName}}{{else}}@{{.Slug}}{{end}}</h3>
+          {{if .IsPublic}}
+          <span class="badge badge-verified" aria-label="Public profile">Public</span>
+          {{else}}
+          <span class="badge" aria-label="Private profile">Private</span>
+          {{end}}
+        </div>
+        <div class="card-body">
+          <p class="footer-text">
+            <a href="/{{.Slug}}" target="_blank" rel="noopener noreferrer">/{{.Slug}}</a>
+          </p>
+          {{if .Bio}}<p>{{.Bio}}</p>{{end}}
+        </div>
+        <div class="card-footer d-flex gap-1">
+          <a href="/dashboard/profiles/{{.ID}}/edit" class="btn btn-secondary btn-rounded btn-sm">Edit</a>
+          <a href="/dashboard/profiles/{{.ID}}/links" class="btn btn-secondary btn-rounded btn-sm">Links</a>
+          <a href="/{{.Slug}}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-rounded btn-sm">View</a>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="card text-center mt-2">
+      <div class="card-body">
+        <p>You have no profiles yet.</p>
+        <a href="/dashboard/profiles/new" class="btn btn-primary btn-rounded mt-2">Create your first profile</a>
+      </div>
+    </div>
+    {{end}}
+  </section>
+</div>
+{{end}}

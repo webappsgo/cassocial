@@ -1,96 +1,119 @@
 # API Reference
 
 Cassocial provides three APIs:
-- **REST API** at `/api/v1/`
+- **REST API** at `/api/`
 - **GraphQL** at `/graphql`
 - **OpenAPI/Swagger** at `/openapi`
 
 ## Authentication
 
-API endpoints require Bearer token authentication:
+Authenticated endpoints require a Bearer token obtained from the login endpoint:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_API_TOKEN" \
-  https://api.example.com/api/v1/profiles
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  https://api.example.com/api/profiles
 ```
-
-Generate API tokens in the admin panel at `/admin/api-keys`.
 
 ## REST API Endpoints
 
 ### Health
 
 ```
-GET /healthz
-GET /api/v1/healthz
+GET /health        # Basic health check
+GET /health/ready  # Readiness check
+GET /health/live   # Liveness check
 ```
 
-Returns server health status.
+Returns server health status as JSON.
+
+### Auth
+
+```
+POST /api/auth/register                 # Register new account
+POST /api/auth/login                    # Login (returns JWT)
+POST /api/auth/login/2fa               # Login with 2FA code
+POST /api/auth/forgot-password          # Request password reset
+POST /api/auth/reset-password           # Reset password with token
+GET  /api/auth/verify-email/{token}     # Verify email address
+
+POST /api/auth/logout        # Logout (auth required)
+POST /api/auth/refresh       # Refresh JWT token (auth required)
+POST /api/auth/2fa/enable    # Enable 2FA (auth required)
+POST /api/auth/2fa/verify    # Verify 2FA setup (auth required)
+POST /api/auth/2fa/disable   # Disable 2FA (auth required)
+```
 
 ### Profiles
 
 ```
-GET    /api/v1/profiles          # List public profiles
-GET    /api/v1/profiles/{slug}   # Get profile by slug
-POST   /api/v1/profiles          # Create profile (auth required)
-PUT    /api/v1/profiles/{id}     # Update profile (auth required)
-DELETE /api/v1/profiles/{id}     # Delete profile (auth required)
+GET    /api/profiles              # List profiles (auth required)
+POST   /api/profiles              # Create profile (auth required)
+GET    /api/profiles/{id}         # Get profile (auth required)
+PUT    /api/profiles/{id}         # Update profile (auth required)
+DELETE /api/profiles/{id}         # Delete profile (auth required)
+POST   /api/profiles/{id}/duplicate      # Duplicate profile (auth required)
+GET    /api/profiles/{id}/qr             # Generate QR code (auth required)
+POST   /api/profiles/{id}/verify-domain  # Verify custom domain (auth required)
 ```
 
 ### Links
 
 ```
-GET    /api/v1/links?profile_id={id}  # Get links for profile
-POST   /api/v1/links                  # Create link (auth required)
-PUT    /api/v1/links/{id}             # Update link (auth required)
-DELETE /api/v1/links/{id}             # Delete link (auth required)
-POST   /api/v1/links/reorder          # Reorder links (auth required)
-```
-
-### Analytics
-
-```
-GET /api/v1/analytics?profile_id={id}&days=30  # Get profile analytics
-GET /api/v1/analytics/link?link_id={id}       # Get link analytics
-GET /api/v1/analytics/export?profile_id={id}&format=csv  # Export analytics
+GET    /api/profiles/{id}/links   # List links for profile (auth required)
+POST   /api/profiles/{id}/links   # Create link on profile (auth required)
+PUT    /api/links/{id}            # Update link (auth required)
+DELETE /api/links/{id}            # Delete link (auth required)
+POST   /api/links/reorder         # Reorder links (auth required)
+POST   /api/links/{id}/toggle     # Toggle link enabled/disabled (auth required)
 ```
 
 ### Services
 
 ```
-GET /api/v1/services             # List all supported services
-GET /api/v1/services/search?q={query}  # Search services
+GET /api/services             # List all supported services
+GET /api/services/search      # Search services
+GET /api/services/categories  # List service categories
+GET /api/services/popular     # List popular services
+GET /api/services/{id}        # Get specific service
 ```
 
-### QR Codes
+### Analytics
 
 ```
-GET /api/v1/qr?url={url}&size=256&format=png  # Generate QR code
-GET /api/v1/qr/profile?slug={slug}            # Profile QR code
+GET /api/analytics/profile/{id}          # Get profile analytics (auth required)
+GET /api/analytics/links/{profile_id}    # Get link analytics (auth required)
+GET /api/analytics/export/{profile_id}   # Export analytics (auth required)
 ```
 
-### Themes
+### Admin
 
 ```
-GET /api/v1/themes               # List available themes
-GET /api/v1/themes/{id}          # Get specific theme
-POST /api/v1/themes              # Save custom theme (auth required)
+GET    /api/admin/users/{id}                  # Get user (admin required)
+GET    /api/admin/users                       # List users (admin required)
+PUT    /api/admin/users/{id}                  # Update user (admin required)
+DELETE /api/admin/users/{id}                  # Delete user (admin required)
+GET    /api/admin/stats                       # System statistics (admin required)
+POST   /api/admin/backup                      # Trigger backup (admin required)
+GET    /api/admin/settings                    # Get settings (admin required)
+PUT    /api/admin/settings                    # Update settings (admin required)
+POST   /api/admin/services/import             # Import services (admin required)
+POST   /api/admin/cache/clear                 # Clear cache (admin required)
+GET    /api/admin/smtp/config                 # Get SMTP config (admin required)
+PUT    /api/admin/smtp/config                 # Update SMTP config (admin required)
+POST   /api/admin/smtp/test                   # Test SMTP connection (admin required)
+GET    /api/admin/notifications/preferences   # Get notification prefs (admin required)
+PUT    /api/admin/notifications/preferences   # Update notification prefs (admin required)
 ```
 
-### Import/Export
+### Public API
+
+No authentication required:
 
 ```
-POST /api/v1/import              # Import data (auth required)
-GET  /api/v1/export?profile_id={id}&format=json  # Export profile
-```
-
-### Shortlinks
-
-```
-POST   /api/v1/shortlinks        # Create shortlink (auth required)
-GET    /api/v1/shortlinks/{code} # Get shortlink info
-DELETE /api/v1/shortlinks/{code} # Delete shortlink (auth required)
-GET    /s/{code}                 # Redirect to target URL
+GET /api/v1/profiles/{username}        # Get public profile by username
+GET /api/v1/profiles/{username}/links  # Get public profile links
+GET /api/v1/profiles/{username}/qr     # Get public profile QR code
+GET /api/v1/link/{id}/click            # Track link click
 ```
 
 ## GraphQL API
@@ -101,7 +124,7 @@ Access GraphiQL playground at `/graphql`
 
 ```graphql
 query {
-  profile(slug: "myprofile") {
+  profile(username: "myprofile") {
     id
     title
     description
@@ -119,12 +142,12 @@ query {
 ```graphql
 mutation {
   createProfile(input: {
-    slug: "myprofile"
+    username: "myprofile"
     title: "My Profile"
     description: "My awesome profile"
   }) {
     id
-    slug
+    username
   }
 }
 ```

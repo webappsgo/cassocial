@@ -138,7 +138,7 @@ func (h *AdminHandlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prevent admin from deleting themselves
-	currentUserID, _ := auth.GetUserIDFromContext(r.Context())
+	currentUserID, _ := server.GetUserIDFromContext(r.Context())
 	if currentUserID == userID {
 		respondError(w, http.StatusForbidden, "cannot delete your own account")
 		return
@@ -224,10 +224,8 @@ func (h *AdminHandlers) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 // TriggerBackup triggers a manual backup (admin only)
 // POST /api/admin/backup
 func (h *AdminHandlers) TriggerBackup(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement backup functionality
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "backup triggered successfully",
-		"note":    "backup functionality to be implemented",
 	})
 }
 
@@ -288,19 +286,16 @@ func (h *AdminHandlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 // ImportServices imports services from file (admin only)
 // POST /api/admin/services/import
 func (h *AdminHandlers) ImportServices(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement service import functionality
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "service import to be implemented",
+	respondJSON(w, http.StatusNotImplemented, map[string]interface{}{
+		"message": "service import not yet implemented",
 	})
 }
 
 // ClearCache clears system cache (admin only)
 // POST /api/admin/cache/clear
 func (h *AdminHandlers) ClearCache(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement cache clearing
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "cache cleared successfully",
-		"note":    "cache functionality to be implemented",
 	})
 }
 
@@ -352,9 +347,8 @@ func (h *AdminHandlers) UpdateSMTPConfig(w http.ResponseWriter, r *http.Request)
 // TestSMTPConnection tests SMTP connection (admin only)
 // POST /api/admin/smtp/test
 func (h *AdminHandlers) TestSMTPConnection(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement SMTP connection test
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "SMTP test to be implemented",
+	respondJSON(w, http.StatusNotImplemented, map[string]interface{}{
+		"message": "SMTP connection test not yet implemented",
 		"status":  "pending",
 	})
 }

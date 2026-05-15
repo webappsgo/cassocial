@@ -55,7 +55,7 @@ type UpdateProfileRequest struct {
 // ListProfiles lists all profiles for the authenticated user
 // GET /api/profiles
 func (h *ProfileHandlers) ListProfiles(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -99,7 +99,7 @@ func (h *ProfileHandlers) ListProfiles(w http.ResponseWriter, r *http.Request) {
 // GetProfile retrieves a specific profile
 // GET /api/profiles/{id}
 func (h *ProfileHandlers) GetProfile(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -129,7 +129,7 @@ func (h *ProfileHandlers) GetProfile(w http.ResponseWriter, r *http.Request) {
 // CreateProfile creates a new profile
 // POST /api/profiles
 func (h *ProfileHandlers) CreateProfile(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -225,7 +225,7 @@ func (h *ProfileHandlers) CreateProfile(w http.ResponseWriter, r *http.Request) 
 // UpdateProfile updates an existing profile
 // PUT /api/profiles/{id}
 func (h *ProfileHandlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -335,7 +335,7 @@ func (h *ProfileHandlers) UpdateProfile(w http.ResponseWriter, r *http.Request) 
 // DeleteProfile deletes a profile
 // DELETE /api/profiles/{id}
 func (h *ProfileHandlers) DeleteProfile(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -380,7 +380,7 @@ func (h *ProfileHandlers) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 // DuplicateProfile duplicates an existing profile
 // POST /api/profiles/{id}/duplicate
 func (h *ProfileHandlers) DuplicateProfile(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -474,7 +474,7 @@ func (h *ProfileHandlers) DuplicateProfile(w http.ResponseWriter, r *http.Reques
 // GenerateQRCode generates a QR code for the profile
 // GET /api/profiles/{id}/qr
 func (h *ProfileHandlers) GenerateQRCode(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -499,8 +499,6 @@ func (h *ProfileHandlers) GenerateQRCode(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// TODO: Implement QR code generation
-	// For now, return a placeholder
 	siteURL, _ := h.db.GetSetting("site_url")
 	profileURL := profile.GetPublicURL(siteURL)
 
@@ -513,7 +511,7 @@ func (h *ProfileHandlers) GenerateQRCode(w http.ResponseWriter, r *http.Request)
 // VerifyDomain verifies a custom domain for the profile
 // POST /api/profiles/{id}/verify-domain
 func (h *ProfileHandlers) VerifyDomain(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -538,10 +536,8 @@ func (h *ProfileHandlers) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement domain verification via TXT record
-	// For now, return placeholder
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "domain verification to be implemented",
+		"message": "domain verification not yet implemented",
 	})
 }
 

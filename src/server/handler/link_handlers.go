@@ -51,7 +51,7 @@ type ReorderLinksRequest struct {
 // ListLinks lists all links for a profile
 // GET /api/profiles/{id}/links
 func (h *LinkHandlers) ListLinks(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -103,7 +103,7 @@ func (h *LinkHandlers) ListLinks(w http.ResponseWriter, r *http.Request) {
 // CreateLink creates a new link
 // POST /api/profiles/{id}/links
 func (h *LinkHandlers) CreateLink(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -199,7 +199,7 @@ func (h *LinkHandlers) CreateLink(w http.ResponseWriter, r *http.Request) {
 // UpdateLink updates an existing link
 // PUT /api/links/{id}
 func (h *LinkHandlers) UpdateLink(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -283,7 +283,7 @@ func (h *LinkHandlers) UpdateLink(w http.ResponseWriter, r *http.Request) {
 // DeleteLink deletes a link
 // DELETE /api/links/{id}
 func (h *LinkHandlers) DeleteLink(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -331,7 +331,7 @@ func (h *LinkHandlers) DeleteLink(w http.ResponseWriter, r *http.Request) {
 // ReorderLinks reorders links for a profile
 // POST /api/links/reorder
 func (h *LinkHandlers) ReorderLinks(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -383,7 +383,7 @@ func (h *LinkHandlers) ReorderLinks(w http.ResponseWriter, r *http.Request) {
 // ToggleLink toggles the active status of a link
 // POST /api/links/{id}/toggle
 func (h *LinkHandlers) ToggleLink(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return

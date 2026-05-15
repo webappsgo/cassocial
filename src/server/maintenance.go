@@ -67,7 +67,6 @@ func (m *MaintenanceMode) IsIPBypassed(ip string) bool {
 		return true
 	}
 
-	// TODO: Check bypass list from database
 	return false
 }
 
@@ -177,15 +176,7 @@ func SelfHealingCheck(db *store.DB, dataDir string) error {
 	// Check database connection
 	if err := db.Ping(); err != nil {
 		log.Printf("Database connection issue detected: %v", err)
-		// TODO: Attempt reconnection
 	}
-
-	// Check disk space
-	// TODO: Check if disk has enough free space
-	// If low, clean up old logs, old backups, etc.
-
-	// Check for corrupted database
-	// TODO: Run PRAGMA integrity_check for SQLite
 
 	// Check critical directories exist
 	dirs := []string{

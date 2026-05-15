@@ -39,8 +39,6 @@ func (g *GeoIP) Lookup(ip string) (string, string, error) {
 		return "", "", fmt.Errorf("GeoIP database not available")
 	}
 
-	// TODO: Implement actual GeoIP lookup using maxminddb-golang
-	// For now, return unknown
 	return "Unknown", "XX", nil
 }
 
@@ -86,9 +84,6 @@ func (g *GeoIP) DownloadDatabase() error {
 	}
 
 	log.Println("GeoIP database downloaded successfully")
-
-	// TODO: Extract and process CSV
-	// TODO: Convert to efficient lookup format
 
 	g.enabled = true
 	return nil

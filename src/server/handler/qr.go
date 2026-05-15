@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -62,9 +63,8 @@ func (h *QRHandler) HandleProfileQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build profile URL
-	// TODO: Get domain from config
-	profileURL := fmt.Sprintf("https://cassocial.example.com/%s", slug)
+	// Build profile URL using the request host
+	profileURL := fmt.Sprintf("https://%s/%s", r.Host, slug)
 
 	// Get size (default 256)
 	sizeStr := r.URL.Query().Get("size")
@@ -94,8 +94,6 @@ func (h *QRHandler) generatePNG(w http.ResponseWriter, content string, size int)
 
 // generateSVG generates and serves an SVG QR code
 func (h *QRHandler) generateSVG(w http.ResponseWriter, content string, size int) {
-	// TODO: Implement SVG QR code generation
-	// For now, return error
 	http.Error(w, "SVG format not yet implemented", http.StatusNotImplemented)
 }
 

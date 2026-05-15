@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/casapps/cassocial/src/server/model"
+	models "github.com/casapps/cassocial/src/server/model"
 )
 
 var (

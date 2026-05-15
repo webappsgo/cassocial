@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#282a36" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  {{if .MetaTitle}}<title>{{.MetaTitle}} | Admin | {{.SiteName}}</title>{{else}}<title>Admin | {{.SiteName}}</title>{{end}}
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/themes.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <link rel="icon" href="/static/images/logo.svg" type="image/svg+xml">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('cassocial-theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+</head>
+<body class="admin-layout">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  {{template "header" .}}
+
+  <div class="admin-container">
+    <aside class="admin-sidebar" aria-label="Admin navigation">
+      <nav class="admin-nav">
+        <div class="admin-nav-section">
+          <span class="admin-nav-heading">Overview</span>
+          <ul class="admin-nav-list">
+            <li><a href="/admin" class="admin-nav-link {{if eq .ActiveNav "dashboard"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Dashboard
+            </a></li>
+          </ul>
+        </div>
+        <div class="admin-nav-section">
+          <span class="admin-nav-heading">Management</span>
+          <ul class="admin-nav-list">
+            <li><a href="/admin/users" class="admin-nav-link {{if eq .ActiveNav "users"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Users
+            </a></li>
+            <li><a href="/admin/profiles" class="admin-nav-link {{if eq .ActiveNav "profiles"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Profiles
+            </a></li>
+            <li><a href="/admin/services" class="admin-nav-link {{if eq .ActiveNav "services"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Services
+            </a></li>
+          </ul>
+        </div>
+        <div class="admin-nav-section">
+          <span class="admin-nav-heading">System</span>
+          <ul class="admin-nav-list">
+            <li><a href="/admin/settings" class="admin-nav-link {{if eq .ActiveNav "settings"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Settings
+            </a></li>
+            <li><a href="/admin/backup" class="admin-nav-link {{if eq .ActiveNav "backup"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Backup
+            </a></li>
+            <li><a href="/admin/stats" class="admin-nav-link {{if eq .ActiveNav "stats"}}active{{end}}">
+              <span class="admin-nav-icon" aria-hidden="true">&#9632;</span>
+              Statistics
+            </a></li>
+          </ul>
+        </div>
+      </nav>
+    </aside>
+
+    <main id="main-content" class="admin-main">
+      {{template "content" .}}
+    </main>
+  </div>
+
+  {{template "footer" .}}
+
+  <script src="/static/js/main.js"></script>
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>

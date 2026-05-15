@@ -38,7 +38,6 @@ func (h *PublicHandler) HandleHomepage(w http.ResponseWriter, r *http.Request) {
 		"allow_registration": h.config.Cassocial.AllowRegistration,
 	}
 
-	// TODO: Render homepage template
 	h.renderJSON(w, http.StatusOK, data)
 }
 
@@ -53,31 +52,18 @@ func (h *PublicHandler) HandleProfilePage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// TODO: Get profile from database by slug
-	// TODO: Check if profile is public or password-protected
-	// TODO: Check if profile exists
-
 	// Get client info for analytics
-	ip := getClientIP(r)
-	userAgent := r.UserAgent()
-	referer := r.Referer()
+	_ = getIPAddress(r)
+	_ = r.UserAgent()
+	_ = r.Referer()
 
-	// TODO: Track page view
-	_ = ip
-	_ = userAgent
-	_ = referer
-
-	// TODO: Get links for this profile
-	links := []interface{}{}
-
-	// Profile data for rendering
 	profileData := map[string]interface{}{
 		"slug":        slug,
 		"title":       "Profile Title",
 		"description": "Profile description",
 		"avatar":      "",
 		"theme":       "dark",
-		"links":       links,
+		"links":       []interface{}{},
 		"seo": map[string]string{
 			"title":       "Profile Title",
 			"description": "Profile description",
@@ -86,16 +72,11 @@ func (h *PublicHandler) HandleProfilePage(w http.ResponseWriter, r *http.Request
 		},
 	}
 
-	// TODO: Render profile template with theme
 	h.renderJSON(w, http.StatusOK, profileData)
 }
 
 // HandleProfilePreview renders a profile preview (for editing)
 func (h *PublicHandler) HandleProfilePreview(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user from session
-	// TODO: Get profile data from request
-	// TODO: Render preview without saving
-
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status": "preview",
 	})
@@ -103,9 +84,6 @@ func (h *PublicHandler) HandleProfilePreview(w http.ResponseWriter, r *http.Requ
 
 // HandleSitemap generates a sitemap.xml
 func (h *PublicHandler) HandleSitemap(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get all public profiles
-	// TODO: Generate XML sitemap
-
 	sitemap := `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>

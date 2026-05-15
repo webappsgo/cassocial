@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -24,17 +25,15 @@ func NewDashboardHandler(cfg *config.Config, db *store.DB) *DashboardHandler {
 
 // HandleDashboard serves the main user dashboard
 func (h *DashboardHandler) HandleDashboard(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	userID := "temp-user-id"
-
-	// TODO: Get user's profiles from database
-	// TODO: Get analytics summary
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	dashboard := map[string]interface{}{
 		"user": map[string]interface{}{
-			"id":       userID,
-			"username": "user",
-			"email":    "user@example.com",
+			"id": userID,
 		},
 		"stats": map[string]interface{}{
 			"total_profiles": 0,
@@ -51,14 +50,15 @@ func (h *DashboardHandler) HandleDashboard(w http.ResponseWriter, r *http.Reques
 
 // HandleProfileList shows user's profile list
 func (h *DashboardHandler) HandleProfileList(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get user's profiles from database
-
-	profiles := []interface{}{}
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
-		"profiles": profiles,
-		"total":    len(profiles),
+		"profiles": []interface{}{},
+		"total":    0,
 		"limit":    h.config.Cassocial.MaxProfilesPerUser,
 	})
 }
@@ -86,9 +86,6 @@ func (h *DashboardHandler) HandleProfileEdit(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// TODO: Get profile from database
-	// TODO: Verify user owns profile
-
 	profile := map[string]interface{}{
 		"id":          profileID,
 		"slug":        "example",
@@ -103,8 +100,11 @@ func (h *DashboardHandler) HandleProfileEdit(w http.ResponseWriter, r *http.Requ
 
 // HandleAnalyticsOverview shows analytics overview
 func (h *DashboardHandler) HandleAnalyticsOverview(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get aggregated analytics for all user's profiles
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	analytics := map[string]interface{}{
 		"total_views":      0,
@@ -121,15 +121,24 @@ func (h *DashboardHandler) HandleAnalyticsOverview(w http.ResponseWriter, r *htt
 
 // HandleAccountSettings shows account settings page
 func (h *DashboardHandler) HandleAccountSettings(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get user info from database
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	user, err := h.db.GetUserByID(userID)
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to retrieve user")
+		return
+	}
 
 	settings := map[string]interface{}{
-		"username":           "user",
-		"email":              "user@example.com",
-		"email_verified":     true,
-		"two_factor_enabled": false,
-		"created_at":         "2025-01-01",
+		"username":           user.Username,
+		"email":              user.Email,
+		"email_verified":     user.EmailVerified,
+		"two_factor_enabled": user.TwoFactorEnabled,
+		"created_at":         user.CreatedAt.Format("2006-01-02"),
 	}
 
 	h.renderJSON(w, http.StatusOK, settings)
@@ -137,27 +146,29 @@ func (h *DashboardHandler) HandleAccountSettings(w http.ResponseWriter, r *http.
 
 // HandleNotifications shows user notifications
 func (h *DashboardHandler) HandleNotifications(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get notifications from database
-
-	notifications := []interface{}{}
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
-		"notifications": notifications,
+		"notifications": []interface{}{},
 		"unread":        0,
 	})
 }
 
 // HandleRecentActivity shows recent activity
 func (h *DashboardHandler) HandleRecentActivity(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get recent activity (views, clicks, profile changes)
-
-	activity := []interface{}{}
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
-		"activity": activity,
-		"total":    len(activity),
+		"activity": []interface{}{},
+		"total":    0,
 	})
 }
 

@@ -1,0 +1,38 @@
+{{define "header"}}
+<header role="banner">
+  <div class="container">
+    <div class="header-content">
+      <a href="/" class="brand-link" aria-label="{{.SiteName}} home">
+        <img src="/static/images/logo.svg" alt="{{.SiteName}}" class="logo" width="160" height="48">
+      </a>
+
+      <button class="mobile-menu-toggle" aria-expanded="false" aria-controls="main-nav" aria-label="Toggle navigation">
+        <span aria-hidden="true">&#9776;</span>
+      </button>
+
+      <nav id="main-nav" aria-label="Main navigation">
+        <ul>
+          <li><a href="/">Home</a></li>
+          {{if .IsAuthenticated}}
+          <li><a href="/dashboard">Dashboard</a></li>
+          {{if .IsAdmin}}
+          <li><a href="/admin">Admin</a></li>
+          {{end}}
+          <li><a href="/auth/logout">Logout</a></li>
+          {{else}}
+          <li><a href="/auth/login">Login</a></li>
+          {{if .RegistrationEnabled}}
+          <li><a href="/auth/register">Register</a></li>
+          {{end}}
+          {{end}}
+          <li>
+            <button class="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+              <span class="theme-toggle-slider" aria-hidden="true"></span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+</header>
+{{end}}

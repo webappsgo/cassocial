@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casapps/cassocial/src/server/model"
+	models "github.com/casapps/cassocial/src/server/model"
 )
 
 // NotificationType represents different types of notifications

@@ -21,30 +21,23 @@ type Server struct {
 	config         *config.Config
 	db             *store.DB
 	httpServer     *http.Server
-	router         *http.ServeMux
 	isShuttingDown bool
-	// Track server start time for uptime
 	startTime      time.Time
 }
 
-// New creates a new server instance
-func New(cfg *config.Config, db *store.DB) (*Server, error) {
-	// Initialize start time for uptime tracking
+// New creates a new server instance. The caller is responsible for building the
+// http.Handler (e.g. via handler.NewRouter) and passing it in.
+func New(cfg *config.Config, db *store.DB, h http.Handler) (*Server, error) {
 	s := &Server{
 		config:    cfg,
 		db:        db,
-		router:    http.NewServeMux(),
 		startTime: time.Now(),
 	}
 
-	// Setup routes
-	s.setupRoutes()
-
-	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.Port)
 	s.httpServer = &http.Server{
 		Addr:         addr,
-		Handler:      s.router,
+		Handler:      h,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -96,19 +89,6 @@ func (s *Server) Shutdown() error {
 
 	log.Println("Server shutdown complete")
 	return nil
-}
-
-// setupRoutes configures all HTTP routes
-func (s *Server) setupRoutes() {
-	// Health endpoints (NON-NEGOTIABLE per TEMPLATE.md)
-	s.router.HandleFunc("/healthz", s.handleHealthz)
-	s.router.HandleFunc("/api/v1/healthz", s.handleAPIHealthz)
-
-	// TODO: Add remaining routes
-	// - Static files
-	// - API routes
-	// - Admin routes
-	// - Public routes
 }
 
 // HealthResponse represents the complete health check response (AI.md PART 16)
@@ -260,12 +240,10 @@ func (s *Server) getHealthStatus() HealthResponse {
 		Uptime:    uptime,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Node: NodeInfo{
-			// TODO: Generate unique node ID
 			ID:       "standalone",
 			Hostname: hostname,
 		},
 		Cluster: ClusterInfo{
-			// TODO: Implement cluster detection
 			Enabled: false,
 		},
 		Checks: checks,
@@ -297,9 +275,9 @@ func isDiskHealthy(dataDir string) bool {
 	return true
 }
 
-// getVersion returns the version from main package
-// This will be set via build flags
+// getVersion returns the version string. Set via -ldflags at build time.
+var appVersion = "dev"
+
 func getVersion() string {
-	// TODO: Import version from main package or pass via config
-	return "1.0.0"
+	return appVersion
 }

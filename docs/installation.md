@@ -68,7 +68,7 @@ cassocial
 cassocial --port 8080
 
 # Run as system service
-sudo cassocial --service --install
+sudo cassocial --service=--install
 sudo cassocial --service start
 ```
 

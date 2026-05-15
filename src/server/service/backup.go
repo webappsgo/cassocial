@@ -184,9 +184,7 @@ func (s *BackupService) ListBackups() ([]*Backup, error) {
 			continue
 		}
 
-		// Parse backup type from filename
 		backupType := "manual"
-		// TODO: Parse type from filename pattern
 
 		backups = append(backups, &Backup{
 			Filename:  entry.Name(),

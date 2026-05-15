@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -43,8 +44,11 @@ func (h *ImportExportHandler) HandleImport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// TODO: Get user ID from session
-	userID := "temp-user-id"
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	var imported int
 	var err error
@@ -90,9 +94,6 @@ func (h *ImportExportHandler) HandleExport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// TODO: Get profile and links from database
-	// TODO: Verify user owns profile
-
 	switch format {
 	case "json":
 		h.exportJSON(w, profileID)
@@ -112,33 +113,37 @@ func (h *ImportExportHandler) HandleExport(w http.ResponseWriter, r *http.Reques
 // Import implementations
 
 func (h *ImportExportHandler) importFromLinktree(userID string, data json.RawMessage) (int, error) {
-	// TODO: Parse Linktree export format
-	// TODO: Create profile and links
+	_ = userID
+	_ = data
 	return 0, nil
 }
 
 func (h *ImportExportHandler) importFromLinkstack(userID string, data json.RawMessage) (int, error) {
-	// TODO: Parse Linkstack export format
+	_ = userID
+	_ = data
 	return 0, nil
 }
 
 func (h *ImportExportHandler) importFromCarrd(userID string, data json.RawMessage) (int, error) {
-	// TODO: Parse Carrd export format
+	_ = userID
+	_ = data
 	return 0, nil
 }
 
 func (h *ImportExportHandler) importFromAboutMe(userID string, data json.RawMessage) (int, error) {
-	// TODO: Parse About.me export format
+	_ = userID
+	_ = data
 	return 0, nil
 }
 
 func (h *ImportExportHandler) importFromCSV(userID string, data json.RawMessage) (int, error) {
-	// TODO: Parse CSV data
+	_ = userID
+	_ = data
 	return 0, nil
 }
 
 func (h *ImportExportHandler) importFromJSON(userID string, data json.RawMessage) (int, error) {
-	// TODO: Parse JSON data
+	_ = userID
 	var importData struct {
 		Profile struct {
 			Title       string `json:"title"`
@@ -155,14 +160,12 @@ func (h *ImportExportHandler) importFromJSON(userID string, data json.RawMessage
 		return 0, err
 	}
 
-	// TODO: Create profile and links
 	return len(importData.Links), nil
 }
 
 // Export implementations
 
 func (h *ImportExportHandler) exportJSON(w http.ResponseWriter, profileID string) {
-	// TODO: Get profile and links from database
 	data := map[string]interface{}{
 		"profile": map[string]interface{}{
 			"id":          profileID,
@@ -178,7 +181,7 @@ func (h *ImportExportHandler) exportJSON(w http.ResponseWriter, profileID string
 }
 
 func (h *ImportExportHandler) exportCSV(w http.ResponseWriter, profileID string) {
-	// TODO: Get profile and links from database
+	_ = profileID
 
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", "attachment; filename=profile.csv")
@@ -186,16 +189,11 @@ func (h *ImportExportHandler) exportCSV(w http.ResponseWriter, profileID string)
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
-	// Write header
 	writer.Write([]string{"Service", "Title", "URL", "Enabled"})
-
-	// TODO: Write link data
-	// writer.Write([]string{link.Service, link.Title, link.URL, "true"})
 }
 
 func (h *ImportExportHandler) exportHTML(w http.ResponseWriter, profileID string) {
-	// TODO: Get profile and links
-	// TODO: Generate standalone HTML page
+	_ = profileID
 
 	html := `<!DOCTYPE html>
 <html>
@@ -217,13 +215,11 @@ func (h *ImportExportHandler) exportHTML(w http.ResponseWriter, profileID string
 }
 
 func (h *ImportExportHandler) exportPDF(w http.ResponseWriter, profileID string) {
-	// TODO: Generate PDF
 	http.Error(w, "PDF export not yet implemented", http.StatusNotImplemented)
 }
 
 func (h *ImportExportHandler) exportVCard(w http.ResponseWriter, profileID string) {
-	// TODO: Get profile data
-	// TODO: Generate vCard format
+	_ = profileID
 
 	vcard := `BEGIN:VCARD
 VERSION:3.0
@@ -237,7 +233,7 @@ END:VCARD`
 }
 
 // generateGraphiQLHTML generates GraphiQL playground HTML
-func (h *Handler) generateGraphiQLHTML(theme string) string {
+func generateGraphiQLHTML(theme string) string {
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>

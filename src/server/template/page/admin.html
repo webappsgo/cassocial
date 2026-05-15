@@ -1,0 +1,122 @@
+{{template "admin" .}}
+
+{{define "content"}}
+<div class="admin-page-header">
+  <h1>Admin Dashboard</h1>
+  <p style="color: var(--text-secondary);">System overview for {{.SiteName}}</p>
+</div>
+
+{{if .FlashSuccess}}
+<div class="alert alert-success" role="alert">
+  <span>{{.FlashSuccess}}</span>
+  <button class="alert-close" aria-label="Dismiss">&times;</button>
+</div>
+{{end}}
+{{if .FlashError}}
+<div class="alert alert-danger" role="alert">
+  <span>{{.FlashError}}</span>
+  <button class="alert-close" aria-label="Dismiss">&times;</button>
+</div>
+{{end}}
+
+<section aria-labelledby="system-stats-heading" class="mb-4">
+  <h2 id="system-stats-heading">System Statistics</h2>
+  <div class="stats-grid mt-2">
+    <div class="stat-card">
+      <span class="stat-value">{{.Stats.TotalUsers}}</span>
+      <span class="stat-label">Total Users</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value">{{.Stats.TotalProfiles}}</span>
+      <span class="stat-label">Total Profiles</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value">{{.Stats.TotalLinks}}</span>
+      <span class="stat-label">Total Links</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value">{{.Stats.TotalRequests}}</span>
+      <span class="stat-label">Requests (24h)</span>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="recent-users-heading" class="mb-4">
+  <div class="admin-section-header">
+    <h2 id="recent-users-heading">Recent Users</h2>
+    <a href="/admin/users" class="btn btn-secondary btn-rounded btn-sm">View All</a>
+  </div>
+  {{if .RecentUsers}}
+  <div class="card mt-2">
+    <table aria-label="Recent users">
+      <thead>
+        <tr>
+          <th scope="col">Username</th>
+          <th scope="col">Email</th>
+          <th scope="col">Role</th>
+          <th scope="col">Status</th>
+          <th scope="col">Joined</th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .RecentUsers}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td>{{.Email}}</td>
+          <td><span class="badge {{if eq .Role "admin"}}badge-featured{{end}}">{{.Role}}</span></td>
+          <td><span class="badge {{if eq .Status "active"}}badge-verified{{else if eq .Status "suspended"}}badge-danger{{end}}">{{.Status}}</span></td>
+          <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+          <td>
+            <a href="/admin/users/{{.ID}}" class="btn btn-secondary btn-square btn-sm">View</a>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="mt-2" style="color: var(--text-secondary);">No users yet.</p>
+  {{end}}
+</section>
+
+<section aria-labelledby="system-status-heading">
+  <h2 id="system-status-heading">System Status</h2>
+  <div class="grid-2 mt-2">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Maintenance Mode</h3>
+      </div>
+      <div class="card-body">
+        <p>Status: <strong>{{if .MaintenanceMode}}Active{{else}}Inactive{{end}}</strong></p>
+      </div>
+      <div class="card-footer">
+        <form method="POST" action="/admin/maintenance">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <input type="hidden" name="enabled" value="{{if .MaintenanceMode}}false{{else}}true{{end}}">
+          <button type="submit"
+                  class="btn btn-rounded btn-sm {{if .MaintenanceMode}}btn-danger{{else}}btn-secondary{{end}}"
+                  data-confirm="{{if .MaintenanceMode}}Disable maintenance mode?{{else}}Enable maintenance mode?{{end}}">
+            {{if .MaintenanceMode}}Disable{{else}}Enable{{end}}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Backup</h3>
+      </div>
+      <div class="card-body">
+        <p>Last backup: <strong>{{if .LastBackup}}{{.LastBackup}}{{else}}Never{{end}}</strong></p>
+      </div>
+      <div class="card-footer">
+        <form method="POST" action="/admin/backup">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <button type="submit" class="btn btn-secondary btn-rounded btn-sm">Run Backup Now</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+{{end}}

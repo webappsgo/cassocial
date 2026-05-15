@@ -12,12 +12,17 @@ require (
 
 	// Utilities
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // QR code generation
-	golang.org/x/crypto v0.31.0 // Argon2, Bcrypt
+	golang.org/x/crypto v0.31.0 // Argon2id password hashing
 
 	// Core
 	gopkg.in/yaml.v3 v3.0.1 // YAML config
 	// Database drivers (NON-NEGOTIABLE: pure Go only, CGO_ENABLED=0)
 	modernc.org/sqlite v1.34.5 // SQLite (pure Go) - REQUIRED instead of mattn/go-sqlite3
+)
+
+require (
+	github.com/robfig/cron/v3 v3.0.1
+	golang.org/x/sys v0.28.0
 )
 
 require (
@@ -34,7 +39,6 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.26.0 // indirect
 	modernc.org/libc v1.55.3 // indirect

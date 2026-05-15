@@ -2,13 +2,11 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/casapps/cassocial/src/config"
 	"github.com/casapps/cassocial/src/server"
-	"github.com/casapps/cassocial/src/server/model"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -64,7 +62,10 @@ func (h *UserHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Validate email format
+	if len(req.Email) == 0 || len(req.Email) > 254 {
+		h.renderError(w, http.StatusBadRequest, "Valid email address required")
+		return
+	}
 
 	// Hash password using Argon2id
 	passwordHash, err := server.HashPassword(req.Password)
@@ -83,9 +84,10 @@ func (h *UserHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		EmailVerified: false,
 	}
 
-	// TODO: Call db.CreateUser(user)
-	// For now, return success
-	_ = user
+	if err := h.db.CreateUser(user); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to create user")
+		return
+	}
 
 	// Generate email verification token
 	verificationToken, err := h.generateVerificationToken(req.Email)
@@ -94,13 +96,12 @@ func (h *UserHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Send verification email
 	_ = verificationToken
 
 	h.renderJSON(w, http.StatusCreated, map[string]interface{}{
 		"status":  "success",
 		"message": "Registration successful. Please check your email to verify your account.",
-		"user_id": "temp-id", // TODO: Return actual user ID
+		"user_id": user.ID,
 	})
 }
 
@@ -112,8 +113,26 @@ func (h *UserHandler) HandleVerifyEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// TODO: Validate token and mark email as verified
-	// For now, return success
+	record, err := h.db.GetEmailVerificationToken(token)
+	if err != nil {
+		h.renderError(w, http.StatusBadRequest, "Invalid or expired verification token")
+		return
+	}
+
+	user, err := h.db.GetUserByID(record.UserID)
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to retrieve user")
+		return
+	}
+
+	user.EmailVerified = true
+	if err := h.db.UpdateUser(user); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to verify email")
+		return
+	}
+
+	h.db.DeleteEmailVerificationToken(token)
+
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
 		"message": "Email verified successfully. You can now login.",
@@ -147,7 +166,6 @@ func (h *UserHandler) HandleRequestPasswordReset(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// TODO: Send reset email
 	_ = resetToken
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
@@ -179,9 +197,31 @@ func (h *UserHandler) HandleResetPassword(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// TODO: Validate token
-	// TODO: Hash new password with Argon2id
-	// TODO: Update user password
+	record, err := h.db.GetPasswordResetToken(req.Token)
+	if err != nil {
+		h.renderError(w, http.StatusBadRequest, "Invalid or expired reset token")
+		return
+	}
+
+	newHash, err := server.HashPassword(req.NewPassword)
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to process password")
+		return
+	}
+
+	user, err := h.db.GetUserByID(record.UserID)
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to retrieve user")
+		return
+	}
+
+	user.PasswordHash = newHash
+	if err := h.db.UpdateUser(user); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to update password")
+		return
+	}
+
+	h.db.DeletePasswordResetToken(req.Token)
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
@@ -191,29 +231,49 @@ func (h *UserHandler) HandleResetPassword(w http.ResponseWriter, r *http.Request
 
 // HandleAccountSettings handles user account settings
 func (h *UserHandler) HandleAccountSettings(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user from session
-	// TODO: Return user settings
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	if r.Method == http.MethodGet {
-		// Return current settings
+		user, err := h.db.GetUserByID(userID)
+		if err != nil {
+			h.renderError(w, http.StatusInternalServerError, "Failed to retrieve user")
+			return
+		}
 		settings := map[string]interface{}{
-			"email":              "user@example.com",
-			"username":           "user",
-			"two_factor_enabled": false,
+			"email":              user.Email,
+			"username":           user.Username,
+			"two_factor_enabled": user.TwoFactorEnabled,
 		}
 		h.renderJSON(w, http.StatusOK, settings)
 		return
 	}
 
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {
-		// Update settings
 		var updates map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 			h.renderError(w, http.StatusBadRequest, "Invalid request")
 			return
 		}
 
-		// TODO: Validate and save settings
+		user, err := h.db.GetUserByID(userID)
+		if err != nil {
+			h.renderError(w, http.StatusInternalServerError, "Failed to retrieve user")
+			return
+		}
+
+		if email, ok := updates["email"].(string); ok && email != "" {
+			user.Email = email
+		}
+
+		if err := h.db.UpdateUser(user); err != nil {
+			h.renderError(w, http.StatusInternalServerError, "Failed to save settings")
+			return
+		}
+
 		h.renderJSON(w, http.StatusOK, map[string]string{
 			"status":  "success",
 			"message": "Settings updated successfully",
@@ -226,64 +286,60 @@ func (h *UserHandler) HandleAccountSettings(w http.ResponseWriter, r *http.Reque
 
 // Handle2FASetup handles 2FA setup
 func (h *UserHandler) Handle2FASetup(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		// Generate TOTP secret and QR code
-		// TODO: Generate secret, QR code URL
-		response := map[string]interface{}{
-			"secret":  "TEMP-SECRET",
-			"qr_code": "data:image/png;base64,...",
-		}
-		h.renderJSON(w, http.StatusOK, response)
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		// Verify and enable 2FA
-		var req struct {
-			Code string `json:"code"`
-		}
-
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			h.renderError(w, http.StatusBadRequest, "Invalid request")
-			return
-		}
-
-		// TODO: Verify TOTP code and enable 2FA
-		h.renderJSON(w, http.StatusOK, map[string]interface{}{
-			"status":       "success",
-			"message":      "2FA enabled successfully",
-			"backup_codes": []string{"code1", "code2", "code3"},
-		})
-		return
-	}
-
-	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	http.Error(w, "2FA setup not yet implemented", http.StatusNotImplemented)
 }
 
 // Helper functions
 
-// generateVerificationToken generates an email verification token
+// generateVerificationToken generates an email verification token and stores it in the database.
 func (h *UserHandler) generateVerificationToken(email string) (string, error) {
+	user, err := h.db.GetUserByEmail(email)
+	if err != nil {
+		return "", err
+	}
+
 	token, err := server.GenerateRandomToken(32)
 	if err != nil {
 		return "", err
 	}
 
-	// TODO: Store token in database with expiry
+	record := &store.EmailVerificationToken{
+		Token:     token,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	if err := h.db.CreateEmailVerificationToken(record); err != nil {
+		return "", err
+	}
+
 	return token, nil
 }
 
-// generatePasswordResetToken generates a password reset token
+// generatePasswordResetToken generates a password reset token and stores it in the database.
 func (h *UserHandler) generatePasswordResetToken(email string) (string, error) {
-	// TODO: Check if email exists
-	// Don't reveal if email doesn't exist for security
+	user, err := h.db.GetUserByEmail(email)
+	if err != nil {
+		return "", err
+	}
 
 	token, err := server.GenerateRandomToken(32)
 	if err != nil {
 		return "", err
 	}
 
-	// TODO: Store token in database with expiry (1 hour)
+	record := &store.PasswordResetToken{
+		Token:     token,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	if err := h.db.CreatePasswordResetToken(record); err != nil {
+		return "", err
+	}
+
 	return token, nil
 }
 

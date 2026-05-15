@@ -36,17 +36,12 @@ func HashPassword(password string) (string, error) {
 	return encodeArgon2Hash(salt, hash), nil
 }
 
-// VerifyPassword verifies a password against its hash
-// Supports both Argon2id (new) and bcrypt (legacy fallback)
+// VerifyPassword verifies a password against an Argon2id hash.
 func VerifyPassword(password, hash string) bool {
-	// Check if it's Argon2id format
-	if strings.HasPrefix(hash, "$argon2id$") {
-		return verifyArgon2Password(password, hash)
+	if !strings.HasPrefix(hash, "$argon2id$") {
+		return false
 	}
-
-	// Legacy bcrypt support (for migration from old passwords)
-	// TODO: Rehash bcrypt passwords to Argon2id on successful login
-	return verifyBcryptPassword(password, hash)
+	return verifyArgon2Password(password, hash)
 }
 
 // verifyArgon2Password verifies Argon2id hashed password
@@ -61,14 +56,6 @@ func verifyArgon2Password(password, encodedHash string) bool {
 
 	// Compare hashes (constant-time comparison)
 	return subtle.ConstantTimeCompare(hash, inputHash) == 1
-}
-
-// verifyBcryptPassword verifies bcrypt hashed password (legacy support)
-func verifyBcryptPassword(password, hash string) bool {
-	// Import bcrypt only for legacy verification
-	// golang.org/x/crypto/bcrypt
-	// For now, return false - bcrypt support can be added if needed
-	return false
 }
 
 // encodeArgon2Hash encodes salt and hash into PHC string format

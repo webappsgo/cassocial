@@ -111,7 +111,7 @@ func (a *Auth) ResetPassword(token, newPassword string) error {
 	}
 
 	// Hash new password
-	passwordHash, err := a.HashPassword(newPassword)
+	passwordHash, err := HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -144,7 +144,7 @@ func (a *Auth) ChangePassword(userID, currentPassword, newPassword string) error
 	}
 
 	// Verify current password
-	if err := a.ComparePassword(user.PasswordHash, currentPassword); err != nil {
+	if !VerifyPassword(currentPassword, user.PasswordHash) {
 		return ErrInvalidCredentials
 	}
 
@@ -154,12 +154,12 @@ func (a *Auth) ChangePassword(userID, currentPassword, newPassword string) error
 	}
 
 	// Check if new password is same as current
-	if err := a.ComparePassword(user.PasswordHash, newPassword); err == nil {
+	if VerifyPassword(newPassword, user.PasswordHash) {
 		return fmt.Errorf("new password must be different from current password")
 	}
 
 	// Hash new password
-	passwordHash, err := a.HashPassword(newPassword)
+	passwordHash, err := HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}

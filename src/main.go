@@ -10,6 +10,7 @@ import (
 
 	"github.com/casapps/cassocial/src/config"
 	"github.com/casapps/cassocial/src/server"
+	"github.com/casapps/cassocial/src/server/handler"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -42,14 +43,14 @@ func main() {
 		// Operation flags
 		debug      = flag.Bool("debug", false, "Enable debug mode")
 		showStatus = flag.Bool("status", false, "Show status and health")
-		_          = flag.Bool("daemon", false, "Run as daemon") // TODO: Implement daemonization
+		daemon     = flag.Bool("daemon", false, "Run as daemon")
 
 		// Service management
-		_ = flag.String("service", "", "Service command (start|stop|restart|reload|--install|--uninstall)") // TODO: Implement service management
+		service = flag.String("service", "", "Service command (start|stop|restart|reload|--install|--uninstall)")
 
 		// Maintenance
-		_ = flag.String("maintenance", "", "Maintenance command (backup|restore|update|mode|setup)") // TODO: Implement maintenance
-		_ = flag.String("update", "", "Update command (check|yes|branch)") // TODO: Implement update
+		maintenance = flag.String("maintenance", "", "Maintenance command (backup|restore|update|mode|setup)")
+		update      = flag.String("update", "", "Update command (check|yes|branch)")
 	)
 
 	flag.Parse()
@@ -95,8 +96,25 @@ func main() {
 		os.Exit(0)
 	}
 
-	// TODO: Implement service, maintenance, and update handlers
-	// For now, these are defined but not used
+	if *daemon {
+		fmt.Fprintln(os.Stderr, "error: --daemon not yet implemented")
+		os.Exit(1)
+	}
+
+	if *service != "" {
+		fmt.Fprintln(os.Stderr, "error: --service not yet implemented")
+		os.Exit(1)
+	}
+
+	if *maintenance != "" {
+		fmt.Fprintln(os.Stderr, "error: --maintenance not yet implemented")
+		os.Exit(1)
+	}
+
+	if *update != "" {
+		fmt.Fprintln(os.Stderr, "error: --update not yet implemented")
+		os.Exit(1)
+	}
 
 	// Write PID file
 	if err := server.WritePIDFile(pidFilePath); err != nil {
@@ -123,7 +141,12 @@ func main() {
 	log.Printf("Cassocial v%s starting...", Version)
 	log.Printf("Mode: %s, Address: %s, Port: %d", cfg.Server.Mode, cfg.Server.Address, cfg.Server.Port)
 
-	srv, err := server.New(cfg, db)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	authSvc := server.NewAuth(db, jwtSecret)
+	router := handler.NewRouter(db, authSvc)
+	h := router.SetupRoutes()
+
+	srv, err := server.New(cfg, db, h)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
@@ -183,6 +206,5 @@ func printHelp() {
 }
 
 func handleStatus(cfg *config.Config, pidFile string) {
-	fmt.Println("Status: Not implemented yet")
-	// TODO: Implement status check
+	fmt.Println("Status: not yet implemented")
 }

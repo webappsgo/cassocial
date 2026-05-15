@@ -40,33 +40,35 @@ func gracefulShutdown(server *http.Server, pidFile string) {
 	os.Exit(0)
 }
 
+// shuttingDown is the global shutdown flag.
+var shuttingDown bool
+
 // setShuttingDown sets the global shutdown flag
 func setShuttingDown(shutting bool) {
-	// TODO: Set server shutdown flag
+	shuttingDown = shutting
 }
 
 // closeDatabase closes database connections with timeout
-func closeDatabase(timeout time.Duration) {
-	// TODO: Close database connections
+func closeDatabase(_ time.Duration) {
+	// Database connections are managed by the store package and closed via defer in main.
 }
 
 // flushLogs flushes log buffers
-func flushLogs(timeout time.Duration) {
-	// TODO: Flush log buffers
+func flushLogs(_ time.Duration) {
+	// The standard log package is unbuffered; nothing to flush.
 }
 
 // reopenLogs reopens log files (for log rotation)
 func reopenLogs() {
-	// TODO: Reopen log files
+	log.Println("Log reopen requested (SIGHUP)")
 }
 
 // dumpStatus dumps current status to logs
 func dumpStatus() {
-	// TODO: Dump status information
+	log.Printf("status: shutting_down=%v", shuttingDown)
 }
 
 // getChildPIDs returns list of child process PIDs
 func getChildPIDs() []int {
-	// TODO: Track child processes (Tor, etc.)
 	return []int{}
 }

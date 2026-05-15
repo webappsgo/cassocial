@@ -33,17 +33,19 @@ src/
 ├── config/                 # Configuration
 ├── mode/                   # Mode detection
 ├── paths/                  # Path resolution
+├── signal/                 # Signal handling
 ├── ssl/                    # SSL/TLS handling
 ├── swagger/                # OpenAPI/Swagger
 ├── graphql/                # GraphQL API
 ├── admin/                  # Admin panel
 ├── scheduler/              # Background tasks
 ├── server/
-│   ├── handler/            # HTTP handlers (23 files)
+│   ├── handler/            # HTTP handlers
 │   ├── service/            # Business logic
 │   ├── model/              # Data models
 │   ├── store/              # Database layer
-│   └── static/             # Static assets
+│   ├── static/             # Static assets
+│   └── template/           # HTML templates
 └── service/                # Email services
 ```
 
@@ -129,8 +131,8 @@ func (h *MyHandler) HandleMyFeature(w http.ResponseWriter, r *http.Request) {
 ### 2. Register Route
 
 ```go
-// src/server/routes.go
-s.router.HandleFunc("/api/v1/myfeature", myHandler.HandleMyFeature)
+// src/server/handler/router.go — add to SetupRoutes()
+rt.mux.Handle("GET /api/myfeature", rt.middleware.RequireAuth(http.HandlerFunc(rt.myHandlers.HandleMyFeature)))
 ```
 
 ### 3. Add to OpenAPI Spec
@@ -188,7 +190,7 @@ cassocial --debug
 or
 
 ```bash
-export DEBUG=true
+export CASSOCIAL_DEBUG=true
 docker compose up
 ```
 

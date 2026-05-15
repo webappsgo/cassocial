@@ -3,7 +3,6 @@ package swagger
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 )
 
 // Handler serves Swagger UI and OpenAPI specification

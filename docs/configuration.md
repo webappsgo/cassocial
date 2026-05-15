@@ -18,7 +18,7 @@ server:
   debug: false
 
 database:
-  driver: sqlite  # sqlite, postgres, mysql
+  driver: sqlite  # sqlite, pgx, postgres, mysql
   name: /data/db/cassocial.db
   max_connections: 10
   max_idle_connections: 5
@@ -70,11 +70,11 @@ CASSOCIAL_DB_PORT=5432
 CASSOCIAL_DB_USER=cassocial
 CASSOCIAL_DB_PASSWORD=password
 
-# Email
-CASSOCIAL_EMAIL_HOST=smtp.example.com
-CASSOCIAL_EMAIL_PORT=587
-CASSOCIAL_EMAIL_USERNAME=user
-CASSOCIAL_EMAIL_PASSWORD=pass
+# Directories
+CASSOCIAL_CONFIG=/etc/casapps/cassocial
+CASSOCIAL_DATA=/var/lib/casapps/cassocial
+CASSOCIAL_LOG=/var/log/casapps/cassocial
+CASSOCIAL_PID=/var/run/casapps/cassocial.pid
 ```
 
 ## CLI Flags
@@ -84,8 +84,9 @@ All settings can be overridden with CLI flags:
 ```bash
 cassocial --port 8080
 cassocial --mode production
-cassocial --config /etc/cassocial
-cassocial --data /var/lib/cassocial
+cassocial --config /etc/casapps/cassocial
+cassocial --data /var/lib/casapps/cassocial
+cassocial --log /var/log/casapps/cassocial
 cassocial --debug
 ```
 
@@ -159,7 +160,6 @@ ssl:
   enabled: true
   letsencrypt: true
   domain: cassocial.example.com
-  email: admin@example.com
 ```
 
 ## Live Reload

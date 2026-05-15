@@ -119,3 +119,13 @@ rootfs/
 # Go
 go.work
 go.work.sum
+*.exe
+*.test
+*.out
+vendor/
+
+# Dotenv (keep default.env and app.env tracked)
+.env
+*.env
+!default.env
+!app.env

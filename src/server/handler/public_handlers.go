@@ -161,7 +161,6 @@ func (h *PublicHandlers) GetPublicProfileQR(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// TODO: Implement QR code generation
 	siteURL, _ := h.db.GetSetting("site_url")
 	profileURL := siteURL + "/" + username
 

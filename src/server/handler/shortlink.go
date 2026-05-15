@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -50,8 +51,7 @@ func (h *ShortlinkHandler) HandleCreateShortlink(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// TODO: Get user ID from session (or allow anonymous with rate limiting)
-	userID := "temp-user-id"
+	userID, _ := server.GetUserIDFromContext(r.Context())
 
 	var req CreateShortlinkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,47 +68,52 @@ func (h *ShortlinkHandler) HandleCreateShortlink(w http.ResponseWriter, r *http.
 	// Generate or validate custom code
 	code := req.CustomCode
 	if code == "" {
-		// Generate random code
 		code = h.generateShortCode()
 	} else {
-		// Validate custom code
 		if !isValidShortCode(code) {
 			h.renderError(w, http.StatusBadRequest, "Invalid custom code. Use 3-20 alphanumeric characters.")
 			return
 		}
 
-		// TODO: Check if code already exists
+		if existing, err := h.db.GetShortlinkByCode(code); err == nil && existing != nil {
+			h.renderError(w, http.StatusConflict, "Short code already in use")
+			return
+		}
 	}
 
 	// Calculate expiry
-	var expiresAt string
+	var expiresAt *time.Time
+	var expiresAtStr string
 	if req.ExpiresIn > 0 {
 		expiry := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
-		expiresAt = expiry.Format(time.RFC3339)
+		expiresAt = &expiry
+		expiresAtStr = expiry.Format(time.RFC3339)
 	}
 
-	// Create shortlink
-	shortlink := &Shortlink{
-		Code:      code,
-		URL:       req.URL,
-		UserID:    userID,
-		Clicks:    0,
+	shortlink := &store.Shortlink{
+		ID:        generateUUID(),
+		ShortCode: code,
+		TargetURL: req.URL,
+		ProfileID: userID,
 		ExpiresAt: expiresAt,
+		CreatedAt: time.Now(),
 	}
 
-	// TODO: Save to database
-	_ = shortlink
+	if err := h.db.CreateShortlink(shortlink); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to create shortlink")
+		return
+	}
 
 	// Build short URL
 	shortURL := fmt.Sprintf("https://%s/s/%s", r.Host, code)
 
 	h.renderJSON(w, http.StatusCreated, map[string]interface{}{
-		"status":    "success",
-		"message":   "Shortlink created successfully",
-		"code":      code,
-		"short_url": shortURL,
+		"status":     "success",
+		"message":    "Shortlink created successfully",
+		"code":       code,
+		"short_url":  shortURL,
 		"target_url": req.URL,
-		"expires_at": expiresAt,
+		"expires_at": expiresAtStr,
 	})
 }
 
@@ -121,17 +126,20 @@ func (h *ShortlinkHandler) HandleRedirectShortlink(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// TODO: Get shortlink from database
-	// TODO: Check if expired
-	// TODO: Track click with IP, user agent, referer
+	shortlink, err := h.db.GetShortlinkByCode(code)
+	if err != nil || shortlink == nil {
+		http.NotFound(w, r)
+		return
+	}
 
-	// For now, redirect to a placeholder
-	targetURL := "https://github.com/casapps/cassocial"
+	if shortlink.ExpiresAt != nil && time.Now().After(*shortlink.ExpiresAt) {
+		http.Error(w, "This link has expired", http.StatusGone)
+		return
+	}
 
-	// Increment click count
-	// TODO: Update database
+	_ = h.db.IncrementShortlinkClickCount(shortlink.ID)
 
-	http.Redirect(w, r, targetURL, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, shortlink.TargetURL, http.StatusTemporaryRedirect)
 }
 
 // HandleGetShortlink returns shortlink information
@@ -142,27 +150,52 @@ func (h *ShortlinkHandler) HandleGetShortlink(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// TODO: Get shortlink from database
-	shortlink := map[string]interface{}{
-		"code":       code,
-		"url":        "https://example.com",
-		"clicks":     0,
-		"created_at": time.Now().Format(time.RFC3339),
+	sl, err := h.db.GetShortlinkByCode(code)
+	if err != nil || sl == nil {
+		h.renderError(w, http.StatusNotFound, "Shortlink not found")
+		return
 	}
 
-	h.renderJSON(w, http.StatusOK, shortlink)
+	h.renderJSON(w, http.StatusOK, map[string]interface{}{
+		"code":       sl.ShortCode,
+		"url":        sl.TargetURL,
+		"clicks":     sl.ClickCount,
+		"created_at": sl.CreatedAt.Format(time.RFC3339),
+	})
 }
 
 // HandleListShortlinks lists user's shortlinks
 func (h *ShortlinkHandler) HandleListShortlinks(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get user's shortlinks from database
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
-	shortlinks := []interface{}{}
+	rows, err := h.db.GetShortlinksByProfileID(userID)
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to retrieve shortlinks")
+		return
+	}
+
+	result := make([]map[string]interface{}, 0, len(rows))
+	for _, sl := range rows {
+		entry := map[string]interface{}{
+			"id":         sl.ID,
+			"code":       sl.ShortCode,
+			"url":        sl.TargetURL,
+			"clicks":     sl.ClickCount,
+			"created_at": sl.CreatedAt.Format(time.RFC3339),
+		}
+		if sl.ExpiresAt != nil {
+			entry["expires_at"] = sl.ExpiresAt.Format(time.RFC3339)
+		}
+		result = append(result, entry)
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
-		"shortlinks": shortlinks,
-		"total":      len(shortlinks),
+		"shortlinks": result,
+		"total":      len(result),
 	})
 }
 
@@ -173,15 +206,33 @@ func (h *ShortlinkHandler) HandleDeleteShortlink(w http.ResponseWriter, r *http.
 		return
 	}
 
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		h.renderError(w, http.StatusBadRequest, "Shortlink code required")
 		return
 	}
 
-	// TODO: Get user ID from session
-	// TODO: Verify user owns shortlink
-	// TODO: Delete shortlink
+	sl, err := h.db.GetShortlinkByCode(code)
+	if err != nil || sl == nil {
+		h.renderError(w, http.StatusNotFound, "Shortlink not found")
+		return
+	}
+
+	if sl.ProfileID != userID {
+		h.renderError(w, http.StatusForbidden, "You do not own this shortlink")
+		return
+	}
+
+	if err := h.db.DeleteShortlink(sl.ID); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to delete shortlink")
+		return
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
@@ -191,25 +242,36 @@ func (h *ShortlinkHandler) HandleDeleteShortlink(w http.ResponseWriter, r *http.
 
 // HandleShortlinkAnalytics returns analytics for a shortlink
 func (h *ShortlinkHandler) HandleShortlinkAnalytics(w http.ResponseWriter, r *http.Request) {
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		h.renderError(w, http.StatusBadRequest, "Shortlink code required")
 		return
 	}
 
-	// TODO: Get user ID from session
-	// TODO: Verify user owns shortlink
-	// TODO: Get click analytics
-
-	analytics := map[string]interface{}{
-		"code":         code,
-		"total_clicks": 0,
-		"clicks_by_day": []interface{}{},
-		"top_referers": []interface{}{},
-		"top_countries": []interface{}{},
+	sl, err := h.db.GetShortlinkByCode(code)
+	if err != nil || sl == nil {
+		h.renderError(w, http.StatusNotFound, "Shortlink not found")
+		return
 	}
 
-	h.renderJSON(w, http.StatusOK, analytics)
+	if sl.ProfileID != userID {
+		h.renderError(w, http.StatusForbidden, "You do not own this shortlink")
+		return
+	}
+
+	h.renderJSON(w, http.StatusOK, map[string]interface{}{
+		"code":          sl.ShortCode,
+		"total_clicks":  sl.ClickCount,
+		"clicks_by_day": []interface{}{},
+		"top_referers":  []interface{}{},
+		"top_countries": []interface{}{},
+	})
 }
 
 // HandleShortlinkQR generates QR code for a shortlink

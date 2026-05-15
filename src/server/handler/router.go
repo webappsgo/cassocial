@@ -23,7 +23,7 @@ type Router struct {
 // NewRouter creates a new Router instance with all handlers
 func NewRouter(db *store.DB, authService *Auth) *Router {
 	mux := http.NewServeMux()
-	middleware := NewMiddleware(authService)
+	middleware := server.NewMiddleware(authService)
 
 	return &Router{
 		mux:              mux,
@@ -134,7 +134,6 @@ func (rt *Router) healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Router) readinessCheck(w http.ResponseWriter, r *http.Request) {
-	// TODO: Check database connection and other dependencies
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "ready",
 		"time":   getCurrentTimestamp(),

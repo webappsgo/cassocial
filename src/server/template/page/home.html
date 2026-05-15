@@ -1,0 +1,41 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="container">
+  <section class="hero text-center mt-4 mb-4" aria-labelledby="hero-heading">
+    <img src="/static/images/logo.svg" alt="{{.SiteName}}" class="logo mb-3" width="200" height="60">
+    <h1 id="hero-heading">{{.SiteName}}</h1>
+    <p>Your self-hosted link aggregator and social profile page. Share everything about yourself in one place.</p>
+    <div class="d-flex justify-center gap-2 mt-3">
+      {{if .RegistrationEnabled}}
+      <a href="/auth/register" class="btn btn-primary btn-rounded btn-lg">Get Started</a>
+      {{end}}
+      <a href="/auth/login" class="btn btn-secondary btn-rounded btn-lg">Sign In</a>
+    </div>
+  </section>
+
+  <section class="mt-4" aria-labelledby="features-heading">
+    <h2 id="features-heading" class="text-center mb-3">Why Cassocial?</h2>
+    <div class="grid-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h3 class="card-title">Self-Hosted</h3>
+          <p>Full control over your data. Run it on your own server with a single binary and no external dependencies.</p>
+        </div>
+      </div>
+      <div class="card text-center">
+        <div class="card-body">
+          <h3 class="card-title">Customizable</h3>
+          <p>Themes, custom CSS, background gradients, and button styles — make your page truly yours.</p>
+        </div>
+      </div>
+      <div class="card text-center">
+        <div class="card-body">
+          <h3 class="card-title">Analytics</h3>
+          <p>Built-in privacy-respecting analytics. See which links get clicked and where visitors come from.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{{end}}

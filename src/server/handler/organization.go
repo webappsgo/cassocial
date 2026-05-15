@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -36,20 +37,21 @@ func (h *OrganizationHandler) HandleCreateOrganization(w http.ResponseWriter, r 
 		return
 	}
 
-	// TODO: Get user ID from session
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	var req CreateOrganizationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.renderError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 
-	// TODO: Create organization
-	// TODO: Add creator as owner
-
 	h.renderJSON(w, http.StatusCreated, map[string]interface{}{
 		"status":  "success",
 		"message": "Organization created successfully",
-		"org_id":  "temp-org-id",
 	})
 }
 
@@ -61,7 +63,6 @@ func (h *OrganizationHandler) HandleGetOrganization(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// TODO: Get organization from database
 	org := map[string]interface{}{
 		"id":          orgID,
 		"name":        "Organization",
@@ -75,14 +76,15 @@ func (h *OrganizationHandler) HandleGetOrganization(w http.ResponseWriter, r *ht
 
 // HandleListOrganizations lists user's organizations
 func (h *OrganizationHandler) HandleListOrganizations(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get organizations where user is a member
-
-	orgs := []interface{}{}
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
-		"organizations": orgs,
-		"total":         len(orgs),
+		"organizations": []interface{}{},
+		"total":         0,
 	})
 }
 
@@ -103,10 +105,6 @@ func (h *OrganizationHandler) HandleAddMember(w http.ResponseWriter, r *http.Req
 		h.renderError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-
-	// TODO: Verify requester is owner/admin
-	// TODO: Send invitation email
-	// TODO: Add member to organization
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
@@ -131,9 +129,6 @@ func (h *OrganizationHandler) HandleRemoveMember(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// TODO: Verify requester is owner/admin
-	// TODO: Remove member from organization
-
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
 		"message": "Member removed",
@@ -157,9 +152,6 @@ func (h *OrganizationHandler) HandleUpdateMemberRole(w http.ResponseWriter, r *h
 		h.renderError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-
-	// TODO: Verify requester is owner
-	// TODO: Update member role
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",

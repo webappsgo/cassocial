@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
@@ -61,7 +60,8 @@ type Enable2FAResponse struct {
 
 // Verify2FARequest represents a 2FA verification request
 type Verify2FARequest struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Secret string `json:"secret,omitempty"`
 }
 
 // Register handles user registration
@@ -84,11 +84,11 @@ func (h *AuthHandlers) Register(w http.ResponseWriter, r *http.Request) {
 	user, err := h.auth.Register(req.Username, req.Email, req.Password)
 	if err != nil {
 		switch err {
-		case auth.ErrUsernameExists:
+		case server.ErrUsernameExists:
 			respondError(w, http.StatusConflict, "username already exists")
-		case auth.ErrEmailExists:
+		case server.ErrEmailExists:
 			respondError(w, http.StatusConflict, "email already exists")
-		case auth.ErrWeakPassword:
+		case server.ErrWeakPassword:
 			respondError(w, http.StatusBadRequest, err.Error())
 		default:
 			respondError(w, http.StatusInternalServerError, "failed to create user")
@@ -122,13 +122,13 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 	token, user, err := h.auth.Login(req.Username, req.Password)
 	if err != nil {
 		switch err {
-		case auth.ErrInvalidCredentials:
+		case server.ErrInvalidCredentials:
 			respondError(w, http.StatusUnauthorized, "invalid credentials")
-		case auth.ErrUserNotActive:
+		case server.ErrUserNotActive:
 			respondError(w, http.StatusForbidden, "user account is not active")
-		case auth.ErrEmailNotVerified:
+		case server.ErrEmailNotVerified:
 			respondError(w, http.StatusForbidden, "email not verified")
-		case auth.Err2FARequired:
+		case server.Err2FARequired:
 			// Return user ID for 2FA flow
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"requires_2fa": true,
@@ -213,7 +213,7 @@ func (h *AuthHandlers) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate password reset token
-	token, err := h.auth.GeneratePasswordResetToken(req.Email)
+	token, err := h.auth.RequestPasswordReset(req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not
 		respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -222,9 +222,7 @@ func (h *AuthHandlers) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Send email with reset token
-	// For now, return success message
-	_ = token // Use token in email sending
+	_ = token
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "password reset link has been sent to your email",
@@ -244,9 +242,9 @@ func (h *AuthHandlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	err := h.auth.ResetPassword(req.Token, req.Password)
 	if err != nil {
 		switch err {
-		case auth.ErrInvalidToken:
+		case server.ErrInvalidToken:
 			respondError(w, http.StatusBadRequest, "invalid or expired reset token")
-		case auth.ErrWeakPassword:
+		case server.ErrWeakPassword:
 			respondError(w, http.StatusBadRequest, err.Error())
 		default:
 			respondError(w, http.StatusInternalServerError, "failed to reset password")
@@ -272,7 +270,7 @@ func (h *AuthHandlers) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	err := h.auth.VerifyEmail(token)
 	if err != nil {
 		switch err {
-		case auth.ErrInvalidVerificationToken:
+		case server.ErrInvalidVerificationToken:
 			respondError(w, http.StatusBadRequest, "invalid or expired verification token")
 		default:
 			respondError(w, http.StatusInternalServerError, "failed to verify email")
@@ -288,7 +286,7 @@ func (h *AuthHandlers) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 // Enable2FA handles enabling 2FA for the authenticated user
 // POST /api/auth/2fa/enable
 func (h *AuthHandlers) Enable2FA(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -308,22 +306,22 @@ func (h *AuthHandlers) Enable2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate 2FA secret
-	secret, qrCode, err := h.auth.Generate2FASecret(user)
+	setup, err := h.auth.Generate2FASecret(user)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to generate 2FA secret")
 		return
 	}
 
 	respondJSON(w, http.StatusOK, Enable2FAResponse{
-		Secret: secret,
-		QRCode: qrCode,
+		Secret: setup.Secret,
+		QRCode: setup.QRCodeURL,
 	})
 }
 
 // Verify2FA handles verifying and enabling 2FA
 // POST /api/auth/2fa/verify
 func (h *AuthHandlers) Verify2FA(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -335,24 +333,9 @@ func (h *AuthHandlers) Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user
-	user, err := h.auth.GetUserByID(userID)
-	if err != nil {
-		respondError(w, http.StatusNotFound, "user not found")
-		return
-	}
-
-	// Verify 2FA code
-	valid, err := h.auth.Verify2FACode(user, req.Code)
-	if err != nil || !valid {
+	// Enable 2FA for user (verifies the code internally)
+	if err := h.auth.Enable2FA(userID, req.Secret, req.Code); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid 2FA code")
-		return
-	}
-
-	// Enable 2FA for user
-	err = h.auth.Enable2FA(userID)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to enable 2FA")
 		return
 	}
 
@@ -364,7 +347,7 @@ func (h *AuthHandlers) Verify2FA(w http.ResponseWriter, r *http.Request) {
 // Disable2FA handles disabling 2FA for the authenticated user
 // POST /api/auth/2fa/disable
 func (h *AuthHandlers) Disable2FA(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return

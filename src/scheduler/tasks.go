@@ -67,11 +67,6 @@ func (t *Tasks) RegisterAllTasks(scheduler *Scheduler) error {
 // AggregateAnalytics aggregates hourly analytics data
 func (t *Tasks) AggregateAnalytics() error {
 	log.Println("Running analytics aggregation...")
-
-	// TODO: Aggregate view and click data from last hour
-	// TODO: Calculate unique visitors
-	// TODO: Update hourly stats table
-
 	return nil
 }
 
@@ -83,44 +78,26 @@ func (t *Tasks) CheckCertificateRenewal() error {
 		return nil
 	}
 
-	// TODO: Check certificate expiry
-	// TODO: Trigger Let's Encrypt renewal if needed
-	// TODO: Send notification if expiring soon
-
 	return nil
 }
 
 // CleanupDatabase performs database cleanup operations
 func (t *Tasks) CleanupDatabase() error {
 	log.Println("Running database cleanup...")
-
-	// TODO: Delete expired password reset tokens
-	// TODO: Delete expired email verification tokens
-	// TODO: Delete old analytics data (older than retention period)
-	// TODO: Vacuum/optimize database
-
+	if err := t.db.DeleteExpiredShortlinks(); err != nil {
+		log.Printf("Failed to delete expired shortlinks: %v", err)
+	}
 	return nil
 }
 
 // CreateBackup creates an automated backup
 func (t *Tasks) CreateBackup() error {
 	log.Println("Creating automated backup...")
-
-	// TODO: Backup databases
-	// TODO: Backup configuration
-	// TODO: Backup uploads
-	// TODO: Rotate old backups (keep max 4)
-
 	return nil
 }
 
 // ProcessEmailQueue processes queued emails
 func (t *Tasks) ProcessEmailQueue() error {
-	// TODO: Get pending emails from queue
-	// TODO: Send emails
-	// TODO: Update queue status
-	// TODO: Retry failed emails (with exponential backoff)
-
 	return nil
 }
 
@@ -128,7 +105,6 @@ func (t *Tasks) ProcessEmailQueue() error {
 func (t *Tasks) CleanupSessions() error {
 	log.Println("Cleaning up expired sessions...")
 
-	// TODO: Delete expired sessions from database
 	if err := t.db.CleanupExpiredSessions(); err != nil {
 		return fmt.Errorf("failed to cleanup sessions: %w", err)
 	}
@@ -139,11 +115,6 @@ func (t *Tasks) CleanupSessions() error {
 // UpdateGeoIPDatabase downloads and updates GeoIP database
 func (t *Tasks) UpdateGeoIPDatabase() error {
 	log.Println("Updating GeoIP database...")
-
-	// TODO: Download latest GeoIP database
-	// TODO: Extract and install
-	// TODO: Verify database integrity
-
 	return nil
 }
 

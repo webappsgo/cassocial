@@ -79,13 +79,6 @@ func (m *Manager) getManualCertConfig() (*tls.Config, error) {
 
 // getLetsEncryptConfig sets up Let's Encrypt automatic certificates
 func (m *Manager) getLetsEncryptConfig() (*tls.Config, error) {
-	// TODO: Implement Let's Encrypt integration
-	// This requires:
-	// - golang.org/x/crypto/acme/autocert
-	// - Certificate cache directory
-	// - HTTP-01 or TLS-ALPN-01 challenge handling
-	// - Automatic renewal
-
 	log.Println("Let's Encrypt support not yet implemented")
 	return nil, fmt.Errorf("Let's Encrypt support coming soon")
 }

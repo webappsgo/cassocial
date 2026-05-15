@@ -95,27 +95,16 @@ func (a *Auth) Enable2FA(userID, secret, code string) error {
 	return nil
 }
 
-// Disable2FA disables two-factor authentication for a user
-func (a *Auth) Disable2FA(userID, password string) error {
-	// Get user
-	user, err := a.GetUserByID(userID)
-	if err != nil {
-		return err
-	}
-
-	// Verify password
-	if err := a.ComparePassword(user.PasswordHash, password); err != nil {
-		return ErrInvalidCredentials
-	}
-
+// Disable2FA disables two-factor authentication for a user.
+// The caller is responsible for verifying user identity before calling this.
+func (a *Auth) Disable2FA(userID string) error {
 	// Update user in database
 	query := "UPDATE users SET two_factor_enabled = ?, two_factor_secret = ?, updated_at = ? WHERE id = ?"
 	if a.db.Driver == "postgres" {
 		query = "UPDATE users SET two_factor_enabled = $1, two_factor_secret = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	_, err = a.db.Exec(query, false, "", time.Now(), userID)
-	if err != nil {
+	if _, err := a.db.Exec(query, false, "", time.Now(), userID); err != nil {
 		return fmt.Errorf("failed to disable 2FA: %w", err)
 	}
 

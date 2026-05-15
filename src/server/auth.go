@@ -13,7 +13,6 @@ import (
 	"github.com/casapps/cassocial/src/server/store"
 	"github.com/casapps/cassocial/src/server/model"
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -88,8 +87,8 @@ func (a *Auth) Register(username, email, password string) (*model.User, error) {
 		return nil, ErrEmailExists
 	}
 
-	// Hash password
-	passwordHash, err := a.HashPassword(password)
+	// Hash password using Argon2id
+	passwordHash, err := HashPassword(password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -156,7 +155,7 @@ func (a *Auth) Login(username, password string) (string, *model.User, error) {
 	// Get user by username or email
 	user, err := a.GetUserByUsernameOrEmail(username)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == ErrUserNotFound || err == sql.ErrNoRows {
 			return "", nil, ErrInvalidCredentials
 		}
 		return "", nil, fmt.Errorf("failed to get user: %w", err)
@@ -174,7 +173,7 @@ func (a *Auth) Login(username, password string) (string, *model.User, error) {
 	}
 
 	// Verify password
-	if err := a.ComparePassword(user.PasswordHash, password); err != nil {
+	if !VerifyPassword(password, user.PasswordHash) {
 		return "", nil, ErrInvalidCredentials
 	}
 
@@ -303,20 +302,6 @@ func (a *Auth) RefreshToken(tokenString string) (string, error) {
 	return a.GenerateToken(user)
 }
 
-// HashPassword hashes a password using bcrypt
-func (a *Auth) HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hash), nil
-}
-
-// ComparePassword compares a password with a hash
-func (a *Auth) ComparePassword(hash, password string) error {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-}
-
 // ValidatePassword validates a password against requirements
 func (a *Auth) ValidatePassword(password string) error {
 	reqs, err := a.GetPasswordRequirements()
@@ -380,10 +365,11 @@ func (a *Auth) GetUserByID(id string) (*model.User, error) {
 		query = strings.Replace(query, "?", "$1", 1)
 	}
 
+	var twoFactorSecret sql.NullString
 	err := a.db.QueryRow(query, id).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
-		&user.TwoFactorEnabled, &user.TwoFactorSecret,
+		&user.TwoFactorEnabled, &twoFactorSecret,
 	)
 
 	if err != nil {
@@ -393,6 +379,7 @@ func (a *Auth) GetUserByID(id string) (*model.User, error) {
 		return nil, err
 	}
 
+	user.TwoFactorSecret = twoFactorSecret.String
 	return user, nil
 }
 
@@ -407,10 +394,11 @@ func (a *Auth) GetUserByUsername(username string) (*model.User, error) {
 		query = strings.Replace(query, "?", "$1", 1)
 	}
 
+	var twoFactorSecret sql.NullString
 	err := a.db.QueryRow(query, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
-		&user.TwoFactorEnabled, &user.TwoFactorSecret,
+		&user.TwoFactorEnabled, &twoFactorSecret,
 	)
 
 	if err != nil {
@@ -420,6 +408,7 @@ func (a *Auth) GetUserByUsername(username string) (*model.User, error) {
 		return nil, err
 	}
 
+	user.TwoFactorSecret = twoFactorSecret.String
 	return user, nil
 }
 
@@ -434,10 +423,11 @@ func (a *Auth) GetUserByEmail(email string) (*model.User, error) {
 		query = strings.Replace(query, "?", "$1", 1)
 	}
 
+	var twoFactorSecret sql.NullString
 	err := a.db.QueryRow(query, email).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
-		&user.TwoFactorEnabled, &user.TwoFactorSecret,
+		&user.TwoFactorEnabled, &twoFactorSecret,
 	)
 
 	if err != nil {
@@ -447,6 +437,7 @@ func (a *Auth) GetUserByEmail(email string) (*model.User, error) {
 		return nil, err
 	}
 
+	user.TwoFactorSecret = twoFactorSecret.String
 	return user, nil
 }
 
@@ -462,10 +453,11 @@ func (a *Auth) GetUserByUsernameOrEmail(usernameOrEmail string) (*model.User, er
 		query = strings.Replace(query, "?", "$2", 1)
 	}
 
+	var twoFactorSecret sql.NullString
 	err := a.db.QueryRow(query, usernameOrEmail, usernameOrEmail).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
-		&user.TwoFactorEnabled, &user.TwoFactorSecret,
+		&user.TwoFactorEnabled, &twoFactorSecret,
 	)
 
 	if err != nil {
@@ -475,6 +467,7 @@ func (a *Auth) GetUserByUsernameOrEmail(usernameOrEmail string) (*model.User, er
 		return nil, err
 	}
 
+	user.TwoFactorSecret = twoFactorSecret.String
 	return user, nil
 }
 

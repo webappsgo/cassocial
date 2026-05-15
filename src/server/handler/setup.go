@@ -97,7 +97,8 @@ func (h *SetupHandler) HandleSetupBasic(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		// TODO: Save to config
+		h.db.SetSetting("site_name", req.SiteName)
+		h.db.SetSetting("site_description", req.SiteDescription)
 		h.renderJSON(w, http.StatusOK, map[string]string{
 			"status": "success",
 		})
@@ -131,7 +132,9 @@ func (h *SetupHandler) HandleSetupDomain(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		// TODO: Validate and save
+		if req.Domain != "" {
+			h.db.SetSetting("site_url", req.Domain)
+		}
 		h.renderJSON(w, http.StatusOK, map[string]string{
 			"status": "success",
 		})
@@ -174,8 +177,14 @@ func (h *SetupHandler) HandleSetupEmail(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		// TODO: Test SMTP connection
-		// TODO: Save to config
+		if req.Enabled {
+			h.db.SetSetting("email_enabled", "true")
+		} else {
+			h.db.SetSetting("email_enabled", "false")
+		}
+		h.db.SetSetting("smtp_host", req.Host)
+		h.db.SetSetting("smtp_user", req.Username)
+		h.db.SetSetting("smtp_from_address", req.From)
 		h.renderJSON(w, http.StatusOK, map[string]string{
 			"status": "success",
 		})
@@ -211,7 +220,11 @@ func (h *SetupHandler) HandleSetupFeatures(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// TODO: Save to config
+		if req.AllowRegistration {
+			h.db.SetSetting("allow_registration", "true")
+		} else {
+			h.db.SetSetting("allow_registration", "false")
+		}
 		h.renderJSON(w, http.StatusOK, map[string]string{
 			"status": "success",
 		})
@@ -248,8 +261,10 @@ func (h *SetupHandler) HandleSetupDatabase(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// TODO: Test database connection
-		// TODO: Save to config
+		if err := h.db.Ping(); err != nil {
+			h.renderError(w, http.StatusBadRequest, "Database connection failed: "+err.Error())
+			return
+		}
 		h.renderJSON(w, http.StatusOK, map[string]string{
 			"status": "success",
 		})
@@ -298,16 +313,19 @@ func (h *SetupHandler) HandleSetupComplete(w http.ResponseWriter, r *http.Reques
 
 	// Create admin user
 	admin := &store.User{
+		ID:            generateUUID(),
 		Username:      req.AdminUsername,
 		Email:         req.AdminEmail,
 		PasswordHash:  passwordHash,
 		Role:          "admin",
 		Status:        "active",
-		EmailVerified: true, // Admin doesn't need email verification
+		EmailVerified: true,
 	}
 
-	// TODO: Save admin to database
-	_ = admin
+	if err := h.db.CreateUser(admin); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to create admin user")
+		return
+	}
 
 	// Mark as initialized
 	if err := h.db.SetSetting("initialized", "true"); err != nil {
@@ -329,6 +347,13 @@ func (h *SetupHandler) HandleSetupComplete(w http.ResponseWriter, r *http.Reques
 			"email":    req.AdminEmail,
 		},
 	})
+}
+
+// renderJSON renders a JSON response
+func (h *SetupHandler) renderJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
 }
 
 // renderError renders an error response

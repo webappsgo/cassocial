@@ -1,0 +1,20 @@
+{{define "link_card"}}
+<a href="/l/{{.ID}}"
+   class="profile-link btn-animation-lift"
+   {{if .BackgroundColor}}style="background-color: {{.BackgroundColor}}; color: {{.TextColor}};"{{end}}
+   rel="noopener noreferrer"
+   aria-label="{{.Title}}{{if .Username}} ({{.Username}}){{end}}">
+  {{if .IconURL}}
+  <img src="{{.IconURL}}" alt="" class="profile-link-icon" aria-hidden="true" width="32" height="32">
+  {{end}}
+  <span class="profile-link-content">
+    <span class="profile-link-title">{{.Title}}</span>
+    {{if and .Username $.ShowUsernames}}
+    <span class="profile-link-username">{{.Username}}</span>
+    {{end}}
+  </span>
+  {{if .ClickCount}}
+  <span class="badge" aria-label="{{.ClickCount}} clicks">{{.ClickCount}}</span>
+  {{end}}
+</a>
+{{end}}

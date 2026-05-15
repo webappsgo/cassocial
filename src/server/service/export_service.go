@@ -18,6 +18,13 @@ var (
 	ErrProfileAccessDenied     = errors.New("profile access denied")
 )
 
+// AnalyticsRecord holds a single analytics aggregation row.
+type AnalyticsRecord struct {
+	EventType string
+	Count     int
+	Date      string
+}
+
 // ExportService handles exporting profile data to various formats
 type ExportService struct {
 	db             *store.DB
@@ -323,12 +330,6 @@ func (s *ExportService) ExportAnalytics(profileID, userID string, startDate, end
 	}
 	defer rows.Close()
 
-	type AnalyticsRecord struct {
-		EventType string
-		Count     int
-		Date      string
-	}
-
 	var records []AnalyticsRecord
 	for rows.Next() {
 		var record AnalyticsRecord
@@ -349,7 +350,7 @@ func (s *ExportService) ExportAnalytics(profileID, userID string, startDate, end
 	}
 }
 
-func (s *ExportService) exportAnalyticsJSON(profile *model.Profile, records []interface{}) ([]byte, string, error) {
+func (s *ExportService) exportAnalyticsJSON(profile *model.Profile, records []AnalyticsRecord) ([]byte, string, error) {
 	data := map[string]interface{}{
 		"profile_id":  profile.ID,
 		"profile_slug": profile.Slug,
@@ -366,7 +367,7 @@ func (s *ExportService) exportAnalyticsJSON(profile *model.Profile, records []in
 	return jsonData, filename, nil
 }
 
-func (s *ExportService) exportAnalyticsCSV(profile *model.Profile, records []interface{}) ([]byte, string, error) {
+func (s *ExportService) exportAnalyticsCSV(profile *model.Profile, records []AnalyticsRecord) ([]byte, string, error) {
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
 
@@ -376,10 +377,8 @@ func (s *ExportService) exportAnalyticsCSV(profile *model.Profile, records []int
 		return nil, "", fmt.Errorf("failed to write CSV header: %w", err)
 	}
 
-	// Write records (simplified - in production, properly type assert)
-	for _, record := range records {
-		// This would need proper implementation based on actual record type
-		writer.Write([]string{"", "", ""})
+	for _, rec := range records {
+		writer.Write([]string{rec.Date, rec.EventType, fmt.Sprintf("%d", rec.Count)}) //nolint:errcheck
 	}
 
 	writer.Flush()

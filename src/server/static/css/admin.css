@@ -1,0 +1,291 @@
+/**
+ * Cassocial v1.0.0 - Admin Stylesheet
+ * License: MIT
+ * Depends on: main.css (must be loaded first for CSS custom properties)
+ */
+
+/* ============================================================================
+   ADMIN LAYOUT
+   ========================================================================= */
+.admin-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-container {
+  display: flex;
+  flex: 1 0 auto;
+  min-height: calc(100vh - 130px);
+}
+
+/* ============================================================================
+   ADMIN SIDEBAR
+   ========================================================================= */
+.admin-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 72px;
+  height: calc(100vh - 72px);
+  overflow-y: auto;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.admin-nav-section {
+  padding: 0 1rem;
+}
+
+.admin-nav-heading {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  padding: 0 0.5rem;
+}
+
+.admin-nav-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+  min-height: 44px;
+}
+
+.admin-nav-link:hover {
+  background-color: var(--bg-tertiary);
+  text-decoration: none;
+}
+
+.admin-nav-link.active {
+  background-color: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+.admin-nav-link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.admin-nav-icon {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.admin-nav-link.active .admin-nav-icon {
+  color: var(--accent-primary);
+}
+
+/* ============================================================================
+   ADMIN MAIN CONTENT AREA
+   ========================================================================= */
+.admin-main {
+  flex: 1;
+  padding: 2rem;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* ============================================================================
+   ADMIN PAGE HEADER
+   ========================================================================= */
+.admin-page-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-page-header h1 {
+  margin-bottom: 0.25rem;
+}
+
+.admin-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.admin-section-header h2 {
+  margin-bottom: 0;
+}
+
+/* ============================================================================
+   ADMIN STATS GRID (extends base stats-grid)
+   ========================================================================= */
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+/* ============================================================================
+   ADMIN USER TABLE
+   ========================================================================= */
+.admin-table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0;
+}
+
+.admin-table th {
+  background-color: var(--bg-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-table th[data-sort]:hover {
+  color: var(--text-primary);
+}
+
+.admin-table th[data-sort-active]::after {
+  content: " \25be";
+  color: var(--accent-primary);
+}
+
+.admin-table th[data-sort-active][data-sort-dir="asc"]::after {
+  content: " \25b4";
+}
+
+.admin-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tr:hover td {
+  background-color: var(--bg-tertiary);
+}
+
+/* ============================================================================
+   ADMIN ACTION BUTTONS
+   ========================================================================= */
+.admin-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius);
+}
+
+/* ============================================================================
+   ADMIN SETTINGS FORM
+   ========================================================================= */
+.settings-section {
+  margin-bottom: 2.5rem;
+}
+
+.settings-section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* ============================================================================
+   ADMIN BADGE VARIANTS (supplement base badges)
+   ========================================================================= */
+.badge-danger {
+  background-color: rgba(255, 85, 85, 0.1);
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
+}
+
+/* ============================================================================
+   MOBILE RESPONSIVE ADMIN LAYOUT
+   ========================================================================= */
+@media (max-width: 900px) {
+  .admin-sidebar {
+    width: 200px;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-container {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 1rem;
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .admin-nav-section {
+    padding: 0;
+    min-width: 140px;
+  }
+
+  .admin-main {
+    padding: 1rem;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}

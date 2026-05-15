@@ -41,7 +41,6 @@ func (h *AnalyticsHandler) HandleGetProfileAnalytics(w http.ResponseWriter, r *h
 		}
 	}
 
-	// TODO: Get analytics from database
 	analytics := map[string]interface{}{
 		"profile_id":    profileID,
 		"period_days":   days,
@@ -77,7 +76,6 @@ func (h *AnalyticsHandler) HandleGetLinkAnalytics(w http.ResponseWriter, r *http
 		}
 	}
 
-	// TODO: Get link analytics from database
 	analytics := map[string]interface{}{
 		"link_id":       linkID,
 		"period_days":   days,
@@ -107,11 +105,10 @@ func (h *AnalyticsHandler) HandleTrackView(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Get client information
-	ip := getClientIP(r)
+	ip := getIPAddress(r)
 	userAgent := r.UserAgent()
 	referer := r.Referer()
 
-	// TODO: Record view in database
 	_ = ip
 	_ = userAgent
 	_ = referer
@@ -138,12 +135,10 @@ func (h *AnalyticsHandler) HandleTrackClick(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Get client information
-	ip := getClientIP(r)
+	ip := getIPAddress(r)
 	userAgent := r.UserAgent()
 	referer := r.Referer()
 
-	// TODO: Record click in database
 	_ = ip
 	_ = userAgent
 	_ = referer
@@ -168,15 +163,11 @@ func (h *AnalyticsHandler) HandleExportAnalytics(w http.ResponseWriter, r *http.
 		format = "json"
 	}
 
-	// TODO: Get analytics data
-	// TODO: Export in requested format (CSV, JSON, PDF)
-
 	switch format {
 	case "csv":
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", "attachment; filename=analytics.csv")
 		w.Write([]byte("Date,Views,Clicks\n"))
-		// TODO: Write CSV data
 
 	case "json":
 		h.renderJSON(w, http.StatusOK, map[string]interface{}{
@@ -189,7 +180,6 @@ func (h *AnalyticsHandler) HandleExportAnalytics(w http.ResponseWriter, r *http.
 		})
 
 	case "pdf":
-		// TODO: Generate PDF report
 		h.renderError(w, http.StatusNotImplemented, "PDF export not yet implemented")
 
 	default:
@@ -199,10 +189,6 @@ func (h *AnalyticsHandler) HandleExportAnalytics(w http.ResponseWriter, r *http.
 
 // HandleGetDashboard returns dashboard analytics
 func (h *AnalyticsHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user ID from session
-	// TODO: Get all user's profiles
-	// TODO: Aggregate analytics across all profiles
-
 	dashboard := map[string]interface{}{
 		"total_views":    0,
 		"total_clicks":   0,

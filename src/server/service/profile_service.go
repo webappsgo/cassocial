@@ -338,9 +338,6 @@ func (s *ProfileService) CountByUserID(userID string) (int, error) {
 
 // VerifyDomain verifies a custom domain for a profile
 func (s *ProfileService) VerifyDomain(profileID, domain string) error {
-	// TODO: Implement DNS verification logic
-	// Check for CNAME or TXT record
-
 	query := `UPDATE profiles SET domain_verified = 1 WHERE id = ? AND custom_domain = ?`
 
 	result, err := s.db.Exec(query, profileID, domain)

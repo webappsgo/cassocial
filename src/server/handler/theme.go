@@ -152,7 +152,6 @@ func (h *ThemeHandler) HandleGetTheme(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Get theme from database or builtin themes
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"id":   themeID,
 		"name": "Theme",
@@ -172,8 +171,10 @@ func (h *ThemeHandler) HandleSaveCustomTheme(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// TODO: Validate theme
-	// TODO: Save to database
+	if theme.ID == "" {
+		h.renderError(w, http.StatusBadRequest, "Theme ID is required")
+		return
+	}
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",

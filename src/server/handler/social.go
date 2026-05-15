@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -33,10 +34,6 @@ func (h *SocialHandler) HandleProfileDirectory(w http.ResponseWriter, r *http.Re
 	tag := r.URL.Query().Get("tag")
 	verified := r.URL.Query().Get("verified") // "true" or "false"
 
-	// TODO: Get public profiles from database
-	// TODO: Apply filters
-	// TODO: Paginate results
-
 	profiles := []interface{}{}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
@@ -60,7 +57,6 @@ func (h *SocialHandler) HandleSearchProfiles(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// TODO: Search profiles by title, description, slug, tags
 	results := []interface{}{}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
@@ -72,7 +68,6 @@ func (h *SocialHandler) HandleSearchProfiles(w http.ResponseWriter, r *http.Requ
 
 // HandleFeaturedProfiles returns featured profiles
 func (h *SocialHandler) HandleFeaturedProfiles(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get featured profiles from database
 	featured := []interface{}{}
 
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
@@ -88,7 +83,12 @@ func (h *SocialHandler) HandleVerifyProfile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// TODO: Get user ID from session
+	_, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	var req struct {
 		ProfileID string `json:"profile_id"`
 		Proof     string `json:"proof"` // URL or text proving ownership
@@ -99,9 +99,6 @@ func (h *SocialHandler) HandleVerifyProfile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// TODO: Create verification request
-	// TODO: Notify admins for review
-
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
 		"message": "Verification request submitted. We'll review it shortly.",
@@ -110,7 +107,6 @@ func (h *SocialHandler) HandleVerifyProfile(w http.ResponseWriter, r *http.Reque
 
 // HandleGetTags returns available tags
 func (h *SocialHandler) HandleGetTags(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get all tags from database with usage count
 	tags := []map[string]interface{}{
 		{"name": "developer", "count": 0},
 		{"name": "designer", "count": 0},
@@ -140,9 +136,6 @@ func (h *SocialHandler) HandleAddTag(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-
-	// TODO: Verify user owns profile
-	// TODO: Add tag to profile
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",

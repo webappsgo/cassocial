@@ -1,0 +1,20 @@
+{{define "footer"}}
+<footer role="contentinfo">
+  <div class="container">
+    <div class="footer-content">
+      <p class="footer-text">
+        &copy; {{.CurrentYear}} {{.SiteName}} &mdash; self-hosted link aggregator
+      </p>
+      <ul class="footer-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/sitemap.xml">Sitemap</a></li>
+        <li><a href="https://github.com/casapps/cassocial" rel="noopener noreferrer" target="_blank">GitHub</a></li>
+        <li><a href="/.well-known/security.txt">Security</a></li>
+      </ul>
+      {{if .AppVersion}}
+      <p class="footer-text">v{{.AppVersion}}</p>
+      {{end}}
+    </div>
+  </div>
+</footer>
+{{end}}

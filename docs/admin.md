@@ -2,6 +2,28 @@
 
 The admin panel is available at `/admin` after completing the setup wizard.
 
+## Admin API Endpoints
+
+All admin API endpoints require an authenticated session with the `admin` role. They are available under `/api/admin/`:
+
+```
+GET    /api/admin/users                       # List all users
+GET    /api/admin/users/{id}                  # Get user details
+PUT    /api/admin/users/{id}                  # Update user (role/status)
+DELETE /api/admin/users/{id}                  # Delete user
+GET    /api/admin/stats                       # System statistics
+POST   /api/admin/backup                      # Trigger manual backup
+GET    /api/admin/settings                    # Get all settings
+PUT    /api/admin/settings                    # Update settings
+POST   /api/admin/services/import             # Import services database
+POST   /api/admin/cache/clear                 # Clear system cache
+GET    /api/admin/smtp/config                 # Get SMTP configuration
+PUT    /api/admin/smtp/config                 # Update SMTP configuration
+POST   /api/admin/smtp/test                   # Test SMTP connection
+GET    /api/admin/notifications/preferences   # Get notification preferences
+PUT    /api/admin/notifications/preferences   # Update notification preferences
+```
+
 ## Dashboard
 
 The dashboard shows:
@@ -15,11 +37,10 @@ The dashboard shows:
 **Location**: `/admin/users`
 
 - View all users
-- Create new users
-- Edit user details
+- Edit user details (role, status)
 - Suspend/activate users
 - Delete users
-- Assign roles (admin, user, viewer)
+- Assign roles (admin, user)
 
 ## Settings
 

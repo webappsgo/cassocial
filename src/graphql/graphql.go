@@ -40,8 +40,6 @@ func (h *Handler) ServeGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Execute GraphQL query
-	// For now, return a mock response
 	response := GraphQLResponse{
 		Data: map[string]interface{}{
 			"profiles": []interface{}{},

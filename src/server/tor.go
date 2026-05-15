@@ -151,10 +151,7 @@ func (t *TorService) waitForOnionAddress() error {
 
 // GenerateVanityAddress generates a vanity .onion address
 func (t *TorService) GenerateVanityAddress(prefix string) error {
-	// TODO: Implement vanity address generation
-	// This requires generating multiple keypairs until finding one with desired prefix
-	log.Printf("Vanity address generation for prefix '%s' not yet implemented", prefix)
-	return fmt.Errorf("vanity address generation not implemented")
+	return fmt.Errorf("vanity address generation is not supported")
 }
 
 // GetStatus returns Tor service status

@@ -21,7 +21,7 @@ func NewAnalyticsHandlers(db *store.DB) *AnalyticsHandlers {
 // GetProfileAnalytics retrieves analytics for a profile
 // GET /api/analytics/profile/{id}
 func (h *AnalyticsHandlers) GetProfileAnalytics(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -101,7 +101,7 @@ func (h *AnalyticsHandlers) GetProfileAnalytics(w http.ResponseWriter, r *http.R
 // GetLinkAnalytics retrieves analytics for links in a profile
 // GET /api/analytics/links/{profile_id}
 func (h *AnalyticsHandlers) GetLinkAnalytics(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -170,7 +170,7 @@ func (h *AnalyticsHandlers) GetLinkAnalytics(w http.ResponseWriter, r *http.Requ
 // ExportAnalytics exports analytics data
 // GET /api/analytics/export/{profile_id}?format={csv|json}
 func (h *AnalyticsHandlers) ExportAnalytics(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.GetUserIDFromContext(r.Context())
+	userID, ok := server.GetUserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -193,9 +193,8 @@ func (h *AnalyticsHandlers) ExportAnalytics(w http.ResponseWriter, r *http.Reque
 		format = "json"
 	}
 
-	// TODO: Implement CSV and JSON export
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "export functionality to be implemented",
+		"message": "export not yet implemented",
 		"format":  format,
 	})
 }
