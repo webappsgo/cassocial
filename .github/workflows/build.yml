@@ -56,7 +56,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -buildvcs=false -ldflags "${LDFLAGS}" ./src
+          go build -buildvcs=false -ldflags "${LDFLAGS}" -o /tmp/cassocial ./src
 
       - name: Build CLI
         if: hashFiles('src/client/') != ''
@@ -64,7 +64,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -buildvcs=false -ldflags "${LDFLAGS}" ./src/client
+          go build -buildvcs=false -ldflags "${LDFLAGS}" -o /tmp/cassocial-cli ./src/client
 
       - name: Test
         env:
