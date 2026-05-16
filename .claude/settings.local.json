@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(go build *)"
+      "Bash(go build *)",
+      "mcp__github__get_latest_release",
+      "mcp__github__get_tag"
     ]
   }
 }

@@ -76,27 +76,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan for secrets
-        run: |
-          # Check for common secret patterns in source files
-          FAIL=0
-          PATTERNS=(
-            'password\s*=\s*"[^"]+'
-            'secret\s*=\s*"[^"]+'
-            'api_key\s*=\s*"[^"]+'
-            'token\s*=\s*"[^"]+'
-            'AKIA[0-9A-Z]{16}'
-            'sk-[a-zA-Z0-9]{48}'
-          )
-          for pattern in "${PATTERNS[@]}"; do
-            if grep -rE "$pattern" --include="*.go" --include="*.yml" --include="*.yaml" \
-                --exclude-dir=".git" --exclude-dir="vendor" .; then
-              echo "Potential secret detected matching pattern: $pattern"
-              FAIL=1
-            fi
-          done
-          if [ "$FAIL" -eq 1 ]; then
-            echo "Secret scanning found potential issues. Review the output above."
-            exit 1
-          fi
-          echo "No secrets detected."
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab  # v3.95.3
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified

@@ -6,7 +6,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1 // MySQL/MariaDB
 
 	// Authentication
-	github.com/golang-jwt/jwt/v5 v5.2.1 // JWT tokens
+	github.com/golang-jwt/jwt/v5 v5.2.2 // JWT tokens
 	github.com/google/uuid v1.6.0 // indirect; UUID generation
 	github.com/jackc/pgx/v5 v5.7.2 // PostgreSQL - REQUIRED instead of lib/pq
 
