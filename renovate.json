@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "pinDigests": true,
+  "packageRules": [
+    {
+      "matchManagers": ["gomod"],
+      "automerge": false,
+      "labels": ["dependencies", "go"]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "automerge": false,
+      "labels": ["dependencies", "github-actions"],
+      "pinDigests": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "automerge": false
+  },
+  "schedule": ["before 6am on Monday"]
+}

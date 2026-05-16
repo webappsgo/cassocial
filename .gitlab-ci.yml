@@ -1,0 +1,100 @@
+stages:
+  - build
+  - test
+  - security
+  - release
+
+variables:
+  CGO_ENABLED: "0"
+  PROJECTNAME: cassocial
+
+build:
+  stage: build
+  image: golang:alpine
+  cache:
+    key: go-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .go-cache/
+  variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go-cache
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      VERSION=$(cat release.txt 2>/dev/null || echo "0.0.0-dev")
+      COMMIT_ID=$(git rev-parse --short HEAD)
+      BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
+      if [ -f site.txt ]; then OFFICIALSITE=$(cat site.txt); else OFFICIALSITE=${OFFICIALSITE:-${CI_ENVIRONMENT_URL:-}}; fi
+      LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
+      CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o /tmp/cassocial ./src
+      CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o /tmp/cassocial-cli ./src/client
+
+test:
+  stage: test
+  image: golang:alpine
+  cache:
+    key: go-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .go-cache/
+  variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go-cache
+  before_script:
+    - apk add --no-cache git
+  script:
+    - go vet ./...
+    - |
+      go test -v -coverprofile=coverage.out -covermode=atomic ./...
+      COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+      echo "Total coverage: ${COVERAGE}%"
+      if awk "BEGIN{exit !(${COVERAGE} < 60)}"; then
+        echo "Coverage ${COVERAGE}% is below the required 60% threshold"
+        exit 1
+      fi
+
+secret-scan:
+  stage: security
+  image: trufflesecurity/trufflehog:latest
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - trufflehog git file://. --since-commit HEAD~1 --only-verified --fail
+
+vuln-scan:
+  stage: security
+  image: golang:alpine
+  before_script:
+    - apk add --no-cache git
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
+
+release:
+  stage: release
+  image: golang:alpine
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/ || $CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+/'
+  before_script:
+    - apk add --no-cache git curl
+  script:
+    - |
+      VERSION=$(cat release.txt 2>/dev/null || echo "${CI_COMMIT_TAG#v}")
+      COMMIT_ID=$(git rev-parse --short HEAD)
+      BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
+      if [ -f site.txt ]; then OFFICIALSITE=$(cat site.txt); else OFFICIALSITE=${OFFICIALSITE:-}; fi
+      LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
+      mkdir -p binaries
+      for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64; do
+        OS=${platform%/*}
+        ARCH=${platform#*/}
+        OUTPUT=binaries/${PROJECTNAME}-${OS}-${ARCH}
+        [ "$OS" = "windows" ] && OUTPUT=${OUTPUT}.exe
+        GOOS=${OS} GOARCH=${ARCH} CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o "${OUTPUT}" ./src
+        CLI_OUTPUT="${OUTPUT/cassocial/cassocial-cli}"
+        GOOS=${OS} GOARCH=${ARCH} CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o "${CLI_OUTPUT}" ./src/client
+      done
+      echo "${VERSION}" > binaries/version.txt
+      cd binaries && sha256sum * > sha256sums.txt && cd ..
+  artifacts:
+    paths:
+      - binaries/
+    expire_in: 30 days

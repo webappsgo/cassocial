@@ -8,6 +8,10 @@ on:
       - '*.*.*'
   workflow_dispatch:
 
+concurrency:
+  group: docker-${{ gitea.ref }}
+  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
+
 permissions:
   contents: read
   packages: write
@@ -24,13 +28,13 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d0bfe4d69e29fef0ac4d7194  # v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aebb5d36dbce8e317f2  # v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4
 
       - name: Set registry from server URL
         run: |
@@ -42,7 +46,7 @@ jobs:
           echo "REGISTRY=${REGISTRY}" >> $GITEA_ENV
 
       - name: Log in to Container Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772  # v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ gitea.actor }}
@@ -54,13 +58,18 @@ jobs:
           echo "YYMM=$(date +"%y%m")" >> $GITEA_ENV
           if [[ "${{ gitea.ref }}" == refs/tags/* ]]; then
             VERSION="${GITEA_REF_NAME}"
-            echo "VERSION=${VERSION#v}" >> $GITEA_ENV  # Strip 'v' prefix
+            echo "VERSION=${VERSION#v}" >> $GITEA_ENV
             echo "IS_TAG=true" >> $GITEA_ENV
           else
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITEA_ENV
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITEA_ENV
+          fi
 
       - name: Determine tags
         id: tags
@@ -86,7 +95,7 @@ jobs:
           echo "tags=$TAGS" >> $GITEA_OUTPUT
 
       - name: Build and push
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1  # v5
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
         with:
           context: .
           file: docker/Dockerfile
@@ -97,6 +106,7 @@ jobs:
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
+            OFFICIAL_SITE=${{ env.OFFICIALSITE }}
           labels: |
             org.opencontainers.image.vendor=casapps
             org.opencontainers.image.authors=casapps

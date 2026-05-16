@@ -12,11 +12,11 @@ on:
       - master
       - devel
   schedule:
-    - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 concurrency:
-  group: security-${{ github.ref }}
+  group: security-${{ gitea.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -50,7 +50,7 @@ jobs:
       - name: Check workflows pin third-party Actions to SHA
         run: |
           FAIL=0
-          for wf in .github/workflows/*.yml; do
+          for wf in .gitea/workflows/*.yml; do
             while IFS= read -r line; do
               if echo "$line" | grep -qE '^\s+uses: [^@]+@[^#]+$'; then
                 ref=$(echo "$line" | grep -oE '@[^#[:space:]]+' | tr -d '@')
@@ -96,6 +96,7 @@ jobs:
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache:/root/.cache/" \
             aquasec/trivy:latest image \
             --exit-code 1 \
             --severity CRITICAL,HIGH \
