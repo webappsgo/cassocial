@@ -7,8 +7,10 @@
 .github/
 .gitea/
 
-# Entire docker directory
-docker/
+# Docker compose files (not needed in image; Dockerfile and rootfs/ are required)
+docker/docker-compose.yml
+docker/docker-compose.dev.yml
+docker/docker-compose.test.yml
 
 # Runtime volume data (NEVER include in image)
 rootfs/
