@@ -107,8 +107,9 @@ $RECYCLE.BIN/
 binaries/
 releases/
 
-# Runtime volume data (NEVER commit)
+# Runtime volume data (NEVER commit; docker/rootfs/ is the build-time overlay — tracked)
 rootfs/
+!docker/rootfs/
 
 # IDE
 .idea/
