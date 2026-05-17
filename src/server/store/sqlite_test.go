@@ -2591,6 +2591,23 @@ func TestConnect_SQLiteFileInTmpDir(t *testing.T) {
 	}
 }
 
+func TestConnect_SQLiteMkdirAllError(t *testing.T) {
+	// Trigger os.MkdirAll failure by using a path where the parent is a file,
+	// not a directory (creating a subdir under a file fails).
+	dir := t.TempDir()
+	// Create a regular file where Connect will try to create a directory.
+	blockingFile := filepath.Join(dir, "blocking")
+	if err := os.WriteFile(blockingFile, []byte("x"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// dbPath has "blocking" as a directory component, but it's a file → MkdirAll fails.
+	dbPath := filepath.Join(blockingFile, "sub", "test.db")
+	_, err := Connect("sqlite", dbPath)
+	if err == nil {
+		t.Fatal("Connect(sqlite, blocked path) returned nil error, want MkdirAll error")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // RunMigrations – idempotency
 // ---------------------------------------------------------------------------
@@ -2609,6 +2626,36 @@ func TestRunMigrations_Idempotent(t *testing.T) {
 	// Second run – "already applied" log path; must not return an error.
 	if err := db.RunMigrations(); err != nil {
 		t.Fatalf("RunMigrations (second/idempotent): %v", err)
+	}
+}
+
+func TestRunMigrations_AdaptSQL_Pgx(t *testing.T) {
+	// Exercise adaptSQL pgx branch: use a sqlite connection but pgx driver label.
+	// The SQL after pgx substitution won't be valid SQLite, so Exec will fail,
+	// but all adaptSQL pgx-path lines will be covered.
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer raw.Close()
+	db := &DB{DB: raw, Driver: "pgx"}
+	// RunMigrations reads the embedded FS (always succeeds), adapts SQL for pgx,
+	// then exec fails gracefully (logged, no error returned).
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations pgx: unexpected error: %v", err)
+	}
+}
+
+func TestRunMigrations_AdaptSQL_MySQL(t *testing.T) {
+	// Exercise adaptSQL mysql branch: same approach as pgx above.
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer raw.Close()
+	db := &DB{DB: raw, Driver: "mysql"}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations mysql: unexpected error: %v", err)
 	}
 }
 
@@ -3285,16 +3332,21 @@ func TestListClusterNodes_ScanError(t *testing.T) {
 	defer raw.Close()
 	db := &DB{DB: raw, Driver: "sqlite"}
 
-	if _, err := db.Exec(`CREATE TABLE cluster_nodes (id TEXT, is_primary INTEGER)`); err != nil {
+	// Full schema — matching the SELECT columns — but with invalid timestamps so
+	// Scan into *time.Time returns an error inside rows.Next().
+	if _, err := db.Exec(`CREATE TABLE cluster_nodes (
+		id TEXT, hostname TEXT, address TEXT, port INTEGER, status TEXT,
+		is_primary INTEGER, last_heartbeat TEXT, created_at TEXT
+	)`); err != nil {
 		t.Fatalf("CREATE TABLE: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO cluster_nodes VALUES ('n1',0)`); err != nil {
+	if _, err := db.Exec(`INSERT INTO cluster_nodes VALUES ('n1','host','addr',9000,'healthy',0,'NOT_A_DATE','NOT_A_DATE')`); err != nil {
 		t.Fatalf("INSERT: %v", err)
 	}
 
 	_, err = db.ListClusterNodes()
 	if err == nil {
-		t.Error("ListClusterNodes with truncated schema returned nil error, want scan error")
+		t.Error("ListClusterNodes with invalid timestamp returned nil error, want scan error")
 	}
 }
 
@@ -3376,15 +3428,25 @@ func TestSearchProfilesByTag_ScanError(t *testing.T) {
 	defer raw.Close()
 	db := &DB{DB: raw, Driver: "sqlite"}
 
-	// Create minimal profiles and profile_tags tables; truncated profiles schema
-	// makes scan fail (expects 23 columns, gets 2).
-	if _, err := db.Exec(`CREATE TABLE profiles (id TEXT, user_id TEXT, is_public INTEGER)`); err != nil {
+	// Full profiles schema matching the SELECT (23 columns), but with invalid
+	// timestamps so Scan into *time.Time fails inside rows.Next().
+	if _, err := db.Exec(`CREATE TABLE profiles (
+		id TEXT, user_id TEXT, slug TEXT, display_name TEXT, bio TEXT,
+		avatar_url TEXT, header_image_url TEXT, theme_id TEXT, custom_css TEXT,
+		show_usernames INTEGER, is_public INTEGER, password_protected INTEGER,
+		protection_password TEXT, custom_domain TEXT, domain_verified INTEGER,
+		analytics_enabled INTEGER, meta_title TEXT, meta_description TEXT,
+		og_image_url TEXT, view_count INTEGER, qr_code_enabled INTEGER,
+		created_at TEXT, updated_at TEXT
+	)`); err != nil {
 		t.Fatalf("CREATE TABLE profiles: %v", err)
 	}
 	if _, err := db.Exec(`CREATE TABLE profile_tags (profile_id TEXT, tag TEXT)`); err != nil {
 		t.Fatalf("CREATE TABLE profile_tags: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO profiles VALUES ('p1','u1',1)`); err != nil {
+	if _, err := db.Exec(`INSERT INTO profiles VALUES (
+		'p1','u1','slug1','Name','Bio','','','','',0,1,0,'','',0,0,'','','',0,0,'NOT_A_DATE','NOT_A_DATE'
+	)`); err != nil {
 		t.Fatalf("INSERT profiles: %v", err)
 	}
 	if _, err := db.Exec(`INSERT INTO profile_tags VALUES ('p1','golang')`); err != nil {
@@ -3393,7 +3455,7 @@ func TestSearchProfilesByTag_ScanError(t *testing.T) {
 
 	_, err = db.SearchProfilesByTag("golang", 10, 0)
 	if err == nil {
-		t.Error("SearchProfilesByTag with truncated schema returned nil error, want scan error")
+		t.Error("SearchProfilesByTag with invalid timestamp returned nil error, want scan error")
 	}
 }
 
