@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/casapps/cassocial/src/server"
+	"github.com/casapps/cassocial/src/server/store"
 )
 
 // ---- RefreshToken ----
@@ -745,6 +746,88 @@ func TestVerifyEmail_Success(t *testing.T) {
 	}
 	if !verified {
 		t.Error("email_verified should be true after VerifyEmail success")
+	}
+}
+
+// TestForgotPassword_DBError verifies that when RequestPasswordReset returns a non-ErrUserNotFound
+// error (triggered here by closing the DB), ForgotPassword returns 200 with a safe message
+// (no enumeration) rather than exposing the error.
+func TestForgotPassword_DBError(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		db.Close()
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	authSvc := server.NewAuth(db, "test-jwt-secret-for-tests")
+
+	// Insert a user so GetUserByEmail finds it (before we close the DB).
+	user, err := authSvc.Register("dberroruser", "dberror@example.com", "ValidPass1")
+	if err != nil {
+		db.Close()
+		t.Fatalf("Register: %v", err)
+	}
+	_ = user
+
+	h := NewAuthHandlers(authSvc, db)
+
+	// Close the DB — GetUserByEmail will now return a DB error (not ErrUserNotFound),
+	// causing RequestPasswordReset to propagate a non-nil error.
+	db.Close()
+
+	rr := postJSON(t, h.ForgotPassword, "/api/auth/forgot-password", map[string]string{
+		"email": "dberror@example.com",
+	})
+
+	// The handler must return 200 regardless (no enumeration).
+	if rr.Code != http.StatusOK {
+		t.Errorf("ForgotPassword (DB error) returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// TestResetPassword_DBError triggers the default error branch in ResetPassword by
+// closing the DB so that auth.ResetPassword returns an unexpected error.
+func TestResetPassword_DBError(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		db.Close()
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	authSvc := server.NewAuth(db, "test-jwt-secret-for-tests")
+
+	// Register a user and get a valid reset token.
+	if _, err := authSvc.Register("resetdberroruser", "resetdberror@example.com", "ValidPass1"); err != nil {
+		db.Close()
+		t.Fatalf("Register: %v", err)
+	}
+	token, err := authSvc.RequestPasswordReset("resetdberror@example.com")
+	if err != nil || token == "" {
+		db.Close()
+		t.Fatalf("RequestPasswordReset: err=%v token=%q", err, token)
+	}
+
+	h := NewAuthHandlers(authSvc, db)
+
+	// Close the DB so that the UPDATE inside auth.ResetPassword fails.
+	db.Close()
+
+	rr := postJSON(t, h.ResetPassword, "/api/auth/reset-password", map[string]string{
+		"token":    token,
+		"password": "NewValidPass1",
+	})
+
+	// Expect 500 Internal Server Error (the default case in the switch).
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("ResetPassword (DB error) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
 	}
 }
 

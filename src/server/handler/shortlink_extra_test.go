@@ -487,6 +487,59 @@ func TestHandleListShortlinks_WithItems(t *testing.T) {
 	}
 }
 
+func TestHandleListShortlinks_WithExpiry(t *testing.T) {
+	h, _, userID := newTestShortlinkHandler(t)
+
+	// Create a shortlink with an expiry so that HandleListShortlinks exercises the
+	// ExpiresAt != nil branch.
+	rr := postShortlinkCreate(t, h, userID, map[string]interface{}{
+		"url":        "https://example.com/expiry",
+		"expires_in": 48, // hours
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create shortlink with expiry returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/list", nil)
+	req = withUserID(req, userID)
+	rrList := httptest.NewRecorder()
+	h.HandleListShortlinks(rrList, req)
+
+	if rrList.Code != http.StatusOK {
+		t.Errorf("HandleListShortlinks (with expiry) returned %d, want %d; body: %s",
+			rrList.Code, http.StatusOK, rrList.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(rrList.Body).Decode(&resp)
+	items, _ := resp["shortlinks"].([]interface{})
+	if len(items) == 0 {
+		t.Fatal("HandleListShortlinks returned empty list; want at least one entry with expires_at")
+	}
+	first, _ := items[0].(map[string]interface{})
+	if first["expires_at"] == nil {
+		t.Error("HandleListShortlinks entry missing expires_at for shortlink created with expires_in")
+	}
+}
+
+func TestHandleListShortlinks_DBError(t *testing.T) {
+	_, db, userID := newTestShortlinkHandler(t)
+
+	// Close the DB so GetShortlinksByProfileID returns an error.
+	db.Close()
+	h := NewShortlinkHandler(nil, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/list", nil)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.HandleListShortlinks(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleListShortlinks (DB error) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
 // ---- isValidShortCode ----
 
 func TestIsValidShortCode(t *testing.T) {

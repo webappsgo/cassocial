@@ -231,6 +231,42 @@ func TestLoadTranslations_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestLoadTranslations_UnreadableFile(t *testing.T) {
+	base := t.TempDir()
+	i18nDir := filepath.Join(base, "i18n")
+	if err := os.MkdirAll(i18nDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Write a JSON file then chmod it unreadable
+	filePath := filepath.Join(i18nDir, "de.json")
+	if err := os.WriteFile(filePath, []byte(`{"key":"val"}`), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.Chmod(filePath, 0000); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(filePath, 0644) })
+
+	// Should not panic — just skip unreadable file
+	i := NewI18N(base, "en")
+	if i == nil {
+		t.Fatal("NewI18N returned nil")
+	}
+}
+
+func TestDetectLanguage_CookieUnknownLang(t *testing.T) {
+	configDir := makeI18NDir(t, map[string]map[string]string{
+		"en": {"k": "v"},
+	})
+	i := NewI18N(configDir, "en")
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(&http.Cookie{Name: "language", Value: "zz"}) // unknown lang
+	if got := i.DetectLanguage(req); got != "en" {
+		t.Errorf("DetectLanguage (unknown cookie) = %q, want en (default)", got)
+	}
+}
+
 func TestLoadTranslations_Directory(t *testing.T) {
 	base := t.TempDir()
 	i18nDir := filepath.Join(base, "i18n")

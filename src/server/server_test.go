@@ -179,3 +179,95 @@ func TestGetVersion(t *testing.T) {
 		t.Error("getVersion returned empty string")
 	}
 }
+
+func TestNew(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	cfg := &config.Config{
+		DataDir: t.TempDir(),
+		Server: config.ServerConfig{
+			Address: "127.0.0.1",
+			Port:    0,
+			Mode:    "production",
+		},
+	}
+
+	s, err := New(cfg, db, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if s == nil {
+		t.Fatal("New returned nil server")
+	}
+	if s.config != cfg {
+		t.Error("server config not set")
+	}
+	if s.db != db {
+		t.Error("server db not set")
+	}
+	if s.httpServer == nil {
+		t.Error("httpServer not initialized")
+	}
+}
+
+func TestShutdown(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	cfg := &config.Config{
+		DataDir: t.TempDir(),
+		Server: config.ServerConfig{
+			Address: "127.0.0.1",
+			Port:    0,
+			Mode:    "production",
+		},
+	}
+
+	s, err := New(cfg, db, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Shutdown should not error even when server has not started (httpServer.Shutdown on idle server)
+	if err := s.Shutdown(); err != nil {
+		t.Errorf("Shutdown returned unexpected error: %v", err)
+	}
+	if !s.isShuttingDown {
+		t.Error("isShuttingDown should be true after Shutdown")
+	}
+}
+
+func TestGetHealthStatus_IsShuttingDown(t *testing.T) {
+	s := newTestServer(t)
+	s.isShuttingDown = true
+	health := s.getHealthStatus()
+	if health.Status != "shutting_down" {
+		t.Errorf("status = %q, want shutting_down", health.Status)
+	}
+}
+
+func TestGetHealthStatus_UnhealthyDisk(t *testing.T) {
+	s := newTestServer(t)
+	// Point DataDir at a non-writable path so disk check fails
+	s.config.DataDir = "/nonexistent/path/that/does/not/exist"
+	health := s.getHealthStatus()
+	if health.Status == "healthy" {
+		t.Error("status should not be healthy when disk is not writable")
+	}
+	if health.Checks["disk"] != "error" {
+		t.Errorf("disk check = %q, want error", health.Checks["disk"])
+	}
+}

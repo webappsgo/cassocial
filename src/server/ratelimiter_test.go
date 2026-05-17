@@ -135,6 +135,53 @@ func TestRateLimiter_GetResetTime_UnknownClient(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_GetRemaining_WindowExpired(t *testing.T) {
+	rl := NewRateLimiter(5, 50*time.Millisecond)
+	rl.Allow("expire-client")
+	rl.Allow("expire-client")
+
+	// Wait for window to expire
+	time.Sleep(100 * time.Millisecond)
+
+	remaining := rl.GetRemaining("expire-client")
+	if remaining != 5 {
+		t.Errorf("GetRemaining after window expiry = %d, want 5 (full limit)", remaining)
+	}
+}
+
+func TestRateLimiter_CleanupLoop_Fires(t *testing.T) {
+	rl := &RateLimiter{
+		requests:        make(map[string]*rateLimitEntry),
+		limit:           10,
+		window:          time.Minute,
+		cleanupInterval: 5 * time.Millisecond,
+	}
+
+	// Add a stale entry (last accessed over 2x cleanupInterval ago)
+	staleAccess := time.Now().Add(-1 * time.Hour)
+	rl.requests["stale-loop"] = &rateLimitEntry{
+		count:      1,
+		resetTime:  staleAccess,
+		lastAccess: staleAccess,
+	}
+
+	// Start cleanup goroutine
+	go rl.cleanupLoop()
+
+	// Wait for cleanup to fire
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		rl.mu.Lock()
+		_, exists := rl.requests["stale-loop"]
+		rl.mu.Unlock()
+		if !exists {
+			return // cleaned up — success
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Error("cleanupLoop did not remove stale entry within 200ms")
+}
+
 func TestRateLimiter_Cleanup(t *testing.T) {
 	rl := &RateLimiter{
 		requests:        make(map[string]*rateLimitEntry),

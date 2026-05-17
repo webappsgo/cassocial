@@ -88,3 +88,46 @@ func TestVerifyPasswordEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeArgon2Hash_WrongParts(t *testing.T) {
+	// Only 3 $ delimiters instead of 5 — must return error
+	_, _, err := decodeArgon2Hash("$argon2id$garbage")
+	if err == nil {
+		t.Error("decodeArgon2Hash with wrong part count should return error")
+	}
+}
+
+func TestDecodeArgon2Hash_WrongAlgorithm(t *testing.T) {
+	// Correct number of parts but algorithm is not argon2id
+	_, _, err := decodeArgon2Hash("$bcrypt$v=19$m=65536,t=3,p=4$salt$hash")
+	if err == nil {
+		t.Error("decodeArgon2Hash with non-argon2id algorithm should return error")
+	}
+}
+
+func TestDecodeArgon2Hash_BadSaltEncoding(t *testing.T) {
+	// Valid structure but salt has invalid base64
+	_, _, err := decodeArgon2Hash("$argon2id$v=19$m=65536,t=3,p=4$!!!invalid!!!$AAAA")
+	if err == nil {
+		t.Error("decodeArgon2Hash with invalid salt encoding should return error")
+	}
+}
+
+func TestDecodeArgon2Hash_BadHashEncoding(t *testing.T) {
+	validSalt := "AAAAAAAAAAAAAAAAAAAAAA" // valid base64 salt (16 bytes raw std)
+	// Valid salt but invalid hash
+	_, _, err := decodeArgon2Hash("$argon2id$v=19$m=65536,t=3,p=4$" + validSalt + "$!!!invalid!!!")
+	if err == nil {
+		t.Error("decodeArgon2Hash with invalid hash encoding should return error")
+	}
+}
+
+func TestGenerateRandomToken_ZeroLength(t *testing.T) {
+	token, err := GenerateRandomToken(0)
+	if err != nil {
+		t.Fatalf("GenerateRandomToken(0): %v", err)
+	}
+	if len(token) != 0 {
+		t.Errorf("GenerateRandomToken(0) = %q, want empty string", token)
+	}
+}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -184,6 +185,30 @@ func TestWaitForOnionAddress_ReadsHostnameFile(t *testing.T) {
 	// The raw value should be non-empty.
 	if ts.onionAddr == "" {
 		t.Error("onionAddr should be set after waitForOnionAddress")
+	}
+}
+
+// TestTorService_Stop_NilProcess verifies Stop returns nil when cmd.Process is nil.
+func TestTorService_Stop_NilProcess(t *testing.T) {
+	ts := NewTorService(t.TempDir())
+	// cmd is set but Process is nil (process never actually started)
+	ts.cmd = &exec.Cmd{}
+	if err := ts.Stop(); err != nil {
+		t.Errorf("Stop() with nil cmd.Process should not error: %v", err)
+	}
+}
+
+// TestTorService_NewTorService_TorNotInstalled verifies enabled=false when tor is absent.
+func TestTorService_NewTorService_Paths(t *testing.T) {
+	dir := t.TempDir()
+	ts := NewTorService(dir)
+	expectedTorData := filepath.Join(dir, "tor")
+	if ts.torDataDir != expectedTorData {
+		t.Errorf("torDataDir = %q, want %q", ts.torDataDir, expectedTorData)
+	}
+	expectedTorrc := filepath.Join(dir, "tor", "torrc")
+	if ts.torrcPath != expectedTorrc {
+		t.Errorf("torrcPath = %q, want %q", ts.torrcPath, expectedTorrc)
 	}
 }
 

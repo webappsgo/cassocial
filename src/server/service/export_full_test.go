@@ -390,3 +390,264 @@ func TestExportService_ExportAnalytics_WrongOwner(t *testing.T) {
 		t.Errorf("ExportAnalytics wrong owner = %v, want ErrProfileAccessDenied", err)
 	}
 }
+
+func TestExportService_ExportAnalytics_ProfileNotFound(t *testing.T) {
+	db, userID, _ := newTestExportDB(t)
+	ps := NewProfileService(db)
+	ls := NewLinkService(db)
+	es := NewExportService(db, ps, ls)
+
+	start := time.Now().Add(-24 * time.Hour)
+	end := time.Now().Add(time.Hour)
+
+	_, _, err := es.ExportAnalytics("no-such-profile", userID, start, end, "json")
+	if err == nil {
+		t.Error("ExportAnalytics with nonexistent profile should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// exportAnalyticsJSON / exportAnalyticsCSV — with actual records
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportAnalyticsJSON_WithRecords(t *testing.T) {
+	db, userID, profileID := newTestExportDB(t)
+
+	// Insert analytics events for the profile.
+	_, err := db.Exec(
+		`INSERT INTO analytics (id, profile_id, event_type, created_at) VALUES
+		 ('a1', ?, 'view', CURRENT_TIMESTAMP),
+		 ('a2', ?, 'view', CURRENT_TIMESTAMP),
+		 ('a3', ?, 'click', CURRENT_TIMESTAMP)`,
+		profileID, profileID, profileID,
+	)
+	if err != nil {
+		t.Fatalf("insert analytics: %v", err)
+	}
+
+	ps := NewProfileService(db)
+	ls := NewLinkService(db)
+	es := NewExportService(db, ps, ls)
+
+	start := time.Now().Add(-24 * time.Hour)
+	end := time.Now().Add(time.Hour)
+
+	data, filename, err := es.ExportAnalytics(profileID, userID, start, end, "json")
+	if err != nil {
+		t.Fatalf("ExportAnalytics json with records: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("ExportAnalytics json: empty data")
+	}
+	if !strings.HasSuffix(filename, ".json") {
+		t.Errorf("filename %q should end with .json", filename)
+	}
+}
+
+func TestExportService_ExportAnalyticsCSV_WithRecords(t *testing.T) {
+	db, userID, profileID := newTestExportDB(t)
+
+	_, err := db.Exec(
+		`INSERT INTO analytics (id, profile_id, event_type, created_at) VALUES
+		 ('b1', ?, 'view', CURRENT_TIMESTAMP),
+		 ('b2', ?, 'click', CURRENT_TIMESTAMP)`,
+		profileID, profileID,
+	)
+	if err != nil {
+		t.Fatalf("insert analytics: %v", err)
+	}
+
+	ps := NewProfileService(db)
+	ls := NewLinkService(db)
+	es := NewExportService(db, ps, ls)
+
+	start := time.Now().Add(-24 * time.Hour)
+	end := time.Now().Add(time.Hour)
+
+	data, filename, err := es.ExportAnalytics(profileID, userID, start, end, "csv")
+	if err != nil {
+		t.Fatalf("ExportAnalytics csv with records: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".csv") {
+		t.Errorf("filename %q should end with .csv", filename)
+	}
+	_ = data
+}
+
+// ---------------------------------------------------------------------------
+// exportToCSV — additional edge cases
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportToCSV_EmptyLinks(t *testing.T) {
+	es, _, _ := newExportServiceWithData(t)
+
+	profile := &model.Profile{
+		ID:   "empty-links-csv",
+		Slug: "empty-csv",
+	}
+
+	data, filename, err := es.exportToCSV(profile, []*model.Link{})
+	if err != nil {
+		t.Fatalf("exportToCSV empty links: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".csv") {
+		t.Errorf("filename %q should end with .csv", filename)
+	}
+	// Should at least contain the header row.
+	if !strings.Contains(string(data), "Title") {
+		t.Error("CSV should contain header row")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// exportToJSON — profile with all optional fields set
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportToJSON_FullProfile(t *testing.T) {
+	es, _, _ := newExportServiceWithData(t)
+
+	profile := &model.Profile{
+		ID:               "full-profile-id",
+		Slug:             "full-profile",
+		DisplayName:      "Full Profile",
+		Bio:              "Bio text",
+		AvatarURL:        "https://example.com/avatar.png",
+		HeaderImageURL:   "https://example.com/header.png",
+		MetaTitle:        "Meta Title",
+		MetaDescription:  "Meta description here",
+		ShowUsernames:    true,
+		IsPublic:         true,
+		AnalyticsEnabled: true,
+	}
+	links := []*model.Link{
+		{Title: "Link1", URL: "https://link1.example.com", IsActive: true, Position: 1, ClickCount: 42},
+		{Title: "Link2", URL: "https://link2.example.com", IsActive: false, Position: 2, Username: "user2"},
+	}
+
+	data, filename, err := es.exportToJSON(profile, links)
+	if err != nil {
+		t.Fatalf("exportToJSON full profile: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".json") {
+		t.Errorf("filename %q should end with .json", filename)
+	}
+	if !strings.Contains(string(data), "full-profile") {
+		t.Error("JSON should contain profile slug")
+	}
+	if !strings.Contains(string(data), "1.0.0") {
+		t.Error("JSON should contain version field")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// exportToHTML — profile with avatar and meta description
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportToHTML_WithAvatarAndMeta(t *testing.T) {
+	es, _, _ := newExportServiceWithData(t)
+
+	profile := &model.Profile{
+		Slug:            "avatar-test",
+		DisplayName:     "Avatar User",
+		Bio:             "Has avatar",
+		AvatarURL:       "https://example.com/avatar.png",
+		MetaDescription: "A test profile with avatar",
+	}
+	links := []*model.Link{
+		{Title: "Active Link", URL: "https://active.example.com", IsActive: true},
+	}
+
+	data, filename, err := es.exportToHTML(profile, links)
+	if err != nil {
+		t.Fatalf("exportToHTML with avatar: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".html") {
+		t.Errorf("filename %q should end with .html", filename)
+	}
+	htmlStr := string(data)
+	if !strings.Contains(htmlStr, "avatar.png") {
+		t.Error("HTML should contain avatar URL")
+	}
+	if !strings.Contains(htmlStr, "A test profile with avatar") {
+		t.Error("HTML should contain meta description")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// exportToPDF — direct test
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportToPDF_Direct(t *testing.T) {
+	es, _, _ := newExportServiceWithData(t)
+
+	profile := &model.Profile{
+		Slug:        "pdf-direct",
+		DisplayName: "PDF User",
+		Bio:         "PDF bio",
+	}
+	links := []*model.Link{
+		{Title: "Link", URL: "https://pdf.example.com", IsActive: true},
+		{Title: "Inactive", URL: "https://inactive.example.com", IsActive: false},
+	}
+
+	data, filename, err := es.exportToPDF(profile, links)
+	if err != nil {
+		t.Fatalf("exportToPDF: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".pdf") {
+		t.Errorf("filename %q should end with .pdf", filename)
+	}
+	if !strings.Contains(string(data), "%PDF") {
+		t.Error("PDF output should start with %PDF")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// exportToVCard — profile with no bio, no avatar
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportToVCard_MinimalProfile(t *testing.T) {
+	es, _, _ := newExportServiceWithData(t)
+
+	profile := &model.Profile{
+		Slug:        "minimal-vcard",
+		DisplayName: "Minimal",
+	}
+
+	data, filename, err := es.exportToVCard(profile, []*model.Link{})
+	if err != nil {
+		t.Fatalf("exportToVCard minimal: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".vcf") {
+		t.Errorf("filename %q should end with .vcf", filename)
+	}
+	content := string(data)
+	if !strings.Contains(content, "BEGIN:VCARD") {
+		t.Error("vcard missing BEGIN:VCARD")
+	}
+	if !strings.Contains(content, "END:VCARD") {
+		t.Error("vcard missing END:VCARD")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ExportProfile — get links error (linkService for deleted profile data)
+// ---------------------------------------------------------------------------
+
+func TestExportService_ExportProfile_AllFormats_NoLinks(t *testing.T) {
+	es, userID, profileID := newExportServiceWithData(t)
+
+	for _, format := range []string{"json", "csv", "html", "pdf", "vcard"} {
+		data, filename, err := es.ExportProfile(profileID, userID, format)
+		if err != nil {
+			t.Errorf("ExportProfile format=%s: unexpected error: %v", format, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("ExportProfile format=%s: empty data", format)
+		}
+		if filename == "" {
+			t.Errorf("ExportProfile format=%s: empty filename", format)
+		}
+	}
+}

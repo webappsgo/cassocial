@@ -235,6 +235,90 @@ func TestGenerateMaintenanceHTML(t *testing.T) {
 	}
 }
 
+func TestMaintenanceMode_IsEnabled_DBError(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+	mm := NewMaintenanceMode(db)
+	db.Close() // close so GetSetting fails
+
+	// IsEnabled must not panic and must return false on DB error
+	if mm.IsEnabled() {
+		t.Error("IsEnabled() should return false when DB errors")
+	}
+}
+
+func TestMaintenanceMode_GetMessage_DBError(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+	mm := NewMaintenanceMode(db)
+	db.Close() // close so GetSetting fails
+
+	msg := mm.GetMessage()
+	if msg == "" {
+		t.Error("GetMessage() should return default message on DB error")
+	}
+}
+
+func TestMaintenanceMode_Enable_NonEmptyMessage(t *testing.T) {
+	mm := newTestMaintenanceMode(t)
+	if err := mm.Enable("Going down for maintenance"); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+	msg := mm.GetMessage()
+	if msg != "Going down for maintenance" {
+		t.Errorf("GetMessage() = %q, want 'Going down for maintenance'", msg)
+	}
+}
+
+func TestMaintenanceMiddleware_Enabled_JSONResponseByPath(t *testing.T) {
+	mm := newTestMaintenanceMode(t)
+	if err := mm.Enable("API maintenance"); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+
+	handler := MaintenanceMiddleware(mm)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("inner handler should not be called during maintenance")
+	}))
+
+	// Trigger the /api/ path branch (without Accept: application/json header)
+	req := httptest.NewRequest("GET", "/api/v2/posts", nil)
+	req.RemoteAddr = "5.6.7.8:1234"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", rr.Code)
+	}
+}
+
+func TestSelfHealingCheck_DBError(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+	db.Close() // force DB error
+
+	// SelfHealingCheck must not return error even when DB is closed (it logs and continues)
+	dataDir := t.TempDir()
+	err = SelfHealingCheck(db, dataDir)
+	if err != nil {
+		t.Errorf("SelfHealingCheck should not return error: %v", err)
+	}
+}
+
 func TestSelfHealingCheck(t *testing.T) {
 	db, err := store.Connect("sqlite", ":memory:")
 	if err != nil {

@@ -314,3 +314,95 @@ func TestGenerateRandomToken_Unique(t *testing.T) {
 		t.Error("GenerateRandomToken should produce unique tokens")
 	}
 }
+
+func TestValidatePasswordResetToken_Expired(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "expuser", "expuser@example.com", "ValidPass1!")
+
+	// Create a token
+	token, err := a.RequestPasswordReset("expuser@example.com")
+	if err != nil || token == "" {
+		t.Fatalf("RequestPasswordReset: err=%v token=%q", err, token)
+	}
+
+	// Manually expire the token in the database
+	_, err = a.db.Exec(
+		`UPDATE users SET password_reset_expires = ? WHERE id = ?`,
+		"2000-01-01T00:00:00Z", user.ID,
+	)
+	if err != nil {
+		t.Fatalf("expiring token: %v", err)
+	}
+
+	_, err = a.ValidatePasswordResetToken(token)
+	if err == nil {
+		t.Error("ValidatePasswordResetToken should error for expired token")
+	}
+	if err != ErrInvalidToken {
+		t.Errorf("err = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestResetPassword_WeakPassword(t *testing.T) {
+	a := newTestAuth(t)
+	registerTestUser(t, a, "weakpw", "weakpw@example.com", "ValidPass1!")
+
+	token, err := a.RequestPasswordReset("weakpw@example.com")
+	if err != nil || token == "" {
+		t.Fatalf("RequestPasswordReset: %v / %q", err, token)
+	}
+
+	// "abc" is too short — ValidatePassword will reject it
+	err = a.ResetPassword(token, "abc")
+	if err == nil {
+		t.Error("ResetPassword with weak password should error")
+	}
+}
+
+func TestChangePassword_UnknownUser(t *testing.T) {
+	a := newTestAuth(t)
+	err := a.ChangePassword("nonexistent-user-id", "OldPass1!", "NewPass2!")
+	if err == nil {
+		t.Error("ChangePassword for unknown user should error")
+	}
+}
+
+func TestVerifyEmail_Expired(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "expmail", "expmail@example.com", "ValidPass1!")
+
+	tok, err := a.GenerateEmailVerificationToken(user.ID)
+	if err != nil || tok == "" {
+		t.Fatalf("GenerateEmailVerificationToken: %v / %q", err, tok)
+	}
+
+	// Manually expire the token
+	_, err = a.db.Exec(
+		`UPDATE users SET password_reset_expires = ? WHERE id = ?`,
+		"2000-01-01T00:00:00Z", user.ID,
+	)
+	if err != nil {
+		t.Fatalf("expiring token: %v", err)
+	}
+
+	err = a.VerifyEmail(tok)
+	if err == nil {
+		t.Error("VerifyEmail should error for expired token")
+	}
+	if err != ErrInvalidVerificationToken {
+		t.Errorf("err = %v, want ErrInvalidVerificationToken", err)
+	}
+}
+
+func TestResendVerificationEmail_DBError(t *testing.T) {
+	a := newTestAuth(t)
+	// User exists but is already verified — tests the "already verified" branch
+	user := registerTestUser(t, a, "reverify", "reverify@example.com", "ValidPass1!")
+	tok, _ := a.GenerateEmailVerificationToken(user.ID)
+	a.VerifyEmail(tok)
+
+	_, err := a.ResendVerificationEmail("reverify@example.com")
+	if err == nil {
+		t.Error("ResendVerificationEmail should error when email already verified")
+	}
+}

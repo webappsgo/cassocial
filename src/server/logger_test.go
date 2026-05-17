@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -177,6 +178,48 @@ func TestLoggingMiddleware_XRealIP(t *testing.T) {
 	req.Header.Set("X-Real-IP", "192.168.1.100")
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+}
+
+func TestNewLogger_InvalidDir(t *testing.T) {
+	// A path that cannot be created (parent is a file, not a dir)
+	base := t.TempDir()
+	// Create a file where the log subdir should go
+	if err := os.WriteFile(base+"/blocker", []byte("x"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// logDir is base/blocker/logs — blocker is a file, MkdirAll will fail
+	_, err := NewLogger(base+"/blocker/logs", "text")
+	if err == nil {
+		t.Error("NewLogger should fail when log directory cannot be created")
+	}
+}
+
+func TestOpenLogFile_Failure(t *testing.T) {
+	// Pass a path whose parent directory does not exist
+	_, err := openLogFile("/nonexistent/path/that/cannot/exist/file.log")
+	if err == nil {
+		t.Error("openLogFile should fail when parent directory does not exist")
+	}
+}
+
+func TestGetClientIPFromRequest_NoHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	// RemoteAddr has host:port form — SplitHostPort should succeed and strip port
+	req.RemoteAddr = "10.0.0.1:9999"
+	ip := getClientIPFromRequest(req)
+	if ip != "10.0.0.1" {
+		t.Errorf("getClientIPFromRequest = %q, want 10.0.0.1", ip)
+	}
+}
+
+func TestGetClientIPFromRequest_BareAddr(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	// No port — SplitHostPort fails, should return raw addr
+	req.RemoteAddr = "10.0.0.2"
+	ip := getClientIPFromRequest(req)
+	if ip != "10.0.0.2" {
+		t.Errorf("getClientIPFromRequest bare = %q, want 10.0.0.2", ip)
+	}
 }
 
 func TestResponseWriter_WriteHeader(t *testing.T) {

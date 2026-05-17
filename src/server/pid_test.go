@@ -120,6 +120,46 @@ func TestRemovePIDFile_NonExistent(t *testing.T) {
 	}
 }
 
+func TestCheckPIDFile_UnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	pidPath := filepath.Join(dir, "unreadable.pid")
+
+	if err := os.WriteFile(pidPath, []byte("12345"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// Remove read permission so ReadFile fails
+	if err := os.Chmod(pidPath, 0000); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(pidPath, 0644) })
+
+	running, pid, err := CheckPIDFile(pidPath)
+	// On Linux running as root this may succeed; as non-root it should error
+	// We just ensure no panic
+	_ = running
+	_ = pid
+	_ = err
+}
+
+func TestIsProcessRunning_OwnPID(t *testing.T) {
+	// Our own PID is definitely running
+	if !isProcessRunning(os.Getpid()) {
+		t.Error("isProcessRunning should return true for own PID")
+	}
+}
+
+func TestIsProcessRunning_InvalidPID(t *testing.T) {
+	// PID 0 and negative PIDs are invalid on Unix
+	if isProcessRunning(-1) {
+		t.Error("isProcessRunning(-1) should return false")
+	}
+}
+
+func TestIsOurProcess_OwnPID(t *testing.T) {
+	// Just call it on our own PID — we only verify it does not panic
+	_ = isOurProcess(os.Getpid())
+}
+
 func TestWritePIDFile_AlreadyRunning(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "running.pid")
