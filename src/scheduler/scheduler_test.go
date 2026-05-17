@@ -188,3 +188,27 @@ func TestScheduler_StartStop(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	s.Stop()
 }
+
+// TestScheduler_CronFires waits for a registered "every second" task to be
+// invoked by the cron scheduler, exercising the wrappedHandler closure created
+// inside RegisterTask.
+func TestScheduler_CronFires(t *testing.T) {
+	s := New()
+	fired := make(chan struct{}, 1)
+	_ = s.RegisterTask("cron-fire", "* * * * * *", func() error {
+		select {
+		case fired <- struct{}{}:
+		default:
+		}
+		return nil
+	})
+	s.Start()
+	defer s.Stop()
+
+	select {
+	case <-fired:
+		// wrappedHandler closure was called — success
+	case <-time.After(3 * time.Second):
+		t.Error("cron task did not fire within 3 seconds")
+	}
+}

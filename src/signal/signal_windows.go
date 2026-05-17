@@ -10,9 +10,10 @@ import (
 	"os/signal"
 )
 
-// setupSignalHandler configures graceful shutdown (Windows)
-// Windows only supports os.Interrupt (Ctrl+C, Ctrl+Break)
-func setupSignalHandler(server *http.Server, pidFile string) {
+// setupSignalHandler configures graceful shutdown (Windows).
+// Windows only supports os.Interrupt (Ctrl+C, Ctrl+Break).
+// It returns a stop function that unregisters the handler and stops the goroutine.
+func setupSignalHandler(server *http.Server, pidFile string) func() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
 
@@ -22,6 +23,11 @@ func setupSignalHandler(server *http.Server, pidFile string) {
 			gracefulShutdown(server, pidFile)
 		}
 	}()
+
+	return func() {
+		signal.Stop(sigChan)
+		close(sigChan)
+	}
 }
 
 // killProcess terminates process (Windows)

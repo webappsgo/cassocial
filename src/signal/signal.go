@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// osExitFn is the function used to exit the process.
+// Tests may replace it to prevent os.Exit from terminating the test binary.
+var osExitFn = os.Exit
+
+// httpShutdownFn is the function used to shut down the HTTP server.
+// Tests may replace it to inject a shutdown error.
+var httpShutdownFn = func(server *http.Server, ctx context.Context) error {
+	return server.Shutdown(ctx)
+}
+
 // gracefulShutdown performs orderly shutdown (cross-platform)
 func gracefulShutdown(server *http.Server, pidFile string) {
 	// Set shutdown flag for health checks
@@ -18,7 +28,7 @@ func gracefulShutdown(server *http.Server, pidFile string) {
 	defer cancel()
 
 	// Stop accepting new connections, wait for in-flight
-	if err := server.Shutdown(ctx); err != nil {
+	if err := httpShutdownFn(server, ctx); err != nil {
 		log.Printf("HTTP server shutdown error: %v", err)
 	}
 
@@ -37,7 +47,7 @@ func gracefulShutdown(server *http.Server, pidFile string) {
 	}
 
 	log.Println("Graceful shutdown complete")
-	os.Exit(0)
+	osExitFn(0)
 }
 
 // shuttingDown is the global shutdown flag.
@@ -50,12 +60,12 @@ func setShuttingDown(shutting bool) {
 
 // closeDatabase closes database connections with timeout
 func closeDatabase(_ time.Duration) {
-	// Database connections are managed by the store package and closed via defer in main.
+	log.Println("closeDatabase: connections managed by store package")
 }
 
 // flushLogs flushes log buffers
 func flushLogs(_ time.Duration) {
-	// The standard log package is unbuffered; nothing to flush.
+	log.Println("flushLogs: standard log package is unbuffered")
 }
 
 // reopenLogs reopens log files (for log rotation)
@@ -68,7 +78,11 @@ func dumpStatus() {
 	log.Printf("status: shutting_down=%v", shuttingDown)
 }
 
+// getChildPIDsFn is the function used to retrieve child PIDs.
+// Tests may replace it to inject a fake PID list.
+var getChildPIDsFn = func() []int { return []int{} }
+
 // getChildPIDs returns list of child process PIDs
 func getChildPIDs() []int {
-	return []int{}
+	return getChildPIDsFn()
 }

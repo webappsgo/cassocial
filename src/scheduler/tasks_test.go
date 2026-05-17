@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/casapps/cassocial/src/config"
@@ -172,6 +173,34 @@ func TestCleanupSessions_WithMemoryDB(t *testing.T) {
 	_ = tasks.CleanupSessions()
 }
 
+func TestCleanupSessions_Success(t *testing.T) {
+	// Create a DB and manually create the sessions table so CleanupSessions
+	// can succeed (return nil path).
+	tmp := t.TempDir()
+	db, err := store.Connect("sqlite", tmp+"/sessions.db")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	defer db.Close()
+
+	// Create the sessions table that CleanupExpiredSessions expects.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS sessions (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL
+	)`); err != nil {
+		t.Fatalf("create sessions table: %v", err)
+	}
+
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	if taskErr := tasks.CleanupSessions(); taskErr != nil {
+		t.Errorf("CleanupSessions() with sessions table should return nil, got: %v", taskErr)
+	}
+}
+
 // ---- UpdateGeoIPDatabase ----
 
 func TestUpdateGeoIPDatabase_NoError(t *testing.T) {
@@ -186,25 +215,111 @@ func TestUpdateGeoIPDatabase_NoError(t *testing.T) {
 
 // ---- RegisterAllTasks — error propagation ----
 
-// fakeErrScheduler is a minimal Scheduler-like type used to force RegisterTask
-// to fail by providing an invalid cron expression on the first call.
-// Because Scheduler.RegisterTask is on a concrete *Scheduler we cannot use an
-// interface; instead we test the error return by passing a scheduler that
-// already has a task registered with the same name.
-func TestRegisterAllTasks_ErrorPropagation(t *testing.T) {
-	s := New()
+// errAfterN is a TaskRegistrar that succeeds for the first n calls then fails.
+type errAfterN struct {
+	n       int
+	calls   int
+	realSch *Scheduler
+}
 
-	// RegisterTask rejects invalid cron expressions. This exercises the error
-	// propagation path that RegisterAllTasks relies on: if any RegisterTask call
-	// fails it returns that error immediately.
-	err := s.RegisterTask("bad_task", "not-a-cron-expression", func() error { return nil })
-	if err == nil {
-		t.Fatal("RegisterTask with invalid cron expression should return an error")
+func (e *errAfterN) RegisterTask(name, schedule string, handler func() error) error {
+	e.calls++
+	if e.calls > e.n {
+		return fmt.Errorf("injected error on call %d", e.calls)
 	}
+	return e.realSch.RegisterTask(name, schedule, handler)
+}
 
-	// Verify the error message is descriptive.
-	if !schedulerErrContains(err.Error(), "failed to register task") {
-		t.Errorf("RegisterTask error %q does not mention 'failed to register task'", err.Error())
+// TestRegisterAllTasks_ErrorOnFirstTask verifies error propagation when the
+// first RegisterTask call fails.
+func TestRegisterAllTasks_ErrorOnFirstTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 0, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when first RegisterTask fails")
+	}
+}
+
+// TestRegisterAllTasks_ErrorOnSecondTask verifies error propagation on the
+// second RegisterTask call.
+func TestRegisterAllTasks_ErrorOnSecondTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 1, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when second RegisterTask fails")
+	}
+}
+
+// TestRegisterAllTasks_ErrorOnThirdTask verifies error propagation on call 3.
+func TestRegisterAllTasks_ErrorOnThirdTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 2, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when third RegisterTask fails")
+	}
+}
+
+// TestRegisterAllTasks_ErrorOnFourthTask verifies error propagation on call 4.
+func TestRegisterAllTasks_ErrorOnFourthTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 3, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when fourth RegisterTask fails")
+	}
+}
+
+// TestRegisterAllTasks_ErrorOnFifthTask verifies error propagation on call 5.
+func TestRegisterAllTasks_ErrorOnFifthTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 4, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when fifth RegisterTask fails")
+	}
+}
+
+// TestRegisterAllTasks_ErrorOnSixthTask verifies error propagation on call 6.
+func TestRegisterAllTasks_ErrorOnSixthTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 5, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when sixth RegisterTask fails")
+	}
+}
+
+// TestRegisterAllTasks_ErrorOnSeventhTask verifies error propagation on call 7.
+func TestRegisterAllTasks_ErrorOnSeventhTask(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	mock := &errAfterN{n: 6, realSch: New()}
+	err := tasks.RegisterAllTasks(mock)
+	if err == nil {
+		t.Error("RegisterAllTasks should return error when seventh RegisterTask fails")
 	}
 }
 

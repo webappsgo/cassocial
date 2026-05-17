@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -277,6 +278,53 @@ func TestCheckCertificateExpiry_MissingCert(t *testing.T) {
 }
 
 // ---- parseX509Certificate ----
+
+// TestGetManualCertConfig_InvalidKeyContent tests the tls.LoadX509KeyPair error
+// path: both files exist but the key file contains garbage (not a valid key).
+func TestGetManualCertConfig_InvalidKeyContent(t *testing.T) {
+	certFile, _ := generateSelfSignedCert(t, time.Now().Add(365*24*time.Hour))
+
+	// Write a valid cert file but a garbage key file.
+	tmp := t.TempDir()
+	keyFile := filepath.Join(tmp, "bad_key.pem")
+	if err := os.WriteFile(keyFile, []byte("this is not a valid PEM key file\n"), 0600); err != nil {
+		t.Fatalf("failed to create bad key file: %v", err)
+	}
+
+	m := NewManager(&Config{
+		Enabled:  true,
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	})
+	_, err := m.getManualCertConfig()
+	if err == nil {
+		t.Error("getManualCertConfig() with invalid key content should return error")
+	}
+}
+
+// TestCheckCertificateExpiry_ParseError exercises the parseX509Certificate
+// error path by injecting a failing parser via parseX509CertificateFn.
+func TestCheckCertificateExpiry_ParseError(t *testing.T) {
+	certFile, keyFile := generateSelfSignedCert(t, time.Now().Add(365*24*time.Hour))
+
+	m := NewManager(&Config{
+		Enabled:  true,
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	})
+
+	// Inject an error-returning parser.
+	orig := parseX509CertificateFn
+	parseX509CertificateFn = func(_ []byte) (*x509.Certificate, error) {
+		return nil, fmt.Errorf("injected parse error")
+	}
+	defer func() { parseX509CertificateFn = orig }()
+
+	_, _, err := m.CheckCertificateExpiry()
+	if err == nil {
+		t.Error("CheckCertificateExpiry should return error when parseX509Certificate fails")
+	}
+}
 
 func TestParseX509Certificate_Valid(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

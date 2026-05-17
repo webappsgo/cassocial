@@ -108,9 +108,13 @@ func (m *Manager) CheckCertificateExpiry() (bool, time.Time, error) {
 	return daysUntilExpiry < 30, expiryTime, nil
 }
 
+// parseX509CertificateFn is the function used to parse a DER-encoded certificate.
+// Tests may replace it to inject a parse error.
+var parseX509CertificateFn = x509.ParseCertificate
+
 // parseX509Certificate parses DER-encoded certificate
 func parseX509Certificate(der []byte) (*x509.Certificate, error) {
-	return x509.ParseCertificate(der)
+	return parseX509CertificateFn(der)
 }
 
 // GetCertPath returns the path to SSL certificates

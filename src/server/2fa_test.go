@@ -429,3 +429,107 @@ func TestGet2FAStatus_UnknownUser(t *testing.T) {
 		t.Error("Get2FAStatus with unknown user should return error")
 	}
 }
+
+// TestEnable2FA_DBExecError exercises the db.Exec error path in Enable2FA.
+// We register a user and get a valid TOTP code, then replace the users table
+// with a trigger that raises an error on UPDATE, so db.Exec fails after
+// GetUserByID and verifyTOTP both succeed.
+func TestEnable2FA_DBExecError(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "enable2fadberr2", "enable2fadberr2@example.com", "ValidPass1")
+
+	setup, err := a.Generate2FASecret(user)
+	if err != nil {
+		t.Fatalf("Generate2FASecret: %v", err)
+	}
+	paddedSecret := setup.Secret
+	if len(paddedSecret)%8 != 0 {
+		paddedSecret += strings.Repeat("=", 8-len(paddedSecret)%8)
+	}
+	decoded, err := base32.StdEncoding.DecodeString(paddedSecret)
+	if err != nil {
+		t.Fatalf("base32 decode: %v", err)
+	}
+	code := a.generateTOTP(decoded, time.Now().Unix()/TOTPPeriod)
+
+	// Install a BEFORE UPDATE trigger that raises an error, so the UPDATE in
+	// Enable2FA fails while SELECT (GetUserByID) still works.
+	if _, err := a.db.Exec(`
+		CREATE TRIGGER block_2fa_update BEFORE UPDATE ON users
+		BEGIN SELECT RAISE(FAIL, 'blocked by test trigger'); END
+	`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	defer a.db.Exec("DROP TRIGGER IF EXISTS block_2fa_update")
+
+	err = a.Enable2FA(user.ID, setup.Secret, code)
+	if err == nil {
+		t.Error("Enable2FA with blocked UPDATE trigger should return error")
+	}
+}
+
+// TestDisable2FA_DBError exercises the db.Exec error path in Disable2FA.
+func TestDisable2FA_DBError(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "disable2fadberr", "disable2fadberr@example.com", "ValidPass1")
+
+	// Close the DB before the UPDATE executes.
+	a.db.Close()
+
+	err := a.Disable2FA(user.ID)
+	if err == nil {
+		t.Error("Disable2FA with closed DB should return error")
+	}
+}
+
+// TestDisable2FA_PostgresQueryBranch exercises the postgres query branch.
+// We set db.Driver to "postgres" so the $1-style query is used; modernc SQLite
+// accepts both placeholder styles so the operation succeeds.
+func TestDisable2FA_PostgresQueryBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "disable2fapg", "disable2fapg@example.com", "ValidPass1")
+
+	// Enable 2FA first so there is something to disable.
+	if _, err := a.db.Exec("UPDATE users SET two_factor_enabled = 1, two_factor_secret = 'SECRET' WHERE id = ?", user.ID); err != nil {
+		t.Fatalf("enabling 2FA: %v", err)
+	}
+
+	// Fake the driver so the postgres branch is taken.
+	origDriver := a.db.Driver
+	a.db.Driver = "postgres"
+	defer func() { a.db.Driver = origDriver }()
+
+	if err := a.Disable2FA(user.ID); err != nil {
+		t.Errorf("Disable2FA with postgres query branch should succeed on SQLite: %v", err)
+	}
+}
+
+// TestEnable2FA_PostgresQueryBranch exercises the postgres query branch in Enable2FA.
+func TestEnable2FA_PostgresQueryBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "enable2fapg", "enable2fapg@example.com", "ValidPass1")
+
+	setup, err := a.Generate2FASecret(user)
+	if err != nil {
+		t.Fatalf("Generate2FASecret: %v", err)
+	}
+	paddedSecret := setup.Secret
+	if len(paddedSecret)%8 != 0 {
+		paddedSecret += strings.Repeat("=", 8-len(paddedSecret)%8)
+	}
+	decoded, err := base32.StdEncoding.DecodeString(paddedSecret)
+	if err != nil {
+		t.Fatalf("base32 decode: %v", err)
+	}
+	code := a.generateTOTP(decoded, time.Now().Unix()/TOTPPeriod)
+
+	// Fake the driver so the postgres branch is taken.
+	origDriver := a.db.Driver
+	a.db.Driver = "postgres"
+	defer func() { a.db.Driver = origDriver }()
+
+	// modernc SQLite accepts $1 placeholders, so this should succeed.
+	if err = a.Enable2FA(user.ID, setup.Secret, code); err != nil {
+		t.Errorf("Enable2FA with postgres query branch should succeed on SQLite: %v", err)
+	}
+}

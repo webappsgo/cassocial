@@ -391,6 +391,10 @@ func (a *Admin) renderError(w http.ResponseWriter, status int, message string) {
 	})
 }
 
+// checkSessionFn is the function used to validate admin sessions.
+// Tests may replace it to simulate an authenticated request.
+var checkSessionFn func(r *http.Request) (bool, string)
+
 // RequireAuth is middleware that requires admin authentication
 func (a *Admin) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -405,6 +409,9 @@ func (a *Admin) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 // CheckAdminSession checks if the request has a valid admin session
 func (a *Admin) CheckAdminSession(r *http.Request) (bool, string) {
+	if checkSessionFn != nil {
+		return checkSessionFn(r)
+	}
 	return false, ""
 }
 
@@ -436,10 +443,14 @@ func (a *Admin) ValidateSetupToken(token string) bool {
 	return true
 }
 
+// randReadFn is the function used to fill a byte slice with random data.
+// Tests may replace it to simulate a read failure.
+var randReadFn = func(b []byte) (int, error) { return cryptoRand.Read(b) }
+
 // generateRandomBytes generates cryptographically secure random bytes
 func generateRandomBytes(n int) []byte {
 	b := make([]byte, n)
-	if _, err := cryptoRand.Read(b); err != nil {
+	if _, err := randReadFn(b); err != nil {
 		log.Printf("failed to generate random bytes: %v", err)
 	}
 	return b

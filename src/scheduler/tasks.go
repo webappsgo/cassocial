@@ -23,8 +23,14 @@ func NewTasks(cfg *config.Config, db *store.DB) *Tasks {
 	}
 }
 
+// TaskRegistrar is the interface required by RegisterAllTasks.
+// *Scheduler satisfies this interface; tests may substitute a mock.
+type TaskRegistrar interface {
+	RegisterTask(name, schedule string, handler func() error) error
+}
+
 // RegisterAllTasks registers all scheduled tasks
-func (t *Tasks) RegisterAllTasks(scheduler *Scheduler) error {
+func (t *Tasks) RegisterAllTasks(scheduler TaskRegistrar) error {
 	// Analytics aggregation - every hour
 	if err := scheduler.RegisterTask("analytics_aggregation", "0 0 * * * *", t.AggregateAnalytics); err != nil {
 		return err

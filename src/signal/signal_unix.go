@@ -12,8 +12,9 @@ import (
 	"time"
 )
 
-// setupSignalHandler configures graceful shutdown (Unix)
-func setupSignalHandler(server *http.Server, pidFile string) {
+// setupSignalHandler configures graceful shutdown (Unix).
+// It returns a stop function that unregisters the handler and stops the goroutine.
+func setupSignalHandler(server *http.Server, pidFile string) func() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,
 		syscall.SIGTERM,
@@ -46,11 +47,20 @@ func setupSignalHandler(server *http.Server, pidFile string) {
 			}
 		}
 	}()
+
+	return func() {
+		signal.Stop(sigChan)
+		close(sigChan)
+	}
 }
+
+// findProcessFn is the function used to locate a process by PID.
+// Tests may replace it to inject a find error.
+var findProcessFn = os.FindProcess
 
 // killProcess sends signal to process (Unix)
 func killProcess(pid int, graceful bool) error {
-	process, err := os.FindProcess(pid)
+	process, err := findProcessFn(pid)
 	if err != nil {
 		return err
 	}
@@ -63,7 +73,7 @@ func killProcess(pid int, graceful bool) error {
 // stopChildProcesses sends SIGTERM to children, SIGKILL after timeout (Unix)
 func stopChildProcesses(timeout time.Duration) {
 	for _, pid := range getChildPIDs() {
-		process, err := os.FindProcess(pid)
+		process, err := findProcessFn(pid)
 		if err != nil {
 			continue
 		}
@@ -75,7 +85,10 @@ func stopChildProcesses(timeout time.Duration) {
 	// Wait with timeout, then SIGKILL
 	deadline := time.Now().Add(timeout)
 	for _, pid := range getChildPIDs() {
-		process, _ := os.FindProcess(pid)
+		process, err := findProcessFn(pid)
+		if err != nil {
+			continue
+		}
 		for time.Now().Before(deadline) {
 			if err := process.Signal(syscall.Signal(0)); err != nil {
 				// Process exited

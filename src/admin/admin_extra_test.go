@@ -2,10 +2,15 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/server/store"
 )
 
 func TestHandleUserCreate_Post(t *testing.T) {
@@ -376,5 +381,107 @@ func TestRenderError_ContentType(t *testing.T) {
 	ct := rr.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("renderError Content-Type=%q, want application/json", ct)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderJSON — encode error path
+// ---------------------------------------------------------------------------
+
+// failWriter is an http.ResponseWriter whose Write method always fails.
+type failWriter struct {
+	header     http.Header
+	statusCode int
+}
+
+func newFailWriter() *failWriter {
+	return &failWriter{header: make(http.Header)}
+}
+
+func (f *failWriter) Header() http.Header         { return f.header }
+func (f *failWriter) WriteHeader(code int)         { f.statusCode = code }
+func (f *failWriter) Write(_ []byte) (int, error) { return 0, errors.New("write error") }
+
+func TestRenderJSON_EncodeError(t *testing.T) {
+	a := newTestAdmin(t)
+
+	fw := newFailWriter()
+	// json.Encoder.Encode writes to the writer; if Write fails the error is logged
+	// and Encode returns an error. renderJSON must not panic.
+	a.renderJSON(fw, http.StatusOK, map[string]string{"key": "value"})
+	// We just verify it does not panic; the log output is not checked.
+}
+
+// ---------------------------------------------------------------------------
+// RequireAuth — pass-through when CheckAdminSession returns true
+// ---------------------------------------------------------------------------
+
+func TestRequireAuth_PassThrough(t *testing.T) {
+	a := newTestAdmin(t)
+
+	// Inject a session checker that always grants access.
+	orig := checkSessionFn
+	checkSessionFn = func(_ *http.Request) (bool, string) { return true, "admin-id" }
+	defer func() { checkSessionFn = orig }()
+
+	called := false
+	handler := a.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/protected", nil)
+	rr := httptest.NewRecorder()
+	handler(rr, req)
+
+	if !called {
+		t.Error("RequireAuth should call next handler when session is valid")
+	}
+	if rr.Code != http.StatusOK {
+		t.Errorf("RequireAuth pass-through returned %d, want 200", rr.Code)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GenerateSetupToken — SetSetting error path
+// ---------------------------------------------------------------------------
+
+func TestGenerateSetupToken_DBError(t *testing.T) {
+	// Use a DB without migrations so the settings table does not exist.
+	tmp := t.TempDir()
+	db, err := store.Connect("sqlite", tmp+"/noschema.db")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	defer db.Close()
+	// Deliberately skip RunMigrations — settings table absent.
+
+	cfg := &config.Config{}
+	cfg.Server.Mode = "development"
+	cfg.Database.Driver = "sqlite"
+	a := New(cfg, db)
+
+	_, tokenErr := a.GenerateSetupToken()
+	if tokenErr == nil {
+		t.Error("GenerateSetupToken with missing settings table should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generateRandomBytes — error path via randReadFn injection
+// ---------------------------------------------------------------------------
+
+func TestGenerateRandomBytes_ReadError(t *testing.T) {
+	// Inject a failing rand reader.
+	orig := randReadFn
+	randReadFn = func(b []byte) (int, error) { return 0, fmt.Errorf("injected rand failure") }
+	defer func() { randReadFn = orig }()
+
+	// generateRandomBytes must not panic even when the read fails.
+	b := generateRandomBytes(16)
+	// The bytes may be zeroed since the read failed, but the slice should still
+	// have the requested length.
+	if len(b) != 16 {
+		t.Errorf("generateRandomBytes(16) returned %d bytes after error, want 16", len(b))
 	}
 }
