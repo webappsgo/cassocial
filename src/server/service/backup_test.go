@@ -1,6 +1,8 @@
 package service
 
 import (
+	"archive/tar"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,5 +174,144 @@ func TestBackupService_RotatesOldBackups(t *testing.T) {
 	}
 	if len(backups) > 4 {
 		t.Errorf("after rotation: %d backups remain, want <= 4", len(backups))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// addFileToTar (private — tested directly in-package)
+// ---------------------------------------------------------------------------
+
+// TestAddFileToTar_BasicFile verifies that addFileToTar writes the correct
+// header and content into the tar archive.
+func TestAddFileToTar_BasicFile(t *testing.T) {
+	content := []byte("hello from addFileToTar test")
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "testfile.txt")
+	if err := os.WriteFile(srcFile, content, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	if err := addFileToTar(tw, srcFile, "archive/testfile.txt"); err != nil {
+		t.Fatalf("addFileToTar: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("tar.Writer.Close: %v", err)
+	}
+
+	// Read back the tar and verify
+	tr := tar.NewReader(&buf)
+	hdr, err := tr.Next()
+	if err != nil {
+		t.Fatalf("tar.Reader.Next: %v", err)
+	}
+	if hdr.Name != "archive/testfile.txt" {
+		t.Errorf("tar header Name = %q, want %q", hdr.Name, "archive/testfile.txt")
+	}
+	if hdr.Size != int64(len(content)) {
+		t.Errorf("tar header Size = %d, want %d", hdr.Size, len(content))
+	}
+
+	var out bytes.Buffer
+	if _, err := out.ReadFrom(tr); err != nil {
+		t.Fatalf("reading tar entry: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), content) {
+		t.Errorf("tar entry content = %q, want %q", out.Bytes(), content)
+	}
+}
+
+// TestAddFileToTar_NonExistentFile verifies that a missing source file
+// returns an error rather than silently producing an empty entry.
+func TestAddFileToTar_NonExistentFile(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	err := addFileToTar(tw, "/no/such/file/exists.txt", "archive/missing.txt")
+	if err == nil {
+		t.Error("addFileToTar(nonexistent) should return error")
+	}
+}
+
+// TestAddFileToTar_EmptyFile verifies zero-byte files are handled correctly.
+func TestAddFileToTar_EmptyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "empty.txt")
+	if err := os.WriteFile(srcFile, []byte{}, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	if err := addFileToTar(tw, srcFile, "empty.txt"); err != nil {
+		t.Fatalf("addFileToTar(empty): %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("tar.Writer.Close: %v", err)
+	}
+
+	tr := tar.NewReader(&buf)
+	hdr, err := tr.Next()
+	if err != nil {
+		t.Fatalf("tar.Reader.Next: %v", err)
+	}
+	if hdr.Size != 0 {
+		t.Errorf("empty file tar header Size = %d, want 0", hdr.Size)
+	}
+}
+
+// TestAddFileToTar_LargerFile verifies multi-kilobyte content round-trips correctly.
+func TestAddFileToTar_LargerFile(t *testing.T) {
+	// 8 KB of data
+	content := bytes.Repeat([]byte("abcdefgh"), 1024)
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "large.bin")
+	if err := os.WriteFile(srcFile, content, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	if err := addFileToTar(tw, srcFile, "large.bin"); err != nil {
+		t.Fatalf("addFileToTar(large): %v", err)
+	}
+	tw.Close()
+
+	tr := tar.NewReader(&buf)
+	if _, err := tr.Next(); err != nil {
+		t.Fatalf("tar.Reader.Next: %v", err)
+	}
+
+	var out bytes.Buffer
+	if _, err := out.ReadFrom(tr); err != nil {
+		t.Fatalf("reading tar entry: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), content) {
+		t.Error("large file content did not round-trip correctly through addFileToTar")
+	}
+}
+
+// TestCreateBackup_ExercisesAddFileToTar confirms that CreateBackup exercises
+// the addFileToTar code path by seeding real database files before backing up.
+func TestCreateBackup_ExercisesAddFileToTar(t *testing.T) {
+	svc := newTestBackupService(t)
+
+	// Seed a real file in the db dir so addDatabaseToBackup has something to tar.
+	dbFile := filepath.Join(svc.config.DataDir, "db", "server.db")
+	if err := os.WriteFile(dbFile, []byte("SQLite stub"), 0o644); err != nil {
+		t.Fatalf("WriteFile db seed: %v", err)
+	}
+
+	backup, err := svc.CreateBackup("manual")
+	if err != nil {
+		t.Fatalf("CreateBackup with seeded db: %v", err)
+	}
+	// The archive must be non-empty (it contains at least the db file).
+	if backup.Size == 0 {
+		t.Error("backup size should be > 0 when db file is present")
 	}
 }

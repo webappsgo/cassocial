@@ -334,3 +334,276 @@ func TestImportService_GenerateID(t *testing.T) {
 		t.Errorf("generateID = %q seems too short", id)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// importFromLinkstack (direct test)
+// ---------------------------------------------------------------------------
+
+func TestImportService_ImportFromLinkstack(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"profile": map[string]interface{}{
+			"username": "lsuser",
+			"name":     "Linkstack User",
+			"bio":      "Bio from linkstack",
+			"avatar":   "https://example.com/avatar.png",
+		},
+		"links": []map[string]interface{}{
+			{"title": "Website", "url": "https://site.example.com", "order": 1},
+			{"title": "Blog", "url": "https://blog.example.com", "order": 2},
+		},
+	}
+
+	data, _ := json.Marshal(input)
+	result, err := svc.importFromLinkstack(userID, data)
+	if err != nil {
+		t.Fatalf("importFromLinkstack: %v", err)
+	}
+	if result == nil {
+		t.Fatal("importFromLinkstack returned nil result")
+	}
+	if _, ok := result["profile_id"]; !ok {
+		t.Error("result missing profile_id key")
+	}
+	linksImported, ok := result["links_imported"].(int)
+	if !ok || linksImported != 2 {
+		t.Errorf("links_imported = %v, want 2", result["links_imported"])
+	}
+	totalLinks, ok := result["total_links"].(int)
+	if !ok || totalLinks != 2 {
+		t.Errorf("total_links = %v, want 2", result["total_links"])
+	}
+}
+
+func TestImportService_ImportFromLinkstack_InvalidJSON(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	_, err := svc.importFromLinkstack(userID, []byte(`{not valid}`))
+	if err == nil {
+		t.Error("importFromLinkstack with invalid JSON should return error")
+	}
+}
+
+func TestImportService_ImportFromLinkstack_NoLinks(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"profile": map[string]interface{}{
+			"username": "lsnolinks",
+			"name":     "No Links User",
+			"bio":      "",
+			"avatar":   "",
+		},
+		"links": []interface{}{},
+	}
+
+	data, _ := json.Marshal(input)
+	result, err := svc.importFromLinkstack(userID, data)
+	if err != nil {
+		t.Fatalf("importFromLinkstack (no links): %v", err)
+	}
+	linksImported, ok := result["links_imported"].(int)
+	if !ok || linksImported != 0 {
+		t.Errorf("links_imported = %v, want 0", result["links_imported"])
+	}
+}
+
+func TestImportService_ImportData_Linkstack(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"profile": map[string]interface{}{
+			"username": "lspublicuser",
+			"name":     "Public User",
+			"bio":      "Test",
+			"avatar":   "",
+		},
+		"links": []map[string]interface{}{
+			{"title": "Link", "url": "https://example.com", "order": 1},
+		},
+	}
+
+	data, _ := json.Marshal(input)
+	jobID, err := svc.ImportData(userID, "linkstack", data)
+	if err != nil {
+		t.Fatalf("ImportData(linkstack): %v", err)
+	}
+	if jobID == "" {
+		t.Error("ImportData(linkstack) returned empty jobID")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// importFromCarrd (direct test)
+// ---------------------------------------------------------------------------
+
+func TestImportService_ImportFromCarrd(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"title": "My Carrd Site",
+		"bio":   "Short bio from carrd",
+		"links": []string{
+			"https://twitter.com/user",
+			"https://github.com/user",
+		},
+	}
+
+	data, _ := json.Marshal(input)
+	result, err := svc.importFromCarrd(userID, data)
+	if err != nil {
+		t.Fatalf("importFromCarrd: %v", err)
+	}
+	if result == nil {
+		t.Fatal("importFromCarrd returned nil result")
+	}
+	if _, ok := result["profile_id"]; !ok {
+		t.Error("result missing profile_id key")
+	}
+	linksImported, ok := result["links_imported"].(int)
+	if !ok || linksImported != 2 {
+		t.Errorf("links_imported = %v, want 2", result["links_imported"])
+	}
+}
+
+func TestImportService_ImportFromCarrd_InvalidJSON(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	_, err := svc.importFromCarrd(userID, []byte(`{bad json`))
+	if err == nil {
+		t.Error("importFromCarrd with invalid JSON should return error")
+	}
+}
+
+func TestImportService_ImportFromCarrd_NoLinks(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"title": "Empty Carrd",
+		"bio":   "No links here",
+		"links": []string{},
+	}
+
+	data, _ := json.Marshal(input)
+	result, err := svc.importFromCarrd(userID, data)
+	if err != nil {
+		t.Fatalf("importFromCarrd (no links): %v", err)
+	}
+	linksImported, ok := result["links_imported"].(int)
+	if !ok || linksImported != 0 {
+		t.Errorf("links_imported = %v, want 0", result["links_imported"])
+	}
+}
+
+func TestImportService_ImportData_Carrd(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"title": "Carrd Public Test",
+		"bio":   "Testing carrd import",
+		"links": []string{"https://example.com"},
+	}
+
+	data, _ := json.Marshal(input)
+	jobID, err := svc.ImportData(userID, "carrd", data)
+	if err != nil {
+		t.Fatalf("ImportData(carrd): %v", err)
+	}
+	if jobID == "" {
+		t.Error("ImportData(carrd) returned empty jobID")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// importFromAboutMe (direct test)
+// ---------------------------------------------------------------------------
+
+func TestImportService_ImportFromAboutMe(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"username": "aboutmeuser",
+		"name":     "About Me User",
+		"headline": "Professional headline",
+		"avatar":   "https://example.com/avatar.png",
+		"links": []map[string]interface{}{
+			{"label": "LinkedIn", "url": "https://linkedin.com/in/user"},
+			{"label": "Twitter", "url": "https://twitter.com/user"},
+		},
+	}
+
+	data, _ := json.Marshal(input)
+	result, err := svc.importFromAboutMe(userID, data)
+	if err != nil {
+		t.Fatalf("importFromAboutMe: %v", err)
+	}
+	if result == nil {
+		t.Fatal("importFromAboutMe returned nil result")
+	}
+	if _, ok := result["profile_id"]; !ok {
+		t.Error("result missing profile_id key")
+	}
+	linksImported, ok := result["links_imported"].(int)
+	if !ok || linksImported != 2 {
+		t.Errorf("links_imported = %v, want 2", result["links_imported"])
+	}
+	totalLinks, ok := result["total_links"].(int)
+	if !ok || totalLinks != 2 {
+		t.Errorf("total_links = %v, want 2", result["total_links"])
+	}
+}
+
+func TestImportService_ImportFromAboutMe_InvalidJSON(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	_, err := svc.importFromAboutMe(userID, []byte(`[not an object]`))
+	if err == nil {
+		t.Error("importFromAboutMe with invalid JSON should return error")
+	}
+}
+
+func TestImportService_ImportFromAboutMe_NoLinks(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"username": "aboutmequiet",
+		"name":     "Quiet User",
+		"headline": "",
+		"avatar":   "",
+		"links":    []interface{}{},
+	}
+
+	data, _ := json.Marshal(input)
+	result, err := svc.importFromAboutMe(userID, data)
+	if err != nil {
+		t.Fatalf("importFromAboutMe (no links): %v", err)
+	}
+	linksImported, ok := result["links_imported"].(int)
+	if !ok || linksImported != 0 {
+		t.Errorf("links_imported = %v, want 0", result["links_imported"])
+	}
+}
+
+func TestImportService_ImportData_AboutMe(t *testing.T) {
+	svc, userID := newTestImportService(t)
+
+	input := map[string]interface{}{
+		"username": "aboutmepublic",
+		"name":     "Public About Me",
+		"headline": "A headline",
+		"avatar":   "",
+		"links": []map[string]interface{}{
+			{"label": "Website", "url": "https://example.com"},
+		},
+	}
+
+	data, _ := json.Marshal(input)
+	jobID, err := svc.ImportData(userID, "aboutme", data)
+	if err != nil {
+		t.Fatalf("ImportData(aboutme): %v", err)
+	}
+	if jobID == "" {
+		t.Error("ImportData(aboutme) returned empty jobID")
+	}
+}

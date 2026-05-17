@@ -189,3 +189,128 @@ func TestPortConfigs_Values(t *testing.T) {
 		}
 	}
 }
+
+// ---- TestConnection / testTLSConnection / testPlainConnection ----
+// These make real network connections, so we only test the error path:
+// a connection to a guaranteed-unreachable address must return ErrConnectionFailed.
+
+// unreachableAddr is a TCP address that will always be refused (port 1 is
+// reserved/privileged and virtually never open on loopback).
+const unreachableAddr = "127.0.0.1:1"
+
+func newSMTPClientForHost(t *testing.T, host string, port int, security string) *Client {
+	t.Helper()
+	cfg := &models.SMTPConfig{
+		Host:        host,
+		Port:        port,
+		FromAddress: "from@example.com",
+		Security:    security,
+	}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	return client
+}
+
+func TestConnection_SSLTLS_ConnectionFailed(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecuritySSLTLS))
+
+	err := client.TestConnection()
+	if err == nil {
+		t.Error("TestConnection(SSL/TLS to unreachable) should return error")
+	}
+}
+
+func TestConnection_STARTTLS_ConnectionFailed(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecuritySTARTTLS))
+
+	err := client.TestConnection()
+	if err == nil {
+		t.Error("TestConnection(STARTTLS to unreachable) should return error")
+	}
+}
+
+func TestConnection_None_ConnectionFailed(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecurityNone))
+
+	err := client.TestConnection()
+	if err == nil {
+		t.Error("TestConnection(NONE to unreachable) should return error")
+	}
+}
+
+func TestConnection_UnknownSecurity(t *testing.T) {
+	// Build directly to bypass NewClient validation of the security field.
+	cfg := &models.SMTPConfig{
+		Host:        "127.0.0.1",
+		Port:        587,
+		FromAddress: "from@example.com",
+		Security:    "UNKNOWN_SECURITY",
+	}
+	client := &Client{config: cfg}
+
+	err := client.TestConnection()
+	if err == nil {
+		t.Error("TestConnection with unknown security type should return error")
+	}
+}
+
+func TestTestTLSConnection_UnreachableHost(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecuritySSLTLS))
+
+	err := client.testTLSConnection(unreachableAddr)
+	if err == nil {
+		t.Error("testTLSConnection to unreachable address should return error")
+	}
+}
+
+func TestTestTLSConnection_ErrorWrapsConnectionFailed(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecuritySSLTLS))
+
+	err := client.testTLSConnection(unreachableAddr)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// The error must wrap ErrConnectionFailed per the implementation.
+	if !smtpErrWraps(err, ErrConnectionFailed) {
+		t.Errorf("testTLSConnection error should wrap ErrConnectionFailed, got: %v", err)
+	}
+}
+
+func TestTestPlainConnection_UnreachableHost(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecurityNone))
+
+	err := client.testPlainConnection(unreachableAddr)
+	if err == nil {
+		t.Error("testPlainConnection to unreachable address should return error")
+	}
+}
+
+func TestTestPlainConnection_ErrorWrapsConnectionFailed(t *testing.T) {
+	client := newSMTPClientForHost(t, "127.0.0.1", 1, string(SecurityNone))
+
+	err := client.testPlainConnection(unreachableAddr)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !smtpErrWraps(err, ErrConnectionFailed) {
+		t.Errorf("testPlainConnection error should wrap ErrConnectionFailed, got: %v", err)
+	}
+}
+
+// smtpErrWraps reports whether target appears anywhere in err's chain.
+func smtpErrWraps(err error, target error) bool {
+	for err != nil {
+		if err == target {
+			return true
+		}
+		type unwrapper interface{ Unwrap() error }
+		u, ok := err.(unwrapper)
+		if !ok {
+			return false
+		}
+		err = u.Unwrap()
+	}
+	return false
+}
