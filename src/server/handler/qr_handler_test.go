@@ -215,3 +215,29 @@ func TestGenerateBase64(t *testing.T) {
 		t.Errorf("qr_code does not have expected prefix, got: %s", resp["qr_code"][:50])
 	}
 }
+
+// TestGeneratePNG_TooLongContent verifies that generatePNG returns 500 when
+// the content is too long for qrcode.Encode to handle.
+func TestGeneratePNG_TooLongContent(t *testing.T) {
+	h := NewQRHandler()
+	// QR codes at Medium recovery level can hold at most ~2953 bytes.
+	// A 5000-byte string forces qrcode.Encode to return an error.
+	content := strings.Repeat("x", 5000)
+	rr := httptest.NewRecorder()
+	h.generatePNG(rr, content, 256)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("generatePNG(oversized content) got %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+// TestGenerateBase64_TooLongContent verifies that generateBase64 returns 500
+// when the content is too long for qrcode.Encode to handle.
+func TestGenerateBase64_TooLongContent(t *testing.T) {
+	h := NewQRHandler()
+	content := strings.Repeat("x", 5000)
+	rr := httptest.NewRecorder()
+	h.generateBase64(rr, content, 256)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("generateBase64(oversized content) got %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}

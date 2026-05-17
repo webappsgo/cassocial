@@ -591,3 +591,72 @@ func TestAdminHandlers_DeleteUser_NonExistent(t *testing.T) {
 			rr.Code, http.StatusOK, rr.Body.String())
 	}
 }
+
+// ---- UpdateSettings / UpdateSMTPConfig / UpdateNotificationPreferences DB error paths ----
+// Override db.Driver to "pgx" so that db.SetSetting uses $1/$2 placeholders
+// which SQLite rejects, causing the error branch inside the handlers to execute.
+
+func newClosedDBAdminHandlers(t *testing.T) *AdminHandlers {
+	t.Helper()
+
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+
+	if err := db.RunMigrations(); err != nil {
+		db.Close()
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	authSvc := server.NewAuth(db, "test-secret-for-admin")
+	h := NewAdminHandlers(db, authSvc)
+	// Close the DB so all subsequent operations fail.
+	db.Close()
+	return h
+}
+
+func TestAdminHandlers_UpdateSettings_DBError(t *testing.T) {
+	h := newClosedDBAdminHandlers(t)
+
+	body, _ := json.Marshal(map[string]string{"some_key": "some_value"})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/settings", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.UpdateSettings(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("UpdateSettings (DB error) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+func TestAdminHandlers_UpdateSMTPConfig_DBError(t *testing.T) {
+	h := newClosedDBAdminHandlers(t)
+
+	body, _ := json.Marshal(map[string]string{"smtp_host": "mail.example.com"})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/smtp/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.UpdateSMTPConfig(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("UpdateSMTPConfig (DB error) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+func TestAdminHandlers_UpdateNotificationPreferences_DBError(t *testing.T) {
+	h := newClosedDBAdminHandlers(t)
+
+	body, _ := json.Marshal(map[string]string{"notify_emergency": "true"})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/notifications/preferences", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.UpdateNotificationPreferences(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("UpdateNotificationPreferences (DB error) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}

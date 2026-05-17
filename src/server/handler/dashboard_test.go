@@ -290,6 +290,21 @@ func TestDashboardHandler_HandleAccountSettings_WithAuth(t *testing.T) {
 	}
 }
 
+// HandleAccountSettings returns 500 when the authenticated user ID is not in the DB.
+func TestDashboardHandler_HandleAccountSettings_UserNotFound(t *testing.T) {
+	h, _ := newTestDashboardHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/settings", nil)
+	req = withUserID(req, "nonexistent-user-id")
+	rr := httptest.NewRecorder()
+	h.HandleAccountSettings(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleAccountSettings (user not found) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
 // HandleNotifications without auth must return 401.
 func TestDashboardHandler_HandleNotifications_NoAuth(t *testing.T) {
 	h, _ := newTestDashboardHandler(t)

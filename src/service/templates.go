@@ -35,8 +35,10 @@ func NewTemplateData(siteName, siteURL, recipientName string) *TemplateData {
 	}
 }
 
-// baseHTMLTemplate provides the base HTML structure for all emails
-const baseHTMLTemplate = `<!DOCTYPE html>
+// baseHTMLTemplate provides the base HTML structure for all emails.
+// Declared as var (not const) so tests can substitute a broken template to
+// exercise the error paths in renderHTML.
+var baseHTMLTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">

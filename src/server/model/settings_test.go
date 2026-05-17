@@ -142,6 +142,15 @@ func TestSetting_SetJSON(t *testing.T) {
 	}
 }
 
+func TestSetting_SetJSON_UnmarshalableValue(t *testing.T) {
+	s := &Setting{}
+	// A channel cannot be marshaled to JSON; json.Marshal must return an error.
+	err := s.SetJSON(make(chan int))
+	if err == nil {
+		t.Error("SetJSON(chan) should return an error for an unmarshalable value")
+	}
+}
+
 func TestSMTPConfig_Validate_Valid(t *testing.T) {
 	sc := &SMTPConfig{
 		Host:        "smtp.example.com",

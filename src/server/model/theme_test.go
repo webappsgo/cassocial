@@ -116,6 +116,8 @@ func TestIsValidHexColor(t *testing.T) {
 		{"#12345", false},   // wrong length
 		{"#12345678", false}, // too long
 		{"", false},
+		{"1234", false},   // length 4 but no leading #
+		{"1234567", false}, // length 7 but no leading #
 	}
 	for _, tt := range tests {
 		got := isValidHexColor(tt.color)

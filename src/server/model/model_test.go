@@ -491,6 +491,17 @@ func TestShortlink_IsExpired_Past(t *testing.T) {
 
 // ---- QRCodeSettings tests ----
 
+// TestIsValidURL_ParseError exercises the url.Parse error branch inside
+// isValidURL. A URL with an invalid IPv6 bracket causes url.Parse to return an
+// error on some Go versions; the fallback uses invalid percent-encoding which
+// reliably triggers a parse error.
+func TestIsValidURL_ParseError(t *testing.T) {
+	// "http://bad%zz.com" has invalid percent-encoding — url.Parse returns error.
+	if isValidURL("http://bad%zz.com") {
+		t.Error("isValidURL(bad percent-encoding) = true, want false")
+	}
+}
+
 func TestQRCodeSettings_Validate_ValidSizes(t *testing.T) {
 	for _, size := range []int{128, 256, 512, 1024} {
 		q := &QRCodeSettings{Size: size}

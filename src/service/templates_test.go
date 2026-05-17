@@ -219,3 +219,41 @@ func TestRenderHTML(t *testing.T) {
 		t.Error("renderHTML() should contain DOCTYPE")
 	}
 }
+
+// TestRenderHTML_ParseError sets baseHTMLTemplate to an invalid Go template so
+// that template.Parse returns an error and renderHTML falls back to plain content.
+func TestRenderHTML_ParseError(t *testing.T) {
+	original := baseHTMLTemplate
+	defer func() { baseHTMLTemplate = original }()
+
+	// "{{.Unclosed" is not valid template syntax — Parse must return an error.
+	baseHTMLTemplate = "{{.Unclosed"
+
+	td := NewTemplateData("Site", "https://example.com", "User")
+	content := "fallback content"
+	result := renderHTML(td, content)
+
+	// renderHTML must return the original content as the fallback.
+	if result != content {
+		t.Errorf("renderHTML(invalid template) = %q, want %q", result, content)
+	}
+}
+
+// TestRenderHTML_ExecuteError sets baseHTMLTemplate to a template that parses
+// successfully but fails during Execute (calling a nil function forces an error).
+func TestRenderHTML_ExecuteError(t *testing.T) {
+	original := baseHTMLTemplate
+	defer func() { baseHTMLTemplate = original }()
+
+	// {{call .NilFunc}} parses fine but Execute fails when .NilFunc is nil.
+	baseHTMLTemplate = `<!DOCTYPE html>{{call .NilFunc}}`
+
+	td := NewTemplateData("Site", "https://example.com", "User")
+	content := "fallback content"
+	result := renderHTML(td, content)
+
+	// renderHTML must fall back to plain content when Execute fails.
+	if result != content {
+		t.Errorf("renderHTML(execute-failing template) = %q, want %q", result, content)
+	}
+}

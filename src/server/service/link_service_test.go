@@ -395,6 +395,19 @@ func TestLinkService_Toggle_NotFound(t *testing.T) {
 	}
 }
 
+func TestLinkService_Toggle_DBError(t *testing.T) {
+	svc, _ := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	err := svc.Toggle("any-id")
+	if err == nil {
+		t.Error("Toggle with closed DB should return error")
+	}
+	if err == ErrLinkNotFound {
+		t.Error("Toggle DB error should not equal ErrLinkNotFound")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Reorder
 // ---------------------------------------------------------------------------
@@ -557,5 +570,245 @@ func TestLinkService_GetMaxLinksPerProfile_Default(t *testing.T) {
 	}
 	if max <= 0 {
 		t.Errorf("getMaxLinksPerProfile = %d, want > 0", max)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Create — error paths
+// ---------------------------------------------------------------------------
+
+func TestLinkService_Create_MaxLinksReached(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+
+	// Set max_links_per_profile to 1 via raw SQL so the second insert is rejected.
+	if _, err := svc.db.Exec(`UPDATE settings SET value = '1' WHERE key = 'max_links_per_profile'`); err != nil {
+		// Row may not exist yet — insert it.
+		if _, err2 := svc.db.Exec(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('max_links_per_profile', '1', CURRENT_TIMESTAMP)`); err2 != nil {
+			t.Fatalf("seed max_links_per_profile: %v / %v", err, err2)
+		}
+	}
+
+	l1 := validLink(profileID)
+	if err := svc.Create(l1); err != nil {
+		t.Fatalf("Create first link (should succeed): %v", err)
+	}
+
+	l2 := validLink(profileID)
+	l2.Title = "Second Link"
+	if err := svc.Create(l2); err != ErrMaxLinksReached {
+		t.Errorf("Create beyond limit = %v, want ErrMaxLinksReached", err)
+	}
+}
+
+func TestLinkService_Create_DBError_OnInsert(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+
+	link := validLink(profileID)
+	// Close the underlying connection so the INSERT fails.
+	svc.db.DB.Close()
+
+	err := svc.Create(link)
+	if err == nil {
+		t.Error("Create with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetByID — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_GetByID_DBError(t *testing.T) {
+	svc, _ := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetByID("any-id")
+	if err == nil {
+		t.Error("GetByID with closed DB should return error")
+	}
+	if err == ErrLinkNotFound {
+		t.Error("GetByID with closed DB should not return ErrLinkNotFound")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetByProfileID — DB error paths
+// ---------------------------------------------------------------------------
+
+func TestLinkService_GetByProfileID_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetByProfileID(profileID)
+	if err == nil {
+		t.Error("GetByProfileID with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetActiveByProfileID — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_GetActiveByProfileID_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetActiveByProfileID(profileID)
+	if err == nil {
+		t.Error("GetActiveByProfileID with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Update — error paths
+// ---------------------------------------------------------------------------
+
+func TestLinkService_Update_ValidationError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+
+	link := validLink(profileID)
+	if err := svc.Create(link); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Invalid URL to trigger validation failure.
+	link.URL = "not-a-url"
+	if err := svc.Update(link); err == nil {
+		t.Error("Update with invalid URL should return validation error")
+	}
+}
+
+func TestLinkService_Update_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+
+	link := validLink(profileID)
+	if err := svc.Create(link); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	link.URL = "https://updated.example.com"
+	err := svc.Update(link)
+	if err == nil {
+		t.Error("Update with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete — error paths
+// ---------------------------------------------------------------------------
+
+func TestLinkService_Delete_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+
+	link := validLink(profileID)
+	if err := svc.Create(link); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	err := svc.Delete(link.ID)
+	if err == nil {
+		t.Error("Delete with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Reorder — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_Reorder_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+
+	link := validLink(profileID)
+	if err := svc.Create(link); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	err := svc.Reorder(profileID, []string{link.ID})
+	if err == nil {
+		t.Error("Reorder with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// IncrementClickCount — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_IncrementClickCount_DBError(t *testing.T) {
+	svc, _ := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	err := svc.IncrementClickCount("any-id")
+	if err == nil {
+		t.Error("IncrementClickCount with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CountByProfileID — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_CountByProfileID_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.CountByProfileID(profileID)
+	if err == nil {
+		t.Error("CountByProfileID with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetTopClickedLinks — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_GetTopClickedLinks_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetTopClickedLinks(profileID, 5)
+	if err == nil {
+		t.Error("GetTopClickedLinks with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// getNextPosition — DB error path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_GetNextPosition_DBError(t *testing.T) {
+	svc, profileID := newTestLinkService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.getNextPosition(profileID)
+	if err == nil {
+		t.Error("getNextPosition with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// getMaxLinksPerProfile — invalid value path
+// ---------------------------------------------------------------------------
+
+func TestLinkService_GetMaxLinksPerProfile_InvalidValue(t *testing.T) {
+	db := newTestLinkDB(t)
+	svc := NewLinkService(db)
+
+	// Insert an unparseable value — getMaxLinksPerProfile should return default (100).
+	_, err := db.Exec(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('max_links_per_profile', 'not-a-number', CURRENT_TIMESTAMP)`)
+	if err != nil {
+		t.Fatalf("seed invalid setting: %v", err)
+	}
+
+	max, err := svc.getMaxLinksPerProfile()
+	if err != nil {
+		t.Fatalf("getMaxLinksPerProfile returned unexpected error: %v", err)
+	}
+	if max != 100 {
+		t.Errorf("getMaxLinksPerProfile with invalid value = %d, want 100 (default)", max)
 	}
 }

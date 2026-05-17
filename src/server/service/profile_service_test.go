@@ -608,3 +608,421 @@ func TestProfileService_GenerateUniqueSlug(t *testing.T) {
 		t.Error("generateUniqueSlug should not return the same slug")
 	}
 }
+
+// generateUniqueSlug when "-copy" slug already exists should try "-copy-1", etc.
+func TestProfileService_GenerateUniqueSlug_Collision(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	// Create "base-copy" first so the loop increments.
+	copy1 := &model.Profile{Slug: "base-copy", DisplayName: "Copy", IsPublic: true}
+	if err := svc.Create(userID, copy1); err != nil {
+		t.Fatalf("Create base-copy: %v", err)
+	}
+
+	slug := svc.generateUniqueSlug("base")
+	if slug == "base-copy" {
+		t.Error("generateUniqueSlug should not return already-taken slug 'base-copy'")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Create — error paths
+// ---------------------------------------------------------------------------
+
+func TestProfileService_Create_MaxProfilesReached(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	// Set max_profiles_per_user to 1 via raw SQL.
+	if _, err := svc.db.Exec(`UPDATE settings SET value = '1' WHERE key = 'max_profiles_per_user'`); err != nil {
+		if _, err2 := svc.db.Exec(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('max_profiles_per_user', '1', CURRENT_TIMESTAMP)`); err2 != nil {
+			t.Fatalf("seed max_profiles_per_user: %v / %v", err, err2)
+		}
+	}
+
+	p1 := validProfile(userID)
+	if err := svc.Create(userID, p1); err != nil {
+		t.Fatalf("Create first profile (should succeed): %v", err)
+	}
+
+	p2 := &model.Profile{Slug: "second-profile", DisplayName: "Second", IsPublic: true}
+	if err := svc.Create(userID, p2); err != ErrMaxProfilesReached {
+		t.Errorf("Create beyond limit = %v, want ErrMaxProfilesReached", err)
+	}
+}
+
+func TestProfileService_Create_DBError(t *testing.T) {
+	// Closing DB forces CountByUserID (and subsequent DB calls) to fail.
+	svc, userID := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	p := &model.Profile{Slug: "some-valid-slug", DisplayName: "Test", IsPublic: true}
+	err := svc.Create(userID, p)
+	if err == nil {
+		t.Error("Create with closed DB should return error")
+	}
+}
+
+func TestProfileService_Create_ValidationError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	// Slug is valid but display_name too long (>100 chars per model.Validate).
+	p := &model.Profile{
+		Slug:        "valid-slug",
+		DisplayName: string(make([]byte, 101)),
+		IsPublic:    true,
+	}
+	err := svc.Create(userID, p)
+	if err == nil {
+		t.Error("Create with display_name too long should return validation error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetByID — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_GetByID_DBError(t *testing.T) {
+	svc, _ := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetByID("any-id")
+	if err == nil {
+		t.Error("GetByID with closed DB should return error")
+	}
+	if err == ErrProfileNotFound {
+		t.Error("GetByID DB error should not equal ErrProfileNotFound")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetBySlug — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_GetBySlug_DBError(t *testing.T) {
+	svc, _ := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetBySlug("any-slug")
+	if err == nil {
+		t.Error("GetBySlug with closed DB should return error")
+	}
+	if err == ErrProfileNotFound {
+		t.Error("GetBySlug DB error should not equal ErrProfileNotFound")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetByUserID — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_GetByUserID_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.GetByUserID(userID)
+	if err == nil {
+		t.Error("GetByUserID with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Update — error paths
+// ---------------------------------------------------------------------------
+
+func TestProfileService_Update_ValidationError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// display_name too long triggers validation failure before the DB is hit.
+	p.DisplayName = string(make([]byte, 101))
+	if err := svc.Update(p); err == nil {
+		t.Error("Update with display_name too long should return validation error")
+	}
+}
+
+func TestProfileService_Update_NotFound(t *testing.T) {
+	svc, _ := newTestProfileService(t)
+
+	p := &model.Profile{
+		ID:          "no-such-id",
+		Slug:        "ghost-slug",
+		DisplayName: "Ghost",
+		IsPublic:    true,
+	}
+	if err := svc.Update(p); err != ErrProfileNotFound {
+		t.Errorf("Update(nonexistent) = %v, want ErrProfileNotFound", err)
+	}
+}
+
+func TestProfileService_Update_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	p.DisplayName = "Changed"
+	err := svc.Update(p)
+	if err == nil {
+		t.Error("Update with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_Delete_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	err := svc.Delete(p.ID)
+	if err == nil {
+		t.Error("Delete with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate — error paths
+// ---------------------------------------------------------------------------
+
+func TestProfileService_Duplicate_NotFound(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	_, err := svc.Duplicate("no-such-profile", userID)
+	if err != ErrProfileNotFound {
+		t.Errorf("Duplicate(nonexistent) = %v, want ErrProfileNotFound", err)
+	}
+}
+
+func TestProfileService_Duplicate_CreateFails(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	orig := validProfile(userID)
+	if err := svc.Create(userID, orig); err != nil {
+		t.Fatalf("Create original: %v", err)
+	}
+
+	// Cap max profiles at 1 so the duplicate Create fails.
+	if _, err := svc.db.Exec(`UPDATE settings SET value = '1' WHERE key = 'max_profiles_per_user'`); err != nil {
+		if _, err2 := svc.db.Exec(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('max_profiles_per_user', '1', CURRENT_TIMESTAMP)`); err2 != nil {
+			t.Fatalf("seed max_profiles_per_user: %v / %v", err, err2)
+		}
+	}
+
+	_, err := svc.Duplicate(orig.ID, userID)
+	if err == nil {
+		t.Error("Duplicate when at profile limit should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// IncrementViewCount — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_IncrementViewCount_DBError(t *testing.T) {
+	svc, _ := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	err := svc.IncrementViewCount("any-id")
+	if err == nil {
+		t.Error("IncrementViewCount with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SlugExists — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_SlugExists_DBError(t *testing.T) {
+	svc, _ := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.SlugExists("any-slug")
+	if err == nil {
+		t.Error("SlugExists with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CountByUserID — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_CountByUserID_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.CountByUserID(userID)
+	if err == nil {
+		t.Error("CountByUserID with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// VerifyDomain — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_VerifyDomain_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	p.CustomDomain = "example.test"
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	err := svc.VerifyDomain(p.ID, "example.test")
+	if err == nil {
+		t.Error("VerifyDomain with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetQRCodeSettings — DB error path
+// ---------------------------------------------------------------------------
+
+func TestProfileService_GetQRCodeSettings_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	_, err := svc.GetQRCodeSettings(p.ID)
+	if err == nil {
+		t.Error("GetQRCodeSettings with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// UpdateQRCodeSettings — error paths
+// ---------------------------------------------------------------------------
+
+func TestProfileService_UpdateQRCodeSettings_ValidationError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Size = 0 should fail validation.
+	settings := &model.QRCodeSettings{
+		ProfileID:       p.ID,
+		Size:            0,
+		ErrorCorrection: "M",
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		Format:          "png",
+	}
+	if err := svc.UpdateQRCodeSettings(settings); err == nil {
+		t.Error("UpdateQRCodeSettings with Size=0 should return validation error")
+	}
+}
+
+func TestProfileService_UpdateQRCodeSettings_DBError(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	p := validProfile(userID)
+	if err := svc.Create(userID, p); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	svc.db.DB.Close()
+
+	settings := &model.QRCodeSettings{
+		ProfileID:       p.ID,
+		Size:            256,
+		ErrorCorrection: "M",
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		LogoSize:        30,
+		Format:          "png",
+	}
+	if err := svc.UpdateQRCodeSettings(settings); err == nil {
+		t.Error("UpdateQRCodeSettings with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generateSlug
+// ---------------------------------------------------------------------------
+
+// TestProfileService_GenerateSlug_Counter exercises the counter-increment branch
+// inside generateSlug when the first candidate slug is already taken.
+func TestProfileService_GenerateSlug_Counter(t *testing.T) {
+	svc, userID := newTestProfileService(t)
+
+	// Create a profile whose slug exactly matches what generateSlug would produce
+	// for the display name "Counter Test".
+	taken := &model.Profile{Slug: "counter-test", DisplayName: "Counter Test", IsPublic: true}
+	if err := svc.Create(userID, taken); err != nil {
+		t.Fatalf("Create taken slug: %v", err)
+	}
+
+	// Now generate a slug for the same display name — the base "counter-test"
+	// is taken so the counter branch (lines 456-457) must fire.
+	slug, err := svc.generateSlug("Counter Test")
+	if err != nil {
+		t.Fatalf("generateSlug: %v", err)
+	}
+	if slug == "counter-test" {
+		t.Error("generateSlug should not return already-taken slug 'counter-test'")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generateSlug — error path when SlugExists fails
+// ---------------------------------------------------------------------------
+
+func TestProfileService_GenerateSlug_DBError(t *testing.T) {
+	svc, _ := newTestProfileService(t)
+	svc.db.DB.Close()
+
+	_, err := svc.generateSlug("Test Display Name")
+	if err == nil {
+		t.Error("generateSlug with closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// getMaxProfilesPerUser — invalid value path (returns default)
+// ---------------------------------------------------------------------------
+
+func TestProfileService_GetMaxProfilesPerUser_InvalidValue(t *testing.T) {
+	db := newTestProfileDB(t)
+	svc := NewProfileService(db)
+
+	_, err := db.Exec(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('max_profiles_per_user', 'not-a-number', CURRENT_TIMESTAMP)`)
+	if err != nil {
+		t.Fatalf("seed invalid setting: %v", err)
+	}
+
+	max, err := svc.getMaxProfilesPerUser()
+	if err != nil {
+		t.Fatalf("getMaxProfilesPerUser returned unexpected error: %v", err)
+	}
+	if max != 5 {
+		t.Errorf("getMaxProfilesPerUser with invalid value = %d, want 5 (default)", max)
+	}
+}
