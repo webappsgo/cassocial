@@ -314,3 +314,199 @@ func smtpErrWraps(err error, target error) bool {
 	}
 	return false
 }
+
+// ---- Send (disabled config) ----
+// Send checks c.config.Enabled first; a disabled config returns an error
+// without touching the network.
+
+func TestSend_DisabledConfig_ReturnsError(t *testing.T) {
+	cfg := &models.SMTPConfig{
+		Enabled:     false,
+		Host:        "smtp.example.com",
+		Port:        587,
+		FromAddress: "from@example.com",
+		Security:    string(SecuritySTARTTLS),
+	}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = client.Send([]string{"to@example.com"}, "Subject", "body", false)
+	if err == nil {
+		t.Error("Send() on disabled config should return error")
+	}
+}
+
+// ---- Send / sendWithTLS / sendWithPlain — error paths (no real SMTP) ----
+// We use a valid-looking config but point at an unreachable port so the
+// dial fails immediately, exercising the connection-error branches.
+
+func newEnabledClient(t *testing.T, port int, security SecurityType) *Client {
+	t.Helper()
+	cfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        "127.0.0.1",
+		Port:        port,
+		FromAddress: "from@example.com",
+		Security:    string(security),
+		RetryDelay:  0, // zero delay so retries don't slow the test
+	}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	return client
+}
+
+func TestSend_SSLTLS_ConnectionFailed(t *testing.T) {
+	client := newEnabledClient(t, 1, SecuritySSLTLS)
+
+	err := client.Send([]string{"to@example.com"}, "Sub", "body", true)
+	if err == nil {
+		t.Error("Send(SSL/TLS, unreachable) should return error")
+	}
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("Send SSL/TLS error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+func TestSend_STARTTLS_ConnectionFailed(t *testing.T) {
+	client := newEnabledClient(t, 1, SecuritySTARTTLS)
+
+	err := client.Send([]string{"to@example.com"}, "Sub", "body", true)
+	if err == nil {
+		t.Error("Send(STARTTLS, unreachable) should return error")
+	}
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("Send STARTTLS error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+func TestSend_None_ConnectionFailed(t *testing.T) {
+	client := newEnabledClient(t, 1, SecurityNone)
+
+	err := client.Send([]string{"to@example.com"}, "Sub", "body", false)
+	if err == nil {
+		t.Error("Send(NONE, unreachable) should return error")
+	}
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("Send NONE error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+func TestSend_UnknownSecurity_ReturnsError(t *testing.T) {
+	// Build client directly to inject unknown security type on enabled config.
+	cfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        "127.0.0.1",
+		Port:        587,
+		FromAddress: "from@example.com",
+		Security:    "UNKNOWN",
+	}
+	client := &Client{config: cfg}
+
+	err := client.Send([]string{"to@example.com"}, "Sub", "body", false)
+	if err == nil {
+		t.Error("Send with unknown security type should return error")
+	}
+}
+
+func TestSendWithTLS_UnreachableHost(t *testing.T) {
+	client := newEnabledClient(t, 1, SecuritySSLTLS)
+
+	err := client.sendWithTLS(unreachableAddr, []string{"to@example.com"}, []byte("msg"))
+	if err == nil {
+		t.Error("sendWithTLS to unreachable host should return error")
+	}
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("sendWithTLS error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+func TestSendWithPlain_UnreachableHost_None(t *testing.T) {
+	client := newEnabledClient(t, 1, SecurityNone)
+
+	err := client.sendWithPlain(unreachableAddr, []string{"to@example.com"}, []byte("msg"))
+	if err == nil {
+		t.Error("sendWithPlain(NONE) to unreachable host should return error")
+	}
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("sendWithPlain error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+func TestSendWithPlain_UnreachableHost_STARTTLS(t *testing.T) {
+	client := newEnabledClient(t, 1, SecuritySTARTTLS)
+
+	err := client.sendWithPlain(unreachableAddr, []string{"to@example.com"}, []byte("msg"))
+	if err == nil {
+		t.Error("sendWithPlain(STARTTLS) to unreachable host should return error")
+	}
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("sendWithPlain STARTTLS error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+// ---- SendWithRetry ----
+
+func TestSendWithRetry_RetriesAndReturnsError(t *testing.T) {
+	// Use an unreachable host and zero retry delay; 2 retries means 3 total attempts.
+	cfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        "127.0.0.1",
+		Port:        1,
+		FromAddress: "from@example.com",
+		Security:    string(SecurityNone),
+		RetryDelay:  0,
+	}
+	client := &Client{config: cfg}
+
+	err := client.SendWithRetry([]string{"to@example.com"}, "Sub", "body", false, 2)
+	if err == nil {
+		t.Error("SendWithRetry should return error when all attempts fail")
+	}
+	// The wrapped error indicates "after N retries"
+	if !smtpErrWraps(err, ErrSendFailed) {
+		t.Errorf("SendWithRetry error should wrap ErrSendFailed, got: %v", err)
+	}
+}
+
+func TestSendWithRetry_ZeroRetries_ReturnsError(t *testing.T) {
+	cfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        "127.0.0.1",
+		Port:        1,
+		FromAddress: "from@example.com",
+		Security:    string(SecurityNone),
+		RetryDelay:  0,
+	}
+	client := &Client{config: cfg}
+
+	err := client.SendWithRetry([]string{"to@example.com"}, "Sub", "body", false, 0)
+	if err == nil {
+		t.Error("SendWithRetry(0 retries) should return error on connection failure")
+	}
+}
+
+func TestSendWithRetry_DisabledSMTP_NoRetries(t *testing.T) {
+	// When SMTP is disabled, Send returns immediately without a connection;
+	// SendWithRetry should propagate that error without any exponential sleep.
+	cfg := &models.SMTPConfig{
+		Enabled:     false,
+		Host:        "smtp.example.com",
+		Port:        587,
+		FromAddress: "from@example.com",
+		Security:    string(SecuritySTARTTLS),
+		RetryDelay:  0, // zero delay so the test does not sleep between retries
+	}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = client.SendWithRetry([]string{"to@example.com"}, "Sub", "body", false, 3)
+	if err == nil {
+		t.Error("SendWithRetry on disabled SMTP should return error")
+	}
+}

@@ -428,3 +428,100 @@ func TestAdminHandlers_ImportServices(t *testing.T) {
 		t.Errorf("ImportServices returned status %d, want %d", rr.Code, http.StatusNotImplemented)
 	}
 }
+
+// ---- TestSMTPConnection (was 0% covered) ----
+
+func TestAdminHandlers_TestSMTPConnection(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/smtp/test", nil)
+	rr := httptest.NewRecorder()
+	h.TestSMTPConnection(rr, req)
+
+	// The handler is not yet implemented and must return 501.
+	if rr.Code != http.StatusNotImplemented {
+		t.Errorf("TestSMTPConnection returned status %d, want %d; body: %s",
+			rr.Code, http.StatusNotImplemented, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode TestSMTPConnection response: %v", err)
+	}
+	if _, ok := resp["message"]; !ok {
+		t.Error("TestSMTPConnection response missing 'message' field")
+	}
+}
+
+// ---- ListUsers — scan error branch ----
+// We cannot easily force a scan error in SQLite, but we can verify the
+// empty-users-table scan path (the rows.Next() body is exercised when
+// the table is populated, which is already tested above).  This test
+// ensures the non-empty path exercises the Scan loop successfully.
+func TestAdminHandlers_ListUsers_ScanLoop(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	// Insert multiple users to ensure the scan loop body executes more than once.
+	for i, name := range []string{"scanloopA", "scanloopB", "scanloopC"} {
+		_, err := h.auth.Register(name, name+"@example.com", "ValidPass1")
+		if err != nil {
+			t.Fatalf("Register[%d] returned error: %v", i, err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/users", nil)
+	rr := httptest.NewRecorder()
+	h.ListUsers(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("ListUsers returned status %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var users []interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&users); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(users) < 3 {
+		t.Errorf("expected at least 3 users, got %d", len(users))
+	}
+}
+
+// ---- UpdateUser — validation failure branch ----
+// Sending an invalid role triggers user.Validate() to fail.
+func TestAdminHandlers_UpdateUser_InvalidRole(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	user, err := h.auth.Register("invalidroletest", "invalidrole@example.com", "ValidPass1")
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"role": "superadmin-does-not-exist"})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/users/"+user.ID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", user.ID)
+	rr := httptest.NewRecorder()
+	h.UpdateUser(rr, req)
+
+	// Should fail validation: invalid role value.
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("UpdateUser with invalid role returned status %d, want non-200; body: %s",
+			rr.Code, rr.Body.String())
+	}
+}
+
+// ---- DeleteUser — non-existent user still returns 200 (DELETE is idempotent) ----
+func TestAdminHandlers_DeleteUser_NonExistent(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/users/no-such-user-id", nil)
+	req.SetPathValue("id", "no-such-user-id")
+	rr := httptest.NewRecorder()
+	h.DeleteUser(rr, req)
+
+	// DELETE of a non-existent row is still a success (no rows affected is not an error in SQL).
+	if rr.Code != http.StatusOK {
+		t.Errorf("DeleteUser non-existent returned status %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}

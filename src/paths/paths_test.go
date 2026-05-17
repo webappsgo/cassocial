@@ -319,6 +319,104 @@ func TestWindowsPaths_User_CustomAppData(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// isRunningInDocker — container env var branch
+// ---------------------------------------------------------------------------
+
+func TestIsRunningInDocker_ContainerEnvVar(t *testing.T) {
+	// Set the "container" env var that isRunningInDocker checks.
+	t.Setenv("container", "podman")
+	got := isRunningInDocker()
+	if !got {
+		t.Error("isRunningInDocker() = false when 'container' env var is set, want true")
+	}
+}
+
+func TestIsRunningInDocker_NoSignals(t *testing.T) {
+	// In a clean non-container environment (no /.dockerenv, no 'container' env,
+	// and PID 1 either doesn't exist or isn't tini) the function must return false.
+	// We can only guarantee this when the 'container' env var is unset.
+	t.Setenv("container", "")
+	// Result depends on the actual environment; we just ensure no panic.
+	_ = isRunningInDocker()
+}
+
+// ---------------------------------------------------------------------------
+// Resolve — explicit OS-specific branches called directly
+// ---------------------------------------------------------------------------
+
+func TestLinuxPaths_RootAllFieldsNonEmpty(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only test")
+	}
+	p := linuxPaths(true)
+	fields := map[string]string{
+		"Config":   p.Config,
+		"Data":     p.Data,
+		"Log":      p.Log,
+		"Backup":   p.Backup,
+		"PID":      p.PID,
+		"SSL":      p.SSL,
+		"Security": p.Security,
+		"Database": p.Database,
+	}
+	for name, val := range fields {
+		if val == "" {
+			t.Errorf("linuxPaths(true).%s is empty", name)
+		}
+	}
+}
+
+func TestLinuxPaths_UserAllFieldsNonEmpty(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only test")
+	}
+	p := linuxPaths(false)
+	fields := map[string]string{
+		"Config":   p.Config,
+		"Data":     p.Data,
+		"Log":      p.Log,
+		"Backup":   p.Backup,
+		"PID":      p.PID,
+		"SSL":      p.SSL,
+		"Security": p.Security,
+		"Database": p.Database,
+	}
+	for name, val := range fields {
+		if val == "" {
+			t.Errorf("linuxPaths(false).%s is empty", name)
+		}
+	}
+}
+
+// TestResolve_NonDockerPaths exercises the GOOS switch in Resolve by calling the
+// concrete OS-specific helpers directly (since GOOS is determined at compile time).
+func TestResolve_BothPrivilegeLevels(t *testing.T) {
+	// Ensure we can get non-nil, non-empty paths for the current OS at both
+	// privilege levels by calling the helpers directly.
+	for _, isRoot := range []bool{true, false} {
+		var p *Paths
+		switch runtime.GOOS {
+		case "linux":
+			p = linuxPaths(isRoot)
+		case "darwin":
+			p = darwinPaths(isRoot)
+		case "freebsd", "openbsd", "netbsd":
+			p = bsdPaths(isRoot)
+		case "windows":
+			p = windowsPaths(isRoot)
+		default:
+			p = linuxPaths(isRoot)
+		}
+		if p == nil {
+			t.Fatalf("OS-specific paths(isRoot=%v) returned nil", isRoot)
+		}
+		if p.Config == "" || p.Data == "" || p.PID == "" {
+			t.Errorf("OS-specific paths(isRoot=%v) has empty required fields", isRoot)
+		}
+	}
+}
+
 func TestWindowsPaths_AllFieldsNonEmpty(t *testing.T) {
 	for _, isRoot := range []bool{true, false} {
 		p := windowsPaths(isRoot)

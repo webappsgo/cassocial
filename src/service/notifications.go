@@ -103,17 +103,19 @@ func (nm *NotificationManager) Start() {
 // Stop stops the notification processing loop
 func (nm *NotificationManager) Stop() {
 	nm.mutex.Lock()
-	defer nm.mutex.Unlock()
 
 	if !nm.running {
+		nm.mutex.Unlock()
 		return
 	}
 
 	nm.stopChan <- true
 	nm.ticker.Stop()
 	nm.running = false
+	nm.mutex.Unlock()
 
-	// Process remaining notifications
+	// Process remaining notifications — called without holding the mutex so
+	// processQueue() can acquire it without deadlocking.
 	nm.processQueue()
 }
 

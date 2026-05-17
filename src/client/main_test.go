@@ -305,6 +305,400 @@ func TestClientDelete_Success(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// resolveToken — token file path and default file path branches
+// ---------------------------------------------------------------------------
+
+func TestResolveToken_TokenFileMissing(t *testing.T) {
+	// File doesn't exist — should fall through to env/default logic.
+	os.Unsetenv("CASSOCIAL_TOKEN")
+	tok := resolveToken("", "/nonexistent/path/token-file")
+	// No env var set and file missing — empty string expected.
+	if tok != "" {
+		t.Errorf("resolveToken with missing file = %q, want empty", tok)
+	}
+}
+
+func TestResolveToken_DefaultFileLoosePermissions(t *testing.T) {
+	// Create a fake HOME with a token file that has loose permissions (world-readable).
+	// resolveToken should emit a warning but return "" because it skips loose-perms files.
+	tmpHome := t.TempDir()
+	tokenDir := tmpHome + "/.config/casapps/cassocial"
+	if err := os.MkdirAll(tokenDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	tokenPath := tokenDir + "/token"
+	if err := os.WriteFile(tokenPath, []byte("loosetoken\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Override HOME so resolveToken finds our fake token file.
+	t.Setenv("HOME", tmpHome)
+	os.Unsetenv("CASSOCIAL_TOKEN")
+
+	// The function should warn and NOT return the token.
+	tok := resolveToken("", "")
+	if tok != "" {
+		t.Errorf("resolveToken with loose-perms token file returned %q, want empty", tok)
+	}
+}
+
+func TestResolveToken_DefaultFileStrictPermissions(t *testing.T) {
+	// Create a fake HOME with a token file that has strict permissions (0600).
+	// resolveToken should read and return the token.
+	tmpHome := t.TempDir()
+	tokenDir := tmpHome + "/.config/casapps/cassocial"
+	if err := os.MkdirAll(tokenDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	tokenPath := tokenDir + "/token"
+	if err := os.WriteFile(tokenPath, []byte("stricttoken\n"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	t.Setenv("HOME", tmpHome)
+	os.Unsetenv("CASSOCIAL_TOKEN")
+
+	tok := resolveToken("", "")
+	if tok != "stricttoken" {
+		t.Errorf("resolveToken with strict-perms token file = %q, want stricttoken", tok)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdProfile — httptest server branches
+// ---------------------------------------------------------------------------
+
+func TestCmdProfile_WithSlugFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/profile" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slug":"alice"}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdProfile([]string{"--slug", "alice"}); err != nil {
+			t.Errorf("cmdProfile(--slug alice) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "alice") {
+		t.Errorf("cmdProfile output %q does not contain 'alice'", out)
+	}
+}
+
+func TestCmdProfile_WithPositionalArg(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slug":"bob"}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdProfile([]string{"bob"}); err != nil {
+			t.Errorf("cmdProfile(bob) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "bob") {
+		t.Errorf("cmdProfile output %q does not contain 'bob'", out)
+	}
+}
+
+func TestCmdProfile_FromUserContext(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slug":"carol"}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}, user: "@carol"}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdProfile([]string{}); err != nil {
+			t.Errorf("cmdProfile() from user context returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "carol") {
+		t.Errorf("cmdProfile output %q does not contain 'carol'", out)
+	}
+}
+
+func TestCmdProfile_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	err := c.cmdProfile([]string{"missing-slug"})
+	if err == nil {
+		t.Fatal("cmdProfile with server 404 should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdLinks — httptest server branches
+// ---------------------------------------------------------------------------
+
+func TestCmdLinks_WithProfileFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/links" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"url":"https://example.com"}]`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdLinks([]string{"--profile", "42"}); err != nil {
+			t.Errorf("cmdLinks(--profile 42) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "example.com") {
+		t.Errorf("cmdLinks output %q does not contain 'example.com'", out)
+	}
+}
+
+func TestCmdLinks_WithPositionalArg(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"url":"https://test.com"}]`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdLinks([]string{"99"}); err != nil {
+			t.Errorf("cmdLinks(99) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "test.com") {
+		t.Errorf("cmdLinks output %q does not contain 'test.com'", out)
+	}
+}
+
+func TestCmdLinks_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	err := c.cmdLinks([]string{"some-id"})
+	if err == nil {
+		t.Fatal("cmdLinks with server 500 should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdShortlink — httptest server branches for list, create, delete
+// ---------------------------------------------------------------------------
+
+func TestCmdShortlink_List(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/shortlinks" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"code":"abc"}]`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdShortlink([]string{"list"}); err != nil {
+			t.Errorf("cmdShortlink(list) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "abc") {
+		t.Errorf("cmdShortlink list output %q does not contain 'abc'", out)
+	}
+}
+
+func TestCmdShortlink_Create_WithURLFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "wrong method", http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"xyz"}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdShortlink([]string{"create", "--url", "https://example.com"}); err != nil {
+			t.Errorf("cmdShortlink(create --url) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "xyz") {
+		t.Errorf("cmdShortlink create output %q does not contain 'xyz'", out)
+	}
+}
+
+func TestCmdShortlink_Create_WithPositionalURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"pos"}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdShortlink([]string{"create", "https://positional.com"}); err != nil {
+			t.Errorf("cmdShortlink(create positional) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "pos") {
+		t.Errorf("cmdShortlink create positional output %q does not contain 'pos'", out)
+	}
+}
+
+func TestCmdShortlink_Create_WithCustomCode(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 512)
+		n, _ := r.Body.Read(buf)
+		gotBody = string(buf[:n])
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"mycode"}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	if err := c.cmdShortlink([]string{"create", "--url", "https://x.com", "--code", "mycode"}); err != nil {
+		t.Errorf("cmdShortlink(create --code) returned error: %v", err)
+	}
+	if !clientContains(gotBody, "mycode") {
+		t.Errorf("create request body %q does not contain custom_code", gotBody)
+	}
+}
+
+func TestCmdShortlink_Delete_WithCodeFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "wrong method", http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"deleted":true}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdShortlink([]string{"delete", "--code", "abc"}); err != nil {
+			t.Errorf("cmdShortlink(delete --code) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "deleted") {
+		t.Errorf("cmdShortlink delete output %q does not contain 'deleted'", out)
+	}
+}
+
+func TestCmdShortlink_Delete_WithPositionalCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"deleted":true}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	out := captureClientStdout(t, func() {
+		if err := c.cmdShortlink([]string{"delete", "xyz"}); err != nil {
+			t.Errorf("cmdShortlink(delete positional) returned error: %v", err)
+		}
+	})
+	if !clientContains(out, "deleted") {
+		t.Errorf("cmdShortlink delete positional output %q does not contain 'deleted'", out)
+	}
+}
+
+func TestCmdShortlink_List_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "gone", http.StatusGone)
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	err := c.cmdShortlink([]string{"list"})
+	if err == nil {
+		t.Fatal("cmdShortlink list with server error should return an error")
+	}
+}
+
+func TestCmdShortlink_Create_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	err := c.cmdShortlink([]string{"create", "--url", "https://example.com"})
+	if err == nil {
+		t.Fatal("cmdShortlink create with server error should return an error")
+	}
+}
+
+func TestCmdShortlink_Delete_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	err := c.cmdShortlink([]string{"delete", "--code", "xyz"})
+	if err == nil {
+		t.Fatal("cmdShortlink delete with server error should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// do — 4xx non-401 error body included in message
+// ---------------------------------------------------------------------------
+
+func TestClientDo_400_ErrorBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request detail", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}}
+	_, err := c.get("/test")
+	if err == nil {
+		t.Fatal("do() with 400 should return an error")
+	}
+	if !clientContains(err.Error(), "400") {
+		t.Errorf("error message %q does not contain status code 400", err.Error())
+	}
+}
+
+func TestClientPost_InvalidServer(t *testing.T) {
+	// Unreachable URL — http.Client.Do should fail.
+	c := &client{server: "http://127.0.0.1:1", http: &http.Client{}}
+	_, err := c.post("/test", map[string]string{"k": "v"})
+	if err == nil {
+		t.Fatal("post() to unreachable server should return an error")
+	}
+}
+
+func TestClientDelete_InvalidServer(t *testing.T) {
+	c := &client{server: "http://127.0.0.1:1", http: &http.Client{}}
+	_, err := c.delete("/test")
+	if err == nil {
+		t.Fatal("delete() to unreachable server should return an error")
+	}
+}
+
 // clientContains checks whether s contains sub.
 func clientContains(s, sub string) bool {
 	if len(sub) == 0 {

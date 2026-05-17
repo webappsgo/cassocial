@@ -338,6 +338,155 @@ func TestNotifyHighTraffic_DoesNotPanic(t *testing.T) {
 	}
 }
 
+// ---- Stop ----
+
+func TestNotificationManager_Stop_DrainsPendingQueue(t *testing.T) {
+	// Build a disabled mailer so sendNotification logs and returns without error.
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	prefs := &models.NotificationPreferences{
+		BugReport:  true,
+		BatchDelay: 300,
+	}
+	nm := NewNotificationManager(disabledMailer, prefs, "admin@test.com")
+	nm.Start()
+
+	// Enqueue a few normal-priority notifications while the manager is running.
+	for i := 0; i < 3; i++ {
+		nm.Queue(&Notification{
+			Type:      NotificationBugReport,
+			Title:     "queued item",
+			Priority:  PriorityNormal,
+			CreatedAt: time.Now(),
+		})
+	}
+
+	if nm.GetQueueLength() != 3 {
+		t.Errorf("expected 3 items before Stop(), got %d", nm.GetQueueLength())
+	}
+
+	// Stop() signals the goroutine, then calls processQueue() — which drains the slice.
+	nm.Stop()
+
+	if nm.IsRunning() {
+		t.Error("IsRunning() should be false after Stop()")
+	}
+	if nm.GetQueueLength() != 0 {
+		t.Errorf("queue should be empty after Stop(), got %d items", nm.GetQueueLength())
+	}
+}
+
+func TestNotificationManager_Stop_Idempotent(t *testing.T) {
+	nm := NewNotificationManager(nil, nil, "admin@test.com")
+	// Not running — first Stop is a no-op.
+	nm.Stop()
+	// Second Stop should also be a no-op (not panic or deadlock).
+	nm.Stop()
+}
+
+func TestNotificationManager_Start_Stop_Cycle(t *testing.T) {
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	nm := NewNotificationManager(disabledMailer, nil, "admin@test.com")
+
+	nm.Start()
+	if !nm.IsRunning() {
+		t.Error("should be running after Start()")
+	}
+
+	nm.Stop()
+	if nm.IsRunning() {
+		t.Error("should not be running after Stop()")
+	}
+}
+
+// ---- processQueue directly ----
+
+func TestProcessQueue_EmptyQueue_NoOp(t *testing.T) {
+	nm := NewNotificationManager(nil, nil, "admin@test.com")
+	// Should not panic on an empty queue.
+	nm.processQueue()
+	if nm.GetQueueLength() != 0 {
+		t.Error("processQueue() on empty queue should leave queue empty")
+	}
+}
+
+func TestProcessQueue_SendsAndDrainsQueue(t *testing.T) {
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	prefs := &models.NotificationPreferences{BugReport: true}
+	nm := NewNotificationManager(disabledMailer, prefs, "admin@test.com")
+
+	nm.Queue(&Notification{
+		Type:      NotificationBugReport,
+		Title:     "direct queue test",
+		Priority:  PriorityNormal,
+		CreatedAt: time.Now(),
+	})
+	nm.Queue(&Notification{
+		Type:      NotificationBugReport,
+		Title:     "second item",
+		Priority:  PriorityNormal,
+		CreatedAt: time.Now(),
+	})
+
+	if nm.GetQueueLength() != 2 {
+		t.Fatalf("expected 2 items before processQueue(), got %d", nm.GetQueueLength())
+	}
+
+	nm.processQueue()
+
+	if nm.GetQueueLength() != 0 {
+		t.Errorf("processQueue() should drain queue, got %d items remaining", nm.GetQueueLength())
+	}
+}
+
+// ---- sendNotification directly ----
+
+func TestSendNotification_DisabledMailer_NoError(t *testing.T) {
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	nm := NewNotificationManager(disabledMailer, nil, "admin@test.com")
+
+	// Should not panic; logs "Mailer disabled" and returns.
+	nm.sendNotification(&Notification{
+		Type:      NotificationBugReport,
+		Title:     "test",
+		Message:   "test message",
+		Severity:  "info",
+		Priority:  PriorityNormal,
+		CreatedAt: time.Now(),
+	})
+}
+
+func TestSendNotification_EmptyRecipient_UsesAdminEmail(t *testing.T) {
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	nm := NewNotificationManager(disabledMailer, nil, "admin@test.com")
+
+	// Recipient is empty — sendNotification should fall back to adminEmail.
+	// With a disabled mailer it just logs and returns without error.
+	nm.sendNotification(&Notification{
+		Type:      NotificationBugReport,
+		Recipient: "", // empty — should use adminEmail
+		Title:     "fallback recipient test",
+		Message:   "msg",
+		Severity:  "info",
+		Priority:  PriorityNormal,
+		CreatedAt: time.Now(),
+	})
+}
+
+func TestSendNotification_WithRecipient_UsesRecipient(t *testing.T) {
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	nm := NewNotificationManager(disabledMailer, nil, "admin@test.com")
+
+	nm.sendNotification(&Notification{
+		Type:      NotificationBugReport,
+		Recipient: "specific@example.com",
+		Title:     "specific recipient test",
+		Message:   "msg",
+		Severity:  "warning",
+		Priority:  PriorityHigh,
+		CreatedAt: time.Now(),
+	})
+}
+
 func TestNotificationManager_isNotificationEnabled(t *testing.T) {
 	prefs := &models.NotificationPreferences{
 		Emergency:          true,

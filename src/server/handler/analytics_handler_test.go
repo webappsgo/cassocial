@@ -199,6 +199,138 @@ func TestAnalyticsHandler_HandleTrackClick_Valid(t *testing.T) {
 	}
 }
 
+// ---- HandleExportAnalytics (was 0% covered) ----
+// Tests cover: missing profile_id (400), csv format, json format (default),
+// pdf format (501), unknown format (400), and explicit days param on link analytics.
+
+func TestAnalyticsHandler_HandleExportAnalytics_MissingID(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleExportAnalytics without profile_id returned %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestAnalyticsHandler_HandleExportAnalytics_JSON(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export?profile_id=pid123&format=json", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleExportAnalytics json returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode json export response: %v", err)
+	}
+	if _, ok := resp["profile_id"]; !ok {
+		t.Error("json export response missing 'profile_id' field")
+	}
+}
+
+func TestAnalyticsHandler_HandleExportAnalytics_DefaultFormat(t *testing.T) {
+	// Omitting format should default to json.
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export?profile_id=pid456", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleExportAnalytics default format returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestAnalyticsHandler_HandleExportAnalytics_CSV(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export?profile_id=pid789&format=csv", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleExportAnalytics csv returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	ct := rr.Header().Get("Content-Type")
+	if ct != "text/csv" {
+		t.Errorf("HandleExportAnalytics csv Content-Type = %q, want %q", ct, "text/csv")
+	}
+}
+
+func TestAnalyticsHandler_HandleExportAnalytics_PDF(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export?profile_id=pid000&format=pdf", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusNotImplemented {
+		t.Errorf("HandleExportAnalytics pdf returned %d, want %d; body: %s",
+			rr.Code, http.StatusNotImplemented, rr.Body.String())
+	}
+}
+
+func TestAnalyticsHandler_HandleExportAnalytics_UnknownFormat(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export?profile_id=pid111&format=xml", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleExportAnalytics unknown format returned %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+// HandleGetLinkAnalytics: missing link_id with custom days param exercises the days branch.
+func TestAnalyticsHandler_HandleGetLinkAnalytics_InvalidDays(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/link?link_id=linkX&days=notanumber", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetLinkAnalytics(rr, req)
+
+	// Invalid days value falls back to 30; response still 200.
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGetLinkAnalytics with invalid days returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+func TestAnalyticsHandler_HandleGetLinkAnalytics_WithDays(t *testing.T) {
+	h := newTestAnalyticsHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/link?link_id=linkY&days=14", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetLinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleGetLinkAnalytics with days returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if days, _ := resp["period_days"].(float64); days != 14 {
+		t.Errorf("expected period_days=14, got %v", resp["period_days"])
+	}
+}
+
 func TestAnalyticsHandler_HandleGetDashboard(t *testing.T) {
 	h := newTestAnalyticsHandler(t)
 

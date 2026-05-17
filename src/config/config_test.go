@@ -572,6 +572,123 @@ func TestLoad_EnvOverridesFile(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// determineConfigDir / DataDir / LogDir / DeterminePIDFile — portable mode
+// ---------------------------------------------------------------------------
+
+// changeToTempDir changes the working directory to a fresh temp dir for the
+// duration of the test, then restores the original. This lets us test the
+// "portable mode" branch that checks for ./config, ./data, etc.
+func changeToTempDir(t *testing.T) string {
+	t.Helper()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	tmp := t.TempDir()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(orig); err != nil {
+			t.Logf("WARNING: could not restore cwd: %v", err)
+		}
+	})
+	return tmp
+}
+
+func TestDetermineConfigDir_PortableMode(t *testing.T) {
+	tmp := changeToTempDir(t)
+	// Create ./config directory so portable mode triggers.
+	if err := os.Mkdir(tmp+"/config", 0755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	t.Setenv("CASSOCIAL_CONFIG", "")
+	got := determineConfigDir("")
+	if got != "./config" {
+		t.Errorf("determineConfigDir portable mode = %q, want ./config", got)
+	}
+}
+
+func TestDetermineDataDir_PortableMode(t *testing.T) {
+	tmp := changeToTempDir(t)
+	if err := os.Mkdir(tmp+"/data", 0755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	t.Setenv("CASSOCIAL_DATA", "")
+	got := determineDataDir("")
+	if got != "./data" {
+		t.Errorf("determineDataDir portable mode = %q, want ./data", got)
+	}
+}
+
+func TestDetermineLogDir_PortableMode(t *testing.T) {
+	tmp := changeToTempDir(t)
+	if err := os.Mkdir(tmp+"/logs", 0755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	t.Setenv("CASSOCIAL_LOG", "")
+	got := determineLogDir("")
+	if got != "./logs" {
+		t.Errorf("determineLogDir portable mode = %q, want ./logs", got)
+	}
+}
+
+func TestDeterminePIDFile_PortableMode(t *testing.T) {
+	tmp := changeToTempDir(t)
+	if err := os.Mkdir(tmp+"/data", 0755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	t.Setenv("CASSOCIAL_PID", "")
+	got := DeterminePIDFile("")
+	if got != "./cassocial.pid" {
+		t.Errorf("DeterminePIDFile portable mode = %q, want ./cassocial.pid", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Load — invalid YAML triggers error path
+// ---------------------------------------------------------------------------
+
+func TestLoad_InvalidYAML_ReturnsError(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := tmp + "/config"
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Write a structurally invalid YAML file.
+	if err := os.WriteFile(configDir+"/server.yml", []byte("{\nnot: [valid yaml"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := Load(configDir, tmp+"/data", tmp+"/logs")
+	if err == nil {
+		t.Error("Load() with invalid YAML should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ensureDirectories — error when a path component is a file, not a directory
+// ---------------------------------------------------------------------------
+
+func TestEnsureDirectories_Error(t *testing.T) {
+	tmp := t.TempDir()
+	// Create a regular file where a directory is expected so MkdirAll fails.
+	blockingFile := tmp + "/blocker"
+	if err := os.WriteFile(blockingFile, []byte("x"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := &Config{
+		ConfigDir: blockingFile + "/config", // cannot create: parent is a file
+		DataDir:   tmp + "/data",
+		LogDir:    tmp + "/logs",
+	}
+	if err := cfg.ensureDirectories(); err == nil {
+		t.Error("ensureDirectories() should return an error when a path cannot be created")
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
 	tmp := t.TempDir()
 	configDir := filepath.Join(tmp, "config")

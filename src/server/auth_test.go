@@ -1,8 +1,10 @@
 package server
 
 import (
+	"encoding/base32"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/casapps/cassocial/src/server/model"
 	"github.com/casapps/cassocial/src/server/store"
@@ -559,6 +561,212 @@ func TestUpdateLastLogin(t *testing.T) {
 
 	if err := a.updateLastLogin(user.ID); err != nil {
 		t.Errorf("updateLastLogin: %v", err)
+	}
+}
+
+// TestLogin_InactiveUser verifies that a pending/disabled user cannot log in.
+func TestLogin_InactiveUser(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "inactiveuser", "inactive@example.com", "ValidPass1")
+
+	// Make user inactive (pending status).
+	if _, err := a.db.Exec("UPDATE users SET status = ? WHERE id = ?", model.StatusPending, user.ID); err != nil {
+		t.Fatalf("setting status pending: %v", err)
+	}
+	if _, err := a.db.Exec("UPDATE settings SET value = 'false' WHERE key = 'email_verification_required'"); err != nil {
+		t.Fatalf("disabling email verification: %v", err)
+	}
+
+	_, _, err := a.Login("inactiveuser", "ValidPass1")
+	if err != ErrUserNotActive {
+		t.Errorf("Login inactive user: got %v, want ErrUserNotActive", err)
+	}
+}
+
+// TestLogin_EmailNotVerified verifies that unverified email blocks login when required.
+func TestLogin_EmailNotVerified(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "unverifuser", "unverif@example.com", "ValidPass1")
+
+	// Require email verification and ensure user is not verified.
+	if _, err := a.db.Exec("UPDATE settings SET value = 'true' WHERE key = 'email_verification_required'"); err != nil {
+		t.Fatalf("enabling email verification: %v", err)
+	}
+	if _, err := a.db.Exec("UPDATE users SET email_verified = 0 WHERE id = ?", user.ID); err != nil {
+		t.Fatalf("marking email unverified: %v", err)
+	}
+
+	_, _, err := a.Login("unverifuser", "ValidPass1")
+	if err != ErrEmailNotVerified {
+		t.Errorf("Login unverified email: got %v, want ErrEmailNotVerified", err)
+	}
+}
+
+// TestLogin_ByEmail verifies that a user can log in using their email address.
+func TestLogin_ByEmail(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "emailloginuser", "emaillogin@example.com", "ValidPass1")
+	if _, err := a.db.Exec("UPDATE settings SET value = 'false' WHERE key = 'email_verification_required'"); err != nil {
+		t.Fatalf("disabling email verification: %v", err)
+	}
+	if _, err := a.db.Exec("UPDATE users SET email_verified = 1 WHERE id = ?", user.ID); err != nil {
+		t.Fatalf("marking email verified: %v", err)
+	}
+
+	token, gotUser, err := a.Login("emaillogin@example.com", "ValidPass1")
+	if err != nil {
+		t.Fatalf("Login by email: %v", err)
+	}
+	if token == "" {
+		t.Error("Login by email returned empty token")
+	}
+	if gotUser.ID != user.ID {
+		t.Errorf("Login by email: user.ID = %q, want %q", gotUser.ID, user.ID)
+	}
+}
+
+// TestLoginWith2FA_ValidCode verifies that a correct TOTP code completes login.
+func TestLoginWith2FA_ValidCode(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "valid2fauser", "valid2fa@example.com", "ValidPass1")
+
+	const rawSecret = "JBSWY3DPEHPK3PXP"
+	if _, err := a.db.Exec("UPDATE users SET two_factor_enabled = 1, two_factor_secret = ? WHERE id = ?", rawSecret, user.ID); err != nil {
+		t.Fatalf("enabling 2FA: %v", err)
+	}
+
+	// Derive a current TOTP code using the same algorithm as the server.
+	paddedSecret := rawSecret
+	if len(paddedSecret)%8 != 0 {
+		paddedSecret += strings.Repeat("=", 8-len(paddedSecret)%8)
+	}
+	decoded, err := base32.StdEncoding.DecodeString(paddedSecret)
+	if err != nil {
+		t.Fatalf("base32 decode: %v", err)
+	}
+	counter := time.Now().Unix() / TOTPPeriod
+	code := a.generateTOTP(decoded, counter)
+
+	token, gotUser, err := a.LoginWith2FA(user.ID, code)
+	if err != nil {
+		t.Fatalf("LoginWith2FA valid code: %v", err)
+	}
+	if token == "" {
+		t.Error("LoginWith2FA returned empty token")
+	}
+	if gotUser.ID != user.ID {
+		t.Errorf("LoginWith2FA user.ID = %q, want %q", gotUser.ID, user.ID)
+	}
+}
+
+// TestRefreshToken_InactiveUser verifies that refresh fails when the user is no longer active.
+func TestRefreshToken_InactiveUser(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "inactiverefresh", "inactiverefresh@example.com", "ValidPass1")
+
+	token, err := a.GenerateToken(user)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	// Deactivate user after token was issued (suspended is not active).
+	if _, err := a.db.Exec("UPDATE users SET status = ? WHERE id = ?", model.StatusSuspended, user.ID); err != nil {
+		t.Fatalf("suspending user: %v", err)
+	}
+
+	_, err = a.RefreshToken(token)
+	if err != ErrUserNotActive {
+		t.Errorf("RefreshToken inactive user: got %v, want ErrUserNotActive", err)
+	}
+}
+
+// TestRefreshToken_UnknownUser verifies that refresh fails when user no longer exists.
+func TestRefreshToken_UnknownUser(t *testing.T) {
+	a := newTestAuth(t)
+
+	// Build a token for a user that doesn't exist in DB.
+	fakeUser := &model.User{
+		ID:       "fake-id-not-in-db",
+		Username: "ghostuser",
+		Role:     model.RoleUser,
+		Status:   model.StatusActive,
+	}
+	token, err := a.GenerateToken(fakeUser)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	_, err = a.RefreshToken(token)
+	if err == nil {
+		t.Error("RefreshToken for nonexistent user should return error")
+	}
+}
+
+// TestRegister_PendingWhenApprovalRequired verifies that users get pending status
+// when registration_requires_approval is true.
+func TestRegister_PendingWhenApprovalRequired(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("UPDATE settings SET value = 'true' WHERE key = 'registration_requires_approval'"); err != nil {
+		t.Fatalf("enabling approval: %v", err)
+	}
+
+	user, err := a.Register("pendinguser", "pending@example.com", "ValidPass1")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if user.Status != model.StatusPending {
+		t.Errorf("Status = %q, want %q", user.Status, model.StatusPending)
+	}
+}
+
+// TestRegister_EmailUnverifiedWhenVerificationRequired verifies that EmailVerified is false
+// when email_verification_required is true.
+func TestRegister_EmailUnverifiedWhenVerificationRequired(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("UPDATE settings SET value = 'true' WHERE key = 'email_verification_required'"); err != nil {
+		t.Fatalf("enabling email verification: %v", err)
+	}
+
+	user, err := a.Register("verifuser", "verif@example.com", "ValidPass1")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if user.EmailVerified {
+		t.Error("EmailVerified should be false when email_verification_required is true")
+	}
+}
+
+// TestGenerateToken_CustomSessionTimeout verifies that a session_timeout_minutes setting
+// is respected (token is generated without error and can be validated).
+func TestGenerateToken_CustomSessionTimeout(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("UPDATE settings SET value = '60' WHERE key = 'session_timeout_minutes'"); err != nil {
+		t.Fatalf("setting session timeout: %v", err)
+	}
+
+	user := registerTestUser(t, a, "timeoutuser", "timeout@example.com", "ValidPass1")
+	token, err := a.GenerateToken(user)
+	if err != nil {
+		t.Fatalf("GenerateToken with custom timeout: %v", err)
+	}
+	claims, err := a.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("ValidateToken after GenerateToken with custom timeout: %v", err)
+	}
+	if claims.UserID != user.ID {
+		t.Errorf("claims.UserID = %q, want %q", claims.UserID, user.ID)
+	}
+}
+
+// TestValidateToken_WrongAlgorithm verifies that a token signed with a non-HMAC algorithm
+// is rejected.
+func TestValidateToken_WrongAlgorithm(t *testing.T) {
+	a := newTestAuth(t)
+	// "none" algorithm tokens are a known attack vector; jwt library produces them
+	// when parsed with an empty secret check. We test that our parser rejects garbage alg.
+	_, err := a.ValidateToken("eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoiYWJjIn0.")
+	if err != ErrInvalidToken {
+		t.Errorf("ValidateToken none-alg: got %v, want ErrInvalidToken", err)
 	}
 }
 

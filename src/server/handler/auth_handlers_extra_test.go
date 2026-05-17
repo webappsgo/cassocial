@@ -453,6 +453,301 @@ func TestDisable2FA_InvalidCode(t *testing.T) {
 	}
 }
 
+// ---- Register additional branches ----
+
+func TestRegister_RegistrationDisabled(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	if _, err := h.db.Exec(`UPDATE settings SET value = 'false' WHERE key = 'registration_enabled'`); err != nil {
+		t.Fatalf("disabling registration: %v", err)
+	}
+
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "shouldnotexist",
+		"email":    "shouldnotexist@example.com",
+		"password": "ValidPass1",
+	})
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("Register with registration disabled returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestRegister_DuplicateUsername(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "dupuser",
+		"email":    "dupuser1@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("first Register returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	rr = postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "dupuser",
+		"email":    "dupuser2@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusConflict {
+		t.Errorf("Register with duplicate username returned %d, want %d; body: %s",
+			rr.Code, http.StatusConflict, rr.Body.String())
+	}
+}
+
+func TestRegister_DuplicateEmail(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "dupemailuser1",
+		"email":    "dupemail@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("first Register returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	rr = postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "dupemailuser2",
+		"email":    "dupemail@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusConflict {
+		t.Errorf("Register with duplicate email returned %d, want %d; body: %s",
+			rr.Code, http.StatusConflict, rr.Body.String())
+	}
+}
+
+// ---- Login additional branches ----
+
+func TestLogin_Success(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	// Disable email verification so login works.
+	if _, err := h.db.Exec(`UPDATE settings SET value = 'false' WHERE key = 'email_verification_required'`); err != nil {
+		t.Fatalf("disabling email verification: %v", err)
+	}
+
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "loginuser",
+		"email":    "loginuser@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Register returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	rr = postJSON(t, h.Login, "/api/auth/login", map[string]string{
+		"username": "loginuser",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Errorf("Login returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := jsonDecode(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if token, _ := resp["token"].(string); token == "" {
+		t.Error("Login response missing token field")
+	}
+}
+
+func TestLogin_UserNotActive(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	// Insert a suspended user directly.
+	userID := generateUUID()
+	_, err := h.db.Exec(
+		`INSERT INTO users (id, username, email, password_hash, role, status, email_verified, two_factor_enabled, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, 'user', 'suspended', 1, 0, datetime('now'), datetime('now'))`,
+		userID, "suspendeduser", "suspended@example.com", "argon2id-placeholder",
+	)
+	if err != nil {
+		t.Fatalf("insert suspended user: %v", err)
+	}
+
+	rr := postJSON(t, h.Login, "/api/auth/login", map[string]string{
+		"username": "suspendeduser",
+		"password": "anything",
+	})
+	// Suspended user or wrong password both return 401; we just verify it is not 200.
+	if rr.Code == http.StatusOK {
+		t.Errorf("Login for suspended user returned 200, want 4xx; body: %s", rr.Body.String())
+	}
+}
+
+func TestLogin_EmailNotVerified(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	// Enable email verification requirement.
+	if _, err := h.db.Exec(`UPDATE settings SET value = 'true' WHERE key = 'email_verification_required'`); err != nil {
+		t.Fatalf("enabling email verification: %v", err)
+	}
+
+	// Register a user (email_verified defaults to 0 when verification required).
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "unverifuser",
+		"email":    "unverif@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Register returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Make sure the user's email is not marked verified.
+	if _, err := h.db.Exec(`UPDATE users SET email_verified = 0 WHERE username = 'unverifuser'`); err != nil {
+		t.Fatalf("clearing email_verified: %v", err)
+	}
+
+	rr = postJSON(t, h.Login, "/api/auth/login", map[string]string{
+		"username": "unverifuser",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("Login for unverified email returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestLogin_2FARequired(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	// Disable email verification.
+	if _, err := h.db.Exec(`UPDATE settings SET value = 'false' WHERE key = 'email_verification_required'`); err != nil {
+		t.Fatalf("disabling email verification: %v", err)
+	}
+
+	// Insert a user with 2FA enabled.
+	userID := generateUUID()
+	_, err := h.db.Exec(
+		`INSERT INTO users (id, username, email, password_hash, role, status, email_verified, two_factor_enabled, two_factor_secret, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, 'user', 'active', 1, 1, 'AAAAAAAAAAAAAAAA', datetime('now'), datetime('now'))`,
+		userID, "twofauser", "twofa@example.com", "placeholder",
+	)
+	if err != nil {
+		t.Fatalf("insert 2FA user: %v", err)
+	}
+
+	// We can't verify the password with a placeholder hash, so test the
+	// 2FA-required path via direct DB setup with a real hashed password instead.
+	// Register the user properly then enable 2FA.
+	user, err := h.auth.Register("twofaloginuser", "twofalogin@example.com", "ValidPass1")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	_, err = h.db.Exec(
+		`UPDATE users SET two_factor_enabled = 1, two_factor_secret = 'AAAAAAAAAAAAAAAA', email_verified = 1 WHERE id = ?`,
+		user.ID,
+	)
+	if err != nil {
+		t.Fatalf("enable 2FA: %v", err)
+	}
+
+	// Disable email verification so the unverified check is bypassed.
+	rr := postJSON(t, h.Login, "/api/auth/login", map[string]string{
+		"username": "twofaloginuser",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Errorf("Login with 2FA enabled returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := jsonDecode(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if v, _ := resp["requires_2fa"].(bool); !v {
+		t.Errorf("Login with 2FA enabled: expected requires_2fa=true, got %v", resp)
+	}
+}
+
+// ---- ResetPassword success path ----
+
+func TestResetPassword_Success(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	// Register a user.
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "resetsuccessuser",
+		"email":    "resetsuccess@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Register returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Obtain a real reset token via the auth service.
+	token, err := h.auth.RequestPasswordReset("resetsuccess@example.com")
+	if err != nil {
+		t.Fatalf("RequestPasswordReset: %v", err)
+	}
+	if token == "" {
+		t.Fatal("RequestPasswordReset returned empty token")
+	}
+
+	rr = postJSON(t, h.ResetPassword, "/api/auth/reset-password", map[string]string{
+		"token":    token,
+		"password": "NewValidPass1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Errorf("ResetPassword with valid token returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// ---- VerifyEmail success path ----
+
+func TestVerifyEmail_Success(t *testing.T) {
+	h := newTestAuthHandlers(t)
+
+	// Register a user.
+	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
+		"username": "verifyemailuser",
+		"email":    "verifyemail@example.com",
+		"password": "ValidPass1",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Register returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Inject a verification token directly into the DB.
+	// VerifyEmail prefixes the lookup token with "EMAIL_", so store "EMAIL_" + token.
+	rawToken := "testverifytoken123"
+	stored := "EMAIL_" + rawToken
+	expiry := "2099-01-01 00:00:00"
+	if _, err := h.db.Exec(
+		`UPDATE users SET password_reset_token = ?, password_reset_expires = ?, email_verified = 0
+		 WHERE username = 'verifyemailuser'`,
+		stored, expiry,
+	); err != nil {
+		t.Fatalf("inject verification token: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/verify-email/"+rawToken, nil)
+	req.SetPathValue("token", rawToken)
+	rr = httptest.NewRecorder()
+	h.VerifyEmail(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("VerifyEmail with valid token returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	// Confirm email is now marked verified.
+	var verified bool
+	if err := h.db.QueryRow(`SELECT email_verified FROM users WHERE username = 'verifyemailuser'`).Scan(&verified); err != nil {
+		t.Fatalf("query email_verified: %v", err)
+	}
+	if !verified {
+		t.Error("email_verified should be true after VerifyEmail success")
+	}
+}
+
 // jsonDecode decodes a JSON byte slice into v.
 func jsonDecode(data []byte, v interface{}) error {
 	return json.NewDecoder(bytes.NewReader(data)).Decode(v)

@@ -142,6 +142,194 @@ func TestGetLinkAnalytics_Valid(t *testing.T) {
 	}
 }
 
+// ---- GetLinkAnalytics missing branches ----
+
+func TestGetLinkAnalytics_MissingID(t *testing.T) {
+	ah, _, _ := newTestAnalyticsHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/links/", nil)
+	// PathValue("profile_id") returns "" when not set.
+	req = withUserID(req, "any-user-id")
+
+	rr := httptest.NewRecorder()
+	ah.GetLinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("GetLinkAnalytics with missing profile_id returned %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestGetLinkAnalytics_NotOwner(t *testing.T) {
+	ah, ph, db := newTestAnalyticsHandlers(t)
+
+	ownerID := createTestUser(t, db, "linkanalyticsowner", "linkanalyticsowner@example.com")
+	otherID := createTestUser(t, db, "linkanalyticsother", "linkanalyticsother@example.com")
+	profileID := createTestProfile(t, ph, ownerID, "linkanalyticsownedslug")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/links/"+profileID, nil)
+	req.SetPathValue("profile_id", profileID)
+	req = withUserID(req, otherID)
+
+	rr := httptest.NewRecorder()
+	ah.GetLinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("GetLinkAnalytics by non-owner returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+// ---- GetProfileAnalytics with actual analytics rows exercises getViewsByDay/etc inner loops ----
+
+func insertAnalyticsRow(t *testing.T, db interface {
+	Exec(query string, args ...interface{}) (interface{ LastInsertId() (int64, error) }, error)
+}, profileID, eventType, referrer, country, device string) {
+	t.Helper()
+}
+
+// TestGetProfileAnalytics_WithData inserts analytics rows so the helper
+// query functions (getViewsByDay, getTopReferrers, getDeviceBreakdown,
+// getCountryBreakdown) scan actual rows and exercise their inner loop bodies.
+func TestGetProfileAnalytics_WithData(t *testing.T) {
+	ah, ph, db := newTestAnalyticsHandlers(t)
+
+	userID := createTestUser(t, db, "analyticsdatauser", "analyticsdata@example.com")
+	profileID := createTestProfile(t, ph, userID, "analyticsdataslug")
+
+	// Insert analytics events so inner loops execute.
+	for _, row := range []struct {
+		eventType string
+		referrer  string
+		country   string
+		device    string
+		ipHash    string
+	}{
+		{"view", "https://example.com", "US", "mobile", "hash1"},
+		{"view", "https://example.com", "US", "desktop", "hash2"},
+		{"view", "https://other.com", "CA", "tablet", "hash3"},
+		{"click", "", "US", "mobile", "hash4"},
+	} {
+		_, err := db.Exec(
+			`INSERT INTO analytics (id, profile_id, event_type, referrer, country, device_type, ip_hash, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+			generateUUID(), profileID, row.eventType, row.referrer, row.country, row.device, row.ipHash,
+		)
+		if err != nil {
+			t.Fatalf("insert analytics row: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/profile/"+profileID+"?period=all", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+
+	rr := httptest.NewRecorder()
+	ah.GetProfileAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetProfileAnalytics with data returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	// With actual view rows, total_views must be > 0.
+	if views, _ := resp["total_views"].(float64); views == 0 {
+		t.Errorf("expected total_views > 0, got %v", resp["total_views"])
+	}
+}
+
+// TestGetProfileAnalytics_WeekData exercises the "week" period path (most common)
+// with actual data so the sub-queries return rows.
+func TestGetProfileAnalytics_WeekData(t *testing.T) {
+	ah, ph, db := newTestAnalyticsHandlers(t)
+
+	userID := createTestUser(t, db, "analyticsweekuser", "analyticsweek@example.com")
+	profileID := createTestProfile(t, ph, userID, "analyticsweekslug")
+
+	// Insert a recent view event.
+	_, err := db.Exec(
+		`INSERT INTO analytics (id, profile_id, event_type, referrer, country, device_type, ip_hash, created_at)
+		 VALUES (?, ?, 'view', 'https://ref.example.com', 'DE', 'mobile', 'hashweek', datetime('now'))`,
+		generateUUID(), profileID,
+	)
+	if err != nil {
+		t.Fatalf("insert analytics row: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/profile/"+profileID+"?period=week", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+
+	rr := httptest.NewRecorder()
+	ah.GetProfileAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetProfileAnalytics week with data returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// ---- ExportAnalytics missing branches ----
+
+func TestExportAnalytics_MissingID(t *testing.T) {
+	ah, _, _ := newTestAnalyticsHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export/", nil)
+	req = withUserID(req, "any-user-id")
+
+	rr := httptest.NewRecorder()
+	ah.ExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("ExportAnalytics with missing profile_id returned %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestExportAnalytics_NotOwner(t *testing.T) {
+	ah, ph, db := newTestAnalyticsHandlers(t)
+
+	ownerID := createTestUser(t, db, "exportowner", "exportowner@example.com")
+	otherID := createTestUser(t, db, "exportother", "exportother@example.com")
+	profileID := createTestProfile(t, ph, ownerID, "exportownedslug")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export/"+profileID+"?format=csv", nil)
+	req.SetPathValue("profile_id", profileID)
+	req = withUserID(req, otherID)
+
+	rr := httptest.NewRecorder()
+	ah.ExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("ExportAnalytics by non-owner returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestExportAnalytics_CSV(t *testing.T) {
+	ah, ph, db := newTestAnalyticsHandlers(t)
+
+	userID := createTestUser(t, db, "exportcsvuser", "exportcsv@example.com")
+	profileID := createTestProfile(t, ph, userID, "exportcsvslug")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/export/"+profileID+"?format=csv", nil)
+	req.SetPathValue("profile_id", profileID)
+	req = withUserID(req, userID)
+
+	rr := httptest.NewRecorder()
+	ah.ExportAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("ExportAnalytics csv returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
 func TestExportAnalytics_NoAuth(t *testing.T) {
 	ah, _, _ := newTestAnalyticsHandlers(t)
 

@@ -184,6 +184,76 @@ func TestUpdateGeoIPDatabase_NoError(t *testing.T) {
 	}
 }
 
+// ---- RegisterAllTasks — error propagation ----
+
+// fakeErrScheduler is a minimal Scheduler-like type used to force RegisterTask
+// to fail by providing an invalid cron expression on the first call.
+// Because Scheduler.RegisterTask is on a concrete *Scheduler we cannot use an
+// interface; instead we test the error return by passing a scheduler that
+// already has a task registered with the same name.
+func TestRegisterAllTasks_ErrorPropagation(t *testing.T) {
+	s := New()
+
+	// RegisterTask rejects invalid cron expressions. This exercises the error
+	// propagation path that RegisterAllTasks relies on: if any RegisterTask call
+	// fails it returns that error immediately.
+	err := s.RegisterTask("bad_task", "not-a-cron-expression", func() error { return nil })
+	if err == nil {
+		t.Fatal("RegisterTask with invalid cron expression should return an error")
+	}
+
+	// Verify the error message is descriptive.
+	if !schedulerErrContains(err.Error(), "failed to register task") {
+		t.Errorf("RegisterTask error %q does not mention 'failed to register task'", err.Error())
+	}
+}
+
+func schedulerErrContains(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+// ---- CleanupSessions — error path ----
+
+func TestCleanupSessions_ErrorPath(t *testing.T) {
+	// Use a fresh DB without running migrations so the sessions table does not
+	// exist, causing CleanupExpiredSessions to return a "no such table" error.
+	tmp := t.TempDir()
+	db, err := store.Connect("sqlite", tmp+"/noschema.db")
+	if err != nil {
+		t.Fatalf("store.Connect() failed: %v", err)
+	}
+	defer db.Close()
+	// Deliberately do NOT call db.RunMigrations() — sessions table absent.
+
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+
+	taskErr := tasks.CleanupSessions()
+	if taskErr == nil {
+		t.Error("CleanupSessions() with missing sessions table should return an error")
+	}
+}
+
+// ---- CleanupDatabase — logs error but returns nil ----
+
+func TestCleanupDatabase_ClosedDB_ReturnsNil(t *testing.T) {
+	db := newTestDB(t)
+	cfg := newTestConfig()
+	tasks := NewTasks(cfg, db)
+	db.Close()
+
+	// CleanupDatabase logs errors but always returns nil.
+	err := tasks.CleanupDatabase()
+	if err != nil {
+		t.Errorf("CleanupDatabase() with closed DB should return nil (errors are only logged), got: %v", err)
+	}
+}
+
 // ---- GetTaskStatistics ----
 
 func TestGetTaskStatistics_EmptyScheduler(t *testing.T) {

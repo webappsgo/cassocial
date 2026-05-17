@@ -74,6 +74,45 @@ func TestGenerate2FASecret_UniqueBackupCodes(t *testing.T) {
 	}
 }
 
+// TestEnable2FA_Success verifies that a correct TOTP code enables 2FA and persists the secret.
+func TestEnable2FA_Success(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "enable2fasuccess", "enable2fasuccess@example.com", "ValidPass1")
+
+	setup, err := a.Generate2FASecret(user)
+	if err != nil {
+		t.Fatalf("Generate2FASecret: %v", err)
+	}
+
+	// Pad and decode secret the same way verifyTOTP does.
+	paddedSecret := setup.Secret
+	if len(paddedSecret)%8 != 0 {
+		paddedSecret += strings.Repeat("=", 8-len(paddedSecret)%8)
+	}
+	decoded, err := base32.StdEncoding.DecodeString(paddedSecret)
+	if err != nil {
+		t.Fatalf("base32 decode: %v", err)
+	}
+	counter := time.Now().Unix() / TOTPPeriod
+	code := a.generateTOTP(decoded, counter)
+
+	if err := a.Enable2FA(user.ID, setup.Secret, code); err != nil {
+		t.Fatalf("Enable2FA valid code: %v", err)
+	}
+
+	// Verify it was actually stored in the DB.
+	got, err := a.GetUserByID(user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if !got.TwoFactorEnabled {
+		t.Error("TwoFactorEnabled should be true after Enable2FA")
+	}
+	if got.TwoFactorSecret != setup.Secret {
+		t.Errorf("TwoFactorSecret = %q, want %q", got.TwoFactorSecret, setup.Secret)
+	}
+}
+
 // TestEnable2FA_InvalidCode verifies that an invalid TOTP code rejects enabling.
 func TestEnable2FA_InvalidCode(t *testing.T) {
 	a := newTestAuth(t)
