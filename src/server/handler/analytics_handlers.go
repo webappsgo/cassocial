@@ -120,7 +120,7 @@ func (h *AnalyticsHandlers) GetLinkAnalytics(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Get link click statistics
-	query := `SELECT l.id, l.title, l.url, l.click_count,
+	query := `SELECT l.id, COALESCE(l.title,''), COALESCE(l.url,''), l.click_count,
 			  COALESCE(COUNT(a.id), 0) as recent_clicks
 			  FROM links l
 			  LEFT JOIN analytics a ON a.link_id = l.id AND a.event_type = 'click'

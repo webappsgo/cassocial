@@ -114,3 +114,32 @@ func TestAPIWebhook_UpdateLastTriggered(t *testing.T) {
 		t.Error("UpdateLastTriggered() should set LastTriggeredAt")
 	}
 }
+
+func TestAPIKey_HasScope(t *testing.T) {
+	ak := &APIKey{}
+	// HasScope always returns true in current implementation
+	if !ak.HasScope("read") {
+		t.Error("HasScope() should return true")
+	}
+	if !ak.HasScope("write") {
+		t.Error("HasScope() should return true for any scope")
+	}
+}
+
+func TestAPIWebhook_HasEvent(t *testing.T) {
+	wh := &APIWebhook{}
+	// HasEvent always returns true in current implementation
+	if !wh.HasEvent("user.created") {
+		t.Error("HasEvent() should return true")
+	}
+	if !wh.HasEvent("profile.updated") {
+		t.Error("HasEvent() should return true for any event")
+	}
+}
+
+func TestAPIWebhook_Validate_InvalidURL(t *testing.T) {
+	wh := &APIWebhook{Name: "Test", URL: "not-a-url"}
+	if err := wh.Validate(); err != ErrInvalidURL {
+		t.Errorf("invalid URL Validate() = %v, want ErrInvalidURL", err)
+	}
+}

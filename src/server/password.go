@@ -36,7 +36,7 @@ func (a *Auth) RequestPasswordReset(email string) (string, error) {
 	// Get user by email
 	user, err := a.GetUserByEmail(email)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == ErrUserNotFound {
 			// Don't reveal if email exists or not for security
 			return "", nil
 		}
@@ -267,7 +267,7 @@ func (a *Auth) ResendVerificationEmail(email string) (string, error) {
 	// Get user by email
 	user, err := a.GetUserByEmail(email)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == ErrUserNotFound {
 			// Don't reveal if email exists or not
 			return "", nil
 		}

@@ -69,9 +69,10 @@ func (h *LinkHandlers) ListLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `SELECT id, profile_id, service_id, title, username, url, icon_url,
-			  background_color, text_color, position, is_active, click_count,
-			  created_at, updated_at
+	query := `SELECT id, profile_id, COALESCE(service_id,''), COALESCE(title,''),
+			  COALESCE(username,''), COALESCE(url,''), COALESCE(icon_url,''),
+			  COALESCE(background_color,''), COALESCE(text_color,''),
+			  position, is_active, click_count, created_at, updated_at
 			  FROM links WHERE profile_id = ? ORDER BY position ASC`
 
 	if h.db.Driver == "postgres" {
@@ -431,9 +432,10 @@ func (h *LinkHandlers) ToggleLink(w http.ResponseWriter, r *http.Request) {
 
 func (h *LinkHandlers) getLinkByID(id string) (*model.Link, error) {
 	link := &model.Link{}
-	query := `SELECT id, profile_id, service_id, title, username, url, icon_url,
-			  background_color, text_color, position, is_active, click_count,
-			  created_at, updated_at FROM links WHERE id = ?`
+	query := `SELECT id, profile_id, COALESCE(service_id,''), COALESCE(title,''),
+			  COALESCE(username,''), COALESCE(url,''), COALESCE(icon_url,''),
+			  COALESCE(background_color,''), COALESCE(text_color,''),
+			  position, is_active, click_count, created_at, updated_at FROM links WHERE id = ?`
 
 	if h.db.Driver == "postgres" {
 		query = replaceQuestionMarks(query, 1)

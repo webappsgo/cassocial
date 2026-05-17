@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -241,5 +242,10 @@ func getClientIPFromRequest(r *http.Request) string {
 		return xri
 	}
 
-	return r.RemoteAddr
+	// Strip port from RemoteAddr if present.
+	addr := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }

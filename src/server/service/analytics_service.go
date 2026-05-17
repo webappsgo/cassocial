@@ -160,12 +160,12 @@ func (s *AnalyticsService) TrackSession(session *model.AnalyticsSession) error {
 		// Update existing session
 		query := `
 			UPDATE analytics_sessions SET
-				duration_seconds = ?, link_clicks = ?, updated_at = ?
+				duration_seconds = ?, link_clicks = ?
 			WHERE session_id = ?
 		`
 
 		_, err = s.db.Exec(query,
-			session.DurationSeconds, session.LinkClicks, time.Now(), session.SessionID,
+			session.DurationSeconds, session.LinkClicks, session.SessionID,
 		)
 
 		if err != nil {
@@ -221,7 +221,7 @@ func (s *AnalyticsService) AggregateHourly(profileID string, hour time.Time) err
 			? as profile_id,
 			? as hour,
 			COUNT(CASE WHEN event_type = 'view' THEN 1 END) as views,
-			COUNT(DISTINCT CASE WHEN event_type = 'view' THEN ip_hash END) as unique_visitors,
+			COUNT(DISTINCT CASE WHEN event_type = 'view' THEN a.ip_hash END) as unique_visitors,
 			COUNT(CASE WHEN event_type = 'click' THEN 1 END) as total_clicks,
 			COALESCE(AVG(s.duration_seconds), 0) as avg_duration_seconds,
 			(SELECT referrer FROM analytics WHERE profile_id = ? AND created_at >= ? AND created_at < ?
@@ -458,14 +458,15 @@ func (s *AnalyticsService) hashIP(ip string) string {
 func (s *AnalyticsService) parseDeviceType(userAgent string) string {
 	userAgent = strings.ToLower(userAgent)
 
-	// Simple device detection - in production use a proper library
-	if strings.Contains(userAgent, "mobile") || strings.Contains(userAgent, "android") ||
-		strings.Contains(userAgent, "iphone") {
-		return model.DeviceTypeMobile
-	}
-
+	// Simple device detection — check tablets before mobile since tablet UAs often
+	// contain "android" without the "Mobile" token.
 	if strings.Contains(userAgent, "tablet") || strings.Contains(userAgent, "ipad") {
 		return model.DeviceTypeTablet
+	}
+
+	if strings.Contains(userAgent, "mobile") || strings.Contains(userAgent, "android") ||
+		strings.Contains(userAgent, "iphone") || strings.Contains(userAgent, "blackberry") {
+		return model.DeviceTypeMobile
 	}
 
 	return model.DeviceTypeDesktop

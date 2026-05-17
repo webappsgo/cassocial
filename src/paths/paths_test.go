@@ -162,3 +162,180 @@ func TestIsPrivileged(t *testing.T) {
 	// Just ensure the function runs without panic.
 	_ = isPrivileged()
 }
+
+// ---- darwinPaths ----
+
+func TestDarwinPaths_Root(t *testing.T) {
+	p := darwinPaths(true)
+	if p == nil {
+		t.Fatal("darwinPaths(true) returned nil")
+	}
+	if p.Config == "" {
+		t.Error("darwinPaths(true).Config is empty")
+	}
+	if p.PID == "" {
+		t.Error("darwinPaths(true).PID is empty")
+	}
+	if !strings.Contains(p.Config, "cassocial") && !strings.Contains(p.Config, "casapps") {
+		t.Errorf("darwinPaths(true).Config = %q, want path containing project/org name", p.Config)
+	}
+}
+
+func TestDarwinPaths_User(t *testing.T) {
+	p := darwinPaths(false)
+	if p == nil {
+		t.Fatal("darwinPaths(false) returned nil")
+	}
+	homeDir, _ := os.UserHomeDir()
+	if !strings.HasPrefix(p.Config, homeDir) {
+		t.Errorf("darwinPaths(false).Config = %q, want prefix %q", p.Config, homeDir)
+	}
+	if !strings.HasSuffix(p.PID, ".pid") {
+		t.Errorf("darwinPaths(false).PID = %q, want .pid suffix", p.PID)
+	}
+}
+
+func TestDarwinPaths_AllFieldsNonEmpty(t *testing.T) {
+	for _, isRoot := range []bool{true, false} {
+		p := darwinPaths(isRoot)
+		fields := map[string]string{
+			"Config":   p.Config,
+			"Data":     p.Data,
+			"Log":      p.Log,
+			"Backup":   p.Backup,
+			"PID":      p.PID,
+			"SSL":      p.SSL,
+			"Security": p.Security,
+			"Database": p.Database,
+		}
+		for name, val := range fields {
+			if val == "" {
+				t.Errorf("darwinPaths(%v).%s is empty", isRoot, name)
+			}
+		}
+	}
+}
+
+// ---- bsdPaths ----
+
+func TestBSDPaths_Root(t *testing.T) {
+	p := bsdPaths(true)
+	if p == nil {
+		t.Fatal("bsdPaths(true) returned nil")
+	}
+	if !strings.HasPrefix(p.Config, "/usr/local/etc/") {
+		t.Errorf("bsdPaths(true).Config = %q, want /usr/local/etc/... prefix", p.Config)
+	}
+	if !strings.HasSuffix(p.PID, ".pid") {
+		t.Errorf("bsdPaths(true).PID = %q, want .pid suffix", p.PID)
+	}
+}
+
+func TestBSDPaths_User(t *testing.T) {
+	p := bsdPaths(false)
+	if p == nil {
+		t.Fatal("bsdPaths(false) returned nil")
+	}
+	homeDir, _ := os.UserHomeDir()
+	if !strings.HasPrefix(p.Config, homeDir) {
+		t.Errorf("bsdPaths(false).Config = %q, want prefix %q", p.Config, homeDir)
+	}
+}
+
+func TestBSDPaths_AllFieldsNonEmpty(t *testing.T) {
+	for _, isRoot := range []bool{true, false} {
+		p := bsdPaths(isRoot)
+		fields := map[string]string{
+			"Config":   p.Config,
+			"Data":     p.Data,
+			"Log":      p.Log,
+			"Backup":   p.Backup,
+			"PID":      p.PID,
+			"SSL":      p.SSL,
+			"Security": p.Security,
+			"Database": p.Database,
+		}
+		for name, val := range fields {
+			if val == "" {
+				t.Errorf("bsdPaths(%v).%s is empty", isRoot, name)
+			}
+		}
+	}
+}
+
+// ---- windowsPaths ----
+
+func TestWindowsPaths_Root_DefaultProgramData(t *testing.T) {
+	// Unset ProgramData so the fallback is used
+	t.Setenv("ProgramData", "")
+	p := windowsPaths(true)
+	if p == nil {
+		t.Fatal("windowsPaths(true) returned nil")
+	}
+	if !strings.Contains(p.Config, "cassocial") && !strings.Contains(p.Config, "casapps") {
+		t.Errorf("windowsPaths(true).Config = %q, want path containing project/org name", p.Config)
+	}
+	if !strings.HasSuffix(p.PID, ".pid") {
+		t.Errorf("windowsPaths(true).PID = %q, want .pid suffix", p.PID)
+	}
+}
+
+func TestWindowsPaths_Root_CustomProgramData(t *testing.T) {
+	t.Setenv("ProgramData", "C:\\CustomProgramData")
+	p := windowsPaths(true)
+	if p == nil {
+		t.Fatal("windowsPaths(true) returned nil")
+	}
+	if !strings.HasPrefix(p.Config, "C:\\CustomProgramData") {
+		t.Errorf("windowsPaths(true).Config = %q, want C:\\CustomProgramData prefix", p.Config)
+	}
+}
+
+func TestWindowsPaths_User_DefaultAppData(t *testing.T) {
+	// Unset AppData and LocalAppData to exercise fallback
+	t.Setenv("AppData", "")
+	t.Setenv("LocalAppData", "")
+	p := windowsPaths(false)
+	if p == nil {
+		t.Fatal("windowsPaths(false) returned nil")
+	}
+	if !strings.Contains(p.Config, "cassocial") && !strings.Contains(p.Config, "casapps") {
+		t.Errorf("windowsPaths(false).Config = %q, want path containing project/org name", p.Config)
+	}
+}
+
+func TestWindowsPaths_User_CustomAppData(t *testing.T) {
+	t.Setenv("AppData", "C:\\Users\\TestUser\\AppData\\Roaming")
+	t.Setenv("LocalAppData", "C:\\Users\\TestUser\\AppData\\Local")
+	p := windowsPaths(false)
+	if p == nil {
+		t.Fatal("windowsPaths(false) returned nil")
+	}
+	if !strings.HasPrefix(p.Config, "C:\\Users\\TestUser\\AppData\\Roaming") {
+		t.Errorf("windowsPaths(false).Config = %q, want Roaming prefix", p.Config)
+	}
+	if !strings.HasPrefix(p.Data, "C:\\Users\\TestUser\\AppData\\Local") {
+		t.Errorf("windowsPaths(false).Data = %q, want Local prefix", p.Data)
+	}
+}
+
+func TestWindowsPaths_AllFieldsNonEmpty(t *testing.T) {
+	for _, isRoot := range []bool{true, false} {
+		p := windowsPaths(isRoot)
+		fields := map[string]string{
+			"Config":   p.Config,
+			"Data":     p.Data,
+			"Log":      p.Log,
+			"Backup":   p.Backup,
+			"PID":      p.PID,
+			"SSL":      p.SSL,
+			"Security": p.Security,
+			"Database": p.Database,
+		}
+		for name, val := range fields {
+			if val == "" {
+				t.Errorf("windowsPaths(%v).%s is empty", isRoot, name)
+			}
+		}
+	}
+}

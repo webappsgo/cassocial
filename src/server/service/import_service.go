@@ -37,6 +37,14 @@ func NewImportService(db *store.DB, profileService *ProfileService, linkService 
 
 // ImportData imports data from various sources
 func (s *ImportService) ImportData(userID, source string, data []byte) (string, error) {
+	// Validate source before touching the DB.
+	switch source {
+	case "linktree", "linkstack", "carrd", "aboutme", "csv", "json":
+		// valid
+	default:
+		return "", ErrUnsupportedImportSource
+	}
+
 	// Create import job
 	jobID, err := s.createImportJob(userID, source)
 	if err != nil {

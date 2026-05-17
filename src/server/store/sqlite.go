@@ -154,7 +154,7 @@ func (db *DB) GetSetting(key string) (string, error) {
 
 // SetSetting updates or inserts a setting
 func (db *DB) SetSetting(key, value string) error {
-	placeholder := "?"
+	placeholder := "?, ?"
 	if db.Driver == "pgx" {
 		placeholder = "$1, $2"
 	}

@@ -61,11 +61,12 @@ func (h *ProfileHandlers) ListProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
-			  theme_id, custom_css, show_usernames, is_public, password_protected,
-			  custom_domain, domain_verified, analytics_enabled, meta_title,
-			  meta_description, og_image_url, view_count, qr_code_enabled,
-			  created_at, updated_at
+	query := `SELECT id, user_id, slug, COALESCE(display_name,''), COALESCE(bio,''), COALESCE(avatar_url,''),
+			  COALESCE(header_image_url,''), COALESCE(theme_id,''), COALESCE(custom_css,''),
+			  show_usernames, is_public, password_protected,
+			  COALESCE(custom_domain,''), domain_verified, analytics_enabled,
+			  COALESCE(meta_title,''), COALESCE(meta_description,''), COALESCE(og_image_url,''),
+			  view_count, qr_code_enabled, created_at, updated_at
 			  FROM profiles WHERE user_id = ? ORDER BY created_at DESC`
 
 	if h.db.Driver == "postgres" {
@@ -545,10 +546,12 @@ func (h *ProfileHandlers) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProfileHandlers) getProfileByID(id string) (*model.Profile, error) {
 	profile := &model.Profile{}
-	query := `SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
-			  theme_id, custom_css, show_usernames, is_public, password_protected,
-			  protection_password, custom_domain, domain_verified, analytics_enabled,
-			  meta_title, meta_description, og_image_url, view_count, qr_code_enabled,
+	query := `SELECT id, user_id, slug, COALESCE(display_name,''), COALESCE(bio,''), COALESCE(avatar_url,''),
+			  COALESCE(header_image_url,''), COALESCE(theme_id,''), COALESCE(custom_css,''),
+			  show_usernames, is_public, password_protected,
+			  COALESCE(protection_password,''), COALESCE(custom_domain,''), domain_verified,
+			  analytics_enabled, COALESCE(meta_title,''), COALESCE(meta_description,''),
+			  COALESCE(og_image_url,''), view_count, qr_code_enabled,
 			  created_at, updated_at FROM profiles WHERE id = ?`
 
 	if h.db.Driver == "postgres" {

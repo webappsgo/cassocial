@@ -28,10 +28,11 @@ func (h *PublicHandlers) GetPublicProfile(w http.ResponseWriter, r *http.Request
 
 	// Get profile by slug
 	profile := &model.Profile{}
-	query := `SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
-			  theme_id, show_usernames, is_public, password_protected, custom_domain,
-			  domain_verified, meta_title, meta_description, og_image_url, view_count,
-			  qr_code_enabled, created_at, updated_at
+	query := `SELECT id, user_id, slug, COALESCE(display_name,''), COALESCE(bio,''),
+			  COALESCE(avatar_url,''), COALESCE(header_image_url,''), COALESCE(theme_id,''),
+			  show_usernames, is_public, password_protected, COALESCE(custom_domain,''),
+			  domain_verified, COALESCE(meta_title,''), COALESCE(meta_description,''),
+			  COALESCE(og_image_url,''), view_count, qr_code_enabled, created_at, updated_at
 			  FROM profiles WHERE slug = ?`
 
 	if h.db.Driver == "postgres" {
@@ -95,9 +96,10 @@ func (h *PublicHandlers) GetPublicProfileLinks(w http.ResponseWriter, r *http.Re
 	}
 
 	// Get active links
-	query = `SELECT id, profile_id, service_id, title, username, url, icon_url,
-			 background_color, text_color, position, is_active, click_count,
-			 created_at, updated_at
+	query = `SELECT id, profile_id, COALESCE(service_id,''), COALESCE(title,''),
+			 COALESCE(username,''), COALESCE(url,''), COALESCE(icon_url,''),
+			 COALESCE(background_color,''), COALESCE(text_color,''),
+			 position, is_active, click_count, created_at, updated_at
 			 FROM links WHERE profile_id = ? AND is_active = ?
 			 ORDER BY position ASC`
 
