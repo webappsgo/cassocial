@@ -3,6 +3,8 @@ package service
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -313,5 +315,218 @@ func TestCreateBackup_ExercisesAddFileToTar(t *testing.T) {
 	// The archive must be non-empty (it contains at least the db file).
 	if backup.Size == 0 {
 		t.Error("backup size should be > 0 when db file is present")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// addUploadsToBackup (private — tested directly in-package)
+// ---------------------------------------------------------------------------
+
+// TestAddUploadsToBackup_WithFiles creates an uploads directory with files and
+// verifies addUploadsToBackup adds them to the tar archive.
+func TestAddUploadsToBackup_WithFiles(t *testing.T) {
+	svc := newTestBackupService(t)
+
+	// Create uploads directory with a couple of files.
+	uploadsDir := filepath.Join(svc.config.DataDir, "uploads")
+	if err := os.MkdirAll(uploadsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll uploads: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uploadsDir, "avatar.png"), []byte("PNG data"), 0o644); err != nil {
+		t.Fatalf("WriteFile avatar: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uploadsDir, "banner.jpg"), []byte("JPEG data"), 0o644); err != nil {
+		t.Fatalf("WriteFile banner: %v", err)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	if err := svc.addUploadsToBackup(tw); err != nil {
+		t.Fatalf("addUploadsToBackup: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("tar.Writer.Close: %v", err)
+	}
+
+	// Read back the tar and verify both files are present.
+	tr := tar.NewReader(&buf)
+	names := make(map[string]bool)
+	for {
+		hdr, err := tr.Next()
+		if err != nil {
+			break
+		}
+		names[filepath.Base(hdr.Name)] = true
+	}
+	for _, want := range []string{"avatar.png", "banner.jpg"} {
+		if !names[want] {
+			t.Errorf("addUploadsToBackup: expected file %q in archive, got names: %v", want, names)
+		}
+	}
+}
+
+// TestAddUploadsToBackup_NoUploadsDir verifies that a missing uploads directory
+// is handled gracefully (no error returned).
+func TestAddUploadsToBackup_NoUploadsDir(t *testing.T) {
+	svc := newTestBackupService(t)
+	// Do not create an uploads directory — it should be silently ignored.
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	if err := svc.addUploadsToBackup(tw); err != nil {
+		t.Fatalf("addUploadsToBackup (no uploads dir) should return nil, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// rotateBackups (private — tested directly in-package)
+// ---------------------------------------------------------------------------
+
+// TestRotateBackups_RemovesExcessFiles creates more than maxBackups stub .tar.gz
+// files in the backup directory and confirms rotateBackups removes the excess.
+func TestRotateBackups_RemovesExcessFiles(t *testing.T) {
+	svc := newTestBackupService(t)
+	backupDir := filepath.Join(svc.config.DataDir, "backup")
+
+	// Create 7 stub backup files (max is 4).
+	for i := 0; i < 7; i++ {
+		name := filepath.Join(backupDir, fmt.Sprintf("cassocial-backup-manual-2026010%d-120000.tar.gz", i))
+		if err := os.WriteFile(name, []byte("stub"), 0o644); err != nil {
+			t.Fatalf("WriteFile backup stub: %v", err)
+		}
+	}
+
+	if err := svc.rotateBackups(backupDir); err != nil {
+		t.Fatalf("rotateBackups: %v", err)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	var remaining int
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".gz" {
+			remaining++
+		}
+	}
+	if remaining > 4 {
+		t.Errorf("rotateBackups: %d backups remain, want <= 4", remaining)
+	}
+}
+
+// TestRotateBackups_NoExcessFiles verifies that when the backup count is at or
+// below the max, rotateBackups is a no-op.
+func TestRotateBackups_NoExcessFiles(t *testing.T) {
+	svc := newTestBackupService(t)
+	backupDir := filepath.Join(svc.config.DataDir, "backup")
+
+	// Create exactly 4 stub files — equal to max.
+	for i := 0; i < 4; i++ {
+		name := filepath.Join(backupDir, fmt.Sprintf("cassocial-backup-manual-2026010%d-120000.tar.gz", i))
+		if err := os.WriteFile(name, []byte("stub"), 0o644); err != nil {
+			t.Fatalf("WriteFile backup stub: %v", err)
+		}
+	}
+
+	if err := svc.rotateBackups(backupDir); err != nil {
+		t.Fatalf("rotateBackups (no excess): %v", err)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	var remaining int
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".gz" {
+			remaining++
+		}
+	}
+	if remaining != 4 {
+		t.Errorf("rotateBackups (no excess): %d remain, want 4", remaining)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// RestoreBackup — additional coverage paths
+// ---------------------------------------------------------------------------
+
+// TestRestoreBackup_CorruptArchive verifies that a corrupt .tar.gz returns an error.
+func TestRestoreBackup_CorruptArchive(t *testing.T) {
+	svc := newTestBackupService(t)
+
+	backupDir := filepath.Join(svc.config.DataDir, "backup")
+	corruptFile := filepath.Join(backupDir, "corrupt.tar.gz")
+	if err := os.WriteFile(corruptFile, []byte("this is not a gzip file"), 0o644); err != nil {
+		t.Fatalf("WriteFile corrupt: %v", err)
+	}
+
+	if err := svc.RestoreBackup("corrupt.tar.gz"); err == nil {
+		t.Error("RestoreBackup(corrupt archive) should return error")
+	}
+}
+
+// TestRestoreBackup_ValidGzipBadTar verifies that a valid gzip wrapping corrupt
+// tar content returns an error when reading the tar stream.
+func TestRestoreBackup_ValidGzipBadTar(t *testing.T) {
+	svc := newTestBackupService(t)
+
+	backupDir := filepath.Join(svc.config.DataDir, "backup")
+	archivePath := filepath.Join(backupDir, "badtar.tar.gz")
+
+	// Write a gzip archive containing random (non-tar) bytes.
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	gzw, _ := gzip.NewWriterLevel(f, gzip.BestSpeed)
+	gzw.Write([]byte("this is not valid tar content at all"))
+	gzw.Close()
+	f.Close()
+
+	if err := svc.RestoreBackup("badtar.tar.gz"); err == nil {
+		t.Error("RestoreBackup(valid gzip, bad tar) should return error")
+	}
+}
+
+// TestRestoreBackup_WithFiles creates a real backup that includes an uploads
+// file and verifies that RestoreBackup extracts it correctly.
+func TestRestoreBackup_WithFiles(t *testing.T) {
+	svc := newTestBackupService(t)
+
+	// Seed an uploads file before creating the backup.
+	uploadsDir := filepath.Join(svc.config.DataDir, "uploads")
+	if err := os.MkdirAll(uploadsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll uploads: %v", err)
+	}
+	wantContent := []byte("restored avatar data")
+	if err := os.WriteFile(filepath.Join(uploadsDir, "restored.png"), wantContent, 0o644); err != nil {
+		t.Fatalf("WriteFile upload: %v", err)
+	}
+
+	backup, err := svc.CreateBackup("manual")
+	if err != nil {
+		t.Fatalf("CreateBackup: %v", err)
+	}
+
+	// Remove the uploads file so we can verify it is restored.
+	if err := os.Remove(filepath.Join(uploadsDir, "restored.png")); err != nil {
+		t.Fatalf("Remove upload: %v", err)
+	}
+
+	if err := svc.RestoreBackup(backup.Filename); err != nil {
+		t.Fatalf("RestoreBackup: %v", err)
+	}
+
+	// Verify the file was restored.
+	got, err := os.ReadFile(filepath.Join(svc.config.DataDir, "uploads", "restored.png"))
+	if err != nil {
+		t.Fatalf("ReadFile after restore: %v", err)
+	}
+	if !bytes.Equal(got, wantContent) {
+		t.Errorf("restored file content = %q, want %q", got, wantContent)
 	}
 }

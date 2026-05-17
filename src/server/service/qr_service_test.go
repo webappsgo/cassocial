@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
+	"image"
 	"image/color"
+	"image/png"
 	"strings"
 	"testing"
 
@@ -470,6 +473,204 @@ func TestGenerateWithLogo_LogoEnabled_InvalidLogoData(t *testing.T) {
 	_, err := svc.GenerateWithLogo("https://example.com", settings, []byte("not a valid image"))
 	if err == nil {
 		t.Error("GenerateWithLogo with invalid logo data should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generatePDF (private — tested directly in-package)
+// ---------------------------------------------------------------------------
+
+// TestGeneratePDF_ReturnsData calls generatePDF directly and verifies it returns
+// non-empty bytes starting with the PDF magic header.
+func TestGeneratePDF_ReturnsData(t *testing.T) {
+	svc := newTestQRService()
+	settings := &model.QRCodeSettings{
+		Size:            128,
+		ErrorCorrection: "M",
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		Format:          "pdf",
+	}
+
+	data, err := svc.generatePDF("https://example.com", settings)
+	if err != nil {
+		t.Fatalf("generatePDF: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("generatePDF returned empty data")
+	}
+	if !bytes.HasPrefix(data, []byte("%PDF")) {
+		t.Errorf("generatePDF output does not start with %%PDF, got: %q", data[:min(10, len(data))])
+	}
+}
+
+// TestGenerateQRCode_PDF exercises the PDF branch through GenerateQRCode.
+func TestGenerateQRCode_PDF(t *testing.T) {
+	svc := newTestQRService()
+	settings := &model.QRCodeSettings{
+		Size:            128,
+		ErrorCorrection: "M",
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		Format:          "pdf",
+	}
+
+	data, err := svc.GenerateQRCode("https://example.com", settings)
+	if err != nil {
+		t.Fatalf("GenerateQRCode(pdf): %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("GenerateQRCode(pdf) returned empty data")
+	}
+}
+
+// TestGenerateDataURI_PDF verifies the data URI prefix for PDF format.
+func TestGenerateDataURI_PDF(t *testing.T) {
+	svc := newTestQRService()
+	settings := &model.QRCodeSettings{
+		Size:            128,
+		ErrorCorrection: "M",
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		Format:          "pdf",
+	}
+
+	uri, err := svc.GenerateDataURI("https://example.com", settings)
+	if err != nil {
+		t.Fatalf("GenerateDataURI(pdf): %v", err)
+	}
+	const prefix = "data:application/pdf;base64,"
+	if !strings.HasPrefix(uri, prefix) {
+		t.Errorf("GenerateDataURI(pdf) missing prefix %q, got: %q", prefix, uri[:min(40, len(uri))])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// embedLogo (private — tested directly in-package)
+// ---------------------------------------------------------------------------
+
+// makeSolidPNG returns the bytes of a solid-color PNG of the given size.
+func makeSolidPNG(t *testing.T, width, height int, c color.Color) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, c)
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("makeSolidPNG png.Encode: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestEmbedLogo_BasicOperation verifies that embedLogo produces an RGBA image
+// of the same bounds as the base image and does not panic.
+func TestEmbedLogo_BasicOperation(t *testing.T) {
+	svc := newTestQRService()
+
+	baseImg := image.NewRGBA(image.Rect(0, 0, 200, 200))
+	logoImg := image.NewRGBA(image.Rect(0, 0, 40, 40))
+
+	result := svc.embedLogo(baseImg, logoImg, 20)
+	if result == nil {
+		t.Fatal("embedLogo returned nil")
+	}
+	b := result.Bounds()
+	if b.Dx() != 200 || b.Dy() != 200 {
+		t.Errorf("embedLogo result bounds = %v, want 200x200", b)
+	}
+}
+
+// TestEmbedLogo_LogoCentered verifies pixel values prove the logo was drawn
+// in the centre of the base image.
+func TestEmbedLogo_LogoCentered(t *testing.T) {
+	svc := newTestQRService()
+
+	// Base: 100x100 white; logo: 20x20 red.
+	baseImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	for y := 0; y < 100; y++ {
+		for x := 0; x < 100; x++ {
+			baseImg.Set(x, y, color.White)
+		}
+	}
+	logoImg := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	for y := 0; y < 20; y++ {
+		for x := 0; x < 20; x++ {
+			logoImg.Set(x, y, color.RGBA{R: 255, A: 255})
+		}
+	}
+
+	result := svc.embedLogo(baseImg, logoImg, 20) // logoSize=20% of 100 = 20px
+
+	// Centre of result should be red (logo pixel).
+	cx, cy := 50, 50
+	r, g, b, _ := result.At(cx, cy).RGBA()
+	if r == 0 {
+		t.Errorf("embedLogo: centre pixel should be red, got r=%d g=%d b=%d", r, g, b)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GenerateWithLogo — happy path (logo enabled, valid PNG logo)
+// ---------------------------------------------------------------------------
+
+// TestGenerateWithLogo_LogoEnabled_ValidLogo exercises the full logo embedding
+// pipeline: generate QR PNG then embed a logo PNG.
+func TestGenerateWithLogo_LogoEnabled_ValidLogo(t *testing.T) {
+	svc := newTestQRService()
+	settings := &model.QRCodeSettings{
+		Size:            256,
+		ErrorCorrection: "H", // High error correction accommodates logo occlusion
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		Format:          "png",
+		LogoEnabled:     true,
+		LogoSize:        20,
+	}
+
+	// Create a small solid blue PNG to use as logo.
+	logoData := makeSolidPNG(t, 30, 30, color.RGBA{B: 255, A: 255})
+
+	data, err := svc.GenerateWithLogo("https://example.com/profile/test", settings, logoData)
+	if err != nil {
+		t.Fatalf("GenerateWithLogo: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("GenerateWithLogo returned empty data")
+	}
+	// Output must be a valid PNG.
+	if len(data) < 4 || data[0] != 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G' {
+		t.Error("GenerateWithLogo output is not a valid PNG")
+	}
+}
+
+// TestGenerateWithLogo_LogoEnabled_NonPNGBaseFormat verifies that a non-PNG
+// base format (e.g. SVG) causes an error when logo embedding is requested,
+// because the base cannot be decoded as PNG.
+func TestGenerateWithLogo_LogoEnabled_NonPNGBaseFormat(t *testing.T) {
+	svc := newTestQRService()
+	settings := &model.QRCodeSettings{
+		Size:            256,
+		ErrorCorrection: "H",
+		Style:           "square",
+		DarkColor:       "#000000",
+		LightColor:      "#ffffff",
+		Format:          "svg", // SVG cannot be decoded as PNG for embedding
+		LogoEnabled:     true,
+		LogoSize:        20,
+	}
+
+	logoData := makeSolidPNG(t, 30, 30, color.RGBA{B: 255, A: 255})
+
+	_, err := svc.GenerateWithLogo("https://example.com", settings, logoData)
+	if err == nil {
+		t.Error("GenerateWithLogo with SVG base and logo enabled should return error")
 	}
 }
 

@@ -699,6 +699,123 @@ func TestClientDelete_InvalidServer(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// get / post / delete — http.NewRequest error path (invalid URL)
+// ---------------------------------------------------------------------------
+
+func TestClientGet_InvalidURL(t *testing.T) {
+	c := &client{
+		server: "http://\x00invalid",
+		http:   &http.Client{},
+	}
+	_, err := c.get("/path")
+	if err == nil {
+		t.Fatal("get() with invalid server URL should return an error")
+	}
+}
+
+func TestClientPost_InvalidURL(t *testing.T) {
+	c := &client{
+		server: "http://\x00invalid",
+		http:   &http.Client{},
+	}
+	_, err := c.post("/path", map[string]string{"k": "v"})
+	if err == nil {
+		t.Fatal("post() with invalid server URL should return an error")
+	}
+}
+
+func TestClientPost_MarshalError(t *testing.T) {
+	c := &client{server: "http://localhost", http: &http.Client{}}
+	// Channels cannot be marshalled to JSON — json.Marshal will return an error.
+	_, err := c.post("/path", make(chan int))
+	if err == nil {
+		t.Fatal("post() with un-marshallable body should return an error")
+	}
+}
+
+func TestClientDelete_InvalidURL(t *testing.T) {
+	c := &client{
+		server: "http://\x00invalid",
+		http:   &http.Client{},
+	}
+	_, err := c.delete("/path")
+	if err == nil {
+		t.Fatal("delete() with invalid server URL should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// do — no token branch (Authorization header not set)
+// ---------------------------------------------------------------------------
+
+func TestClientDo_NoToken(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	c := &client{server: srv.URL, http: &http.Client{}, token: ""}
+	_, err := c.get("/test")
+	if err != nil {
+		t.Fatalf("get() with no token: %v", err)
+	}
+	if gotAuth != "" {
+		t.Errorf("Authorization header should be empty when token is empty, got %q", gotAuth)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdProfile — fs.Parse error (unknown flag)
+// ---------------------------------------------------------------------------
+
+func TestCmdProfile_ParseError(t *testing.T) {
+	c := &client{server: "http://localhost", http: &http.Client{}}
+	err := c.cmdProfile([]string{"--unknown-flag-xyz"})
+	if err == nil {
+		t.Fatal("cmdProfile with unknown flag should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdLinks — fs.Parse error (unknown flag)
+// ---------------------------------------------------------------------------
+
+func TestCmdLinks_ParseError(t *testing.T) {
+	c := &client{server: "http://localhost", http: &http.Client{}}
+	err := c.cmdLinks([]string{"--unknown-flag-xyz"})
+	if err == nil {
+		t.Fatal("cmdLinks with unknown flag should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdShortlink create — fs.Parse error (unknown flag)
+// ---------------------------------------------------------------------------
+
+func TestCmdShortlink_Create_ParseError(t *testing.T) {
+	c := &client{server: "http://localhost", http: &http.Client{}}
+	err := c.cmdShortlink([]string{"create", "--unknown-flag-xyz"})
+	if err == nil {
+		t.Fatal("cmdShortlink create with unknown flag should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdShortlink delete — fs.Parse error (unknown flag)
+// ---------------------------------------------------------------------------
+
+func TestCmdShortlink_Delete_ParseError(t *testing.T) {
+	c := &client{server: "http://localhost", http: &http.Client{}}
+	err := c.cmdShortlink([]string{"delete", "--unknown-flag-xyz"})
+	if err == nil {
+		t.Fatal("cmdShortlink delete with unknown flag should return an error")
+	}
+}
+
 // clientContains checks whether s contains sub.
 func clientContains(s, sub string) bool {
 	if len(sub) == 0 {

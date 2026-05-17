@@ -429,6 +429,72 @@ func TestAdminHandlers_ImportServices(t *testing.T) {
 	}
 }
 
+// ---- GetSettings — scan loop produces rows ----
+// After migration there are default settings rows; this exercises the rows.Next body.
+func TestAdminHandlers_GetSettings_WithRows(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/settings", nil)
+	rr := httptest.NewRecorder()
+	h.GetSettings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetSettings returned status %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var settings []interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&settings); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(settings) == 0 {
+		t.Error("GetSettings expected non-empty settings list after migration")
+	}
+}
+
+// ---- UpdateSettings — zero-key map exercises the empty-loop path ----
+func TestAdminHandlers_UpdateSettings_EmptyBody(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	body, _ := json.Marshal(map[string]string{})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/settings", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.UpdateSettings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("UpdateSettings with empty map returned status %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// ---- GetSystemStats — exercises all count queries ----
+func TestAdminHandlers_GetSystemStats_WithData(t *testing.T) {
+	h := newTestAdminHandlers(t)
+
+	// Register a user and verify it appears in stats.
+	_, err := h.auth.Register("statsuser", "statsuser@example.com", "ValidPass1")
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/stats", nil)
+	rr := httptest.NewRecorder()
+	h.GetSystemStats(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetSystemStats with data returned status %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if totalUsers, _ := resp["total_users"].(float64); totalUsers == 0 {
+		t.Errorf("GetSystemStats total_users expected > 0, got %v", resp["total_users"])
+	}
+}
+
 // ---- TestSMTPConnection (was 0% covered) ----
 
 func TestAdminHandlers_TestSMTPConnection(t *testing.T) {

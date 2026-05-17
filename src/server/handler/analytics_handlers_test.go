@@ -274,6 +274,38 @@ func TestGetProfileAnalytics_WeekData(t *testing.T) {
 	}
 }
 
+// TestGetLinkAnalytics_WithData inserts links so the rows.Next() body is exercised.
+func TestGetLinkAnalytics_WithData(t *testing.T) {
+	ah, ph, db := newTestAnalyticsHandlers(t)
+
+	lh := NewLinkHandlers(db)
+	userID := createTestUser(t, db, "linkanalyticsdatauser", "linkanalyticsdata@example.com")
+	profileID := createTestProfile(t, ph, userID, "linkanalyticsdataslug")
+
+	// Create a link so the query returns rows.
+	createTestLink(t, lh, userID, profileID)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/links/"+profileID, nil)
+	req.SetPathValue("profile_id", profileID)
+	req = withUserID(req, userID)
+
+	rr := httptest.NewRecorder()
+	ah.GetLinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetLinkAnalytics with data returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	links, _ := resp["links"].([]interface{})
+	if len(links) == 0 {
+		t.Errorf("expected at least one link in analytics response, got none")
+	}
+}
+
 // ---- ExportAnalytics missing branches ----
 
 func TestExportAnalytics_MissingID(t *testing.T) {

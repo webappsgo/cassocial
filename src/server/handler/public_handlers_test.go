@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -209,6 +210,153 @@ func TestTrackLinkClick_ActiveLink(t *testing.T) {
 	location := rr.Header().Get("Location")
 	if location != "https://example.com" {
 		t.Errorf("TrackLinkClick redirect location = %q, want https://example.com", location)
+	}
+}
+
+func TestGetPublicProfileQR_EmptyUsername(t *testing.T) {
+	pub, _, _, _ := newTestPublicHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles//qr", nil)
+	req.SetPathValue("username", "")
+
+	rr := httptest.NewRecorder()
+	pub.GetPublicProfileQR(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("GetPublicProfileQR with empty username returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestGetPublicProfileQR_PrivateProfile(t *testing.T) {
+	pub, ph, _, db := newTestPublicHandlers(t)
+	userID := createTestUser(t, db, "qrprivateuser", "qrprivate@example.com")
+
+	body := map[string]interface{}{
+		"slug":         "qrprivateslug",
+		"display_name": "Private QR Profile",
+		"is_public":    false,
+	}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	ph.CreateProfile(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("CreateProfile (private) returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	pubReq := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/qrprivateslug/qr", nil)
+	pubReq.SetPathValue("username", "qrprivateslug")
+	pubRR := httptest.NewRecorder()
+	pub.GetPublicProfileQR(pubRR, pubReq)
+
+	if pubRR.Code != http.StatusForbidden {
+		t.Errorf("GetPublicProfileQR for private profile returned %d, want %d", pubRR.Code, http.StatusForbidden)
+	}
+}
+
+func TestGetPublicProfileQR_QRDisabled(t *testing.T) {
+	pub, ph, _, db := newTestPublicHandlers(t)
+	userID := createTestUser(t, db, "qrdisableduser", "qrdisabled@example.com")
+	profileID := createTestProfile(t, ph, userID, "qrdisabledslug")
+
+	// Disable QR code on the profile.
+	_, err := db.Exec("UPDATE profiles SET qr_code_enabled = 0 WHERE id = ?", profileID)
+	if err != nil {
+		t.Fatalf("disabling QR code: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/qrdisabledslug/qr", nil)
+	req.SetPathValue("username", "qrdisabledslug")
+
+	rr := httptest.NewRecorder()
+	pub.GetPublicProfileQR(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("GetPublicProfileQR with QR disabled returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestTrackLinkClick_EmptyID(t *testing.T) {
+	pub, _, _, _ := newTestPublicHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/link//click", nil)
+	req.SetPathValue("id", "")
+
+	rr := httptest.NewRecorder()
+	pub.TrackLinkClick(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("TrackLinkClick with empty ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestTrackLinkClick_InactiveLink(t *testing.T) {
+	pub, ph, lh, db := newTestPublicHandlers(t)
+	userID := createTestUser(t, db, "inactivelinkuser", "inactivelink@example.com")
+	profileID := createTestProfile(t, ph, userID, "inactivelinkslug")
+	linkID := createTestLink(t, lh, userID, profileID)
+
+	// Deactivate the link.
+	_, err := db.Exec("UPDATE links SET is_active = 0 WHERE id = ?", linkID)
+	if err != nil {
+		t.Fatalf("deactivating link: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/link/"+linkID+"/click", nil)
+	req.SetPathValue("id", linkID)
+
+	rr := httptest.NewRecorder()
+	pub.TrackLinkClick(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("TrackLinkClick for inactive link returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestGetPublicProfileLinks_EmptyUsername(t *testing.T) {
+	pub, _, _, _ := newTestPublicHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles//links", nil)
+	req.SetPathValue("username", "")
+
+	rr := httptest.NewRecorder()
+	pub.GetPublicProfileLinks(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("GetPublicProfileLinks with empty username returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestGetPublicProfileLinks_PrivateProfile(t *testing.T) {
+	pub, ph, _, db := newTestPublicHandlers(t)
+	userID := createTestUser(t, db, "linksPrivateUser", "linksprivate@example.com")
+
+	body := map[string]interface{}{
+		"slug":         "linksprivateslug",
+		"display_name": "Private Links Profile",
+		"is_public":    false,
+	}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	ph.CreateProfile(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("CreateProfile (private) returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	pubReq := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/linksprivateslug/links", nil)
+	pubReq.SetPathValue("username", "linksprivateslug")
+	pubRR := httptest.NewRecorder()
+	pub.GetPublicProfileLinks(pubRR, pubReq)
+
+	if pubRR.Code != http.StatusForbidden {
+		t.Errorf("GetPublicProfileLinks for private profile returned %d, want %d", pubRR.Code, http.StatusForbidden)
 	}
 }
 

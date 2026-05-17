@@ -196,6 +196,27 @@ func TestPublicHandler_HandleSecurityTxt(t *testing.T) {
 	}
 }
 
+// HandleProfilePreview must return 200 with a status field.
+func TestPublicHandler_HandleProfilePreview(t *testing.T) {
+	h := newTestPublicHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/preview", nil)
+	rr := httptest.NewRecorder()
+	h.HandleProfilePreview(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleProfilePreview returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode HandleProfilePreview response: %v", err)
+	}
+	if body["status"] != "preview" {
+		t.Errorf("HandleProfilePreview body status = %v, want \"preview\"", body["status"])
+	}
+}
+
 // HandleRobotsTxt must include the request host in the Sitemap URL.
 func TestPublicHandler_HandleRobotsTxt_IncludesHost(t *testing.T) {
 	h := newTestPublicHandler(t)

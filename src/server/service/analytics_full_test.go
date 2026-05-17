@@ -472,3 +472,512 @@ func TestAnalyticsService_GenerateID_Unique(t *testing.T) {
 		ids[id] = true
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TrackView — DB error path (analytics table dropped before insert)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackView_DBError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Drop the analytics table so the INSERT fails while the profiles SELECT succeeds.
+	_, err := db.Exec(`DROP TABLE analytics`)
+	if err != nil {
+		t.Fatalf("drop analytics table: %v", err)
+	}
+
+	err = svc.TrackView(profileID, "1.2.3.4", "Mozilla/5.0", "")
+	if err == nil {
+		t.Error("TrackView with dropped analytics table should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TrackClick — DB error path (analytics table insert fails)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackClick_DBError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics`)
+	if err != nil {
+		t.Fatalf("drop analytics table: %v", err)
+	}
+
+	err = svc.TrackClick(profileID, "some-link", "1.2.3.4", "Mozilla/5.0", "")
+	if err == nil {
+		t.Error("TrackClick with dropped analytics table should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TrackSession — validation error (invalid device type)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackSession_ValidationError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Invalid DeviceType triggers Validate() failure.
+	session := &model.AnalyticsSession{
+		ProfileID:  profileID,
+		SessionID:  "bad-device-session",
+		IPHash:     "hash123",
+		DeviceType: "supercomputer", // not mobile/tablet/desktop
+		CreatedAt:  time.Now(),
+	}
+
+	err := svc.TrackSession(session)
+	if err == nil {
+		t.Error("TrackSession with invalid device type should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TrackSession — zero CreatedAt auto-populated
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackSession_ZeroCreatedAt(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	session := &model.AnalyticsSession{
+		ProfileID:  profileID,
+		SessionID:  "zero-time-session",
+		IPHash:     "hash123",
+		DeviceType: model.DeviceTypeDesktop,
+		// CreatedAt deliberately left as zero value
+	}
+
+	if err := svc.TrackSession(session); err != nil {
+		t.Fatalf("TrackSession with zero CreatedAt: %v", err)
+	}
+	if session.CreatedAt.IsZero() {
+		t.Error("TrackSession should have set CreatedAt when it was zero")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TrackSession — sessionExists DB error (analytics_sessions table dropped before check)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackSession_SessionExistsError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics_sessions`)
+	if err != nil {
+		t.Fatalf("drop analytics_sessions: %v", err)
+	}
+
+	session := &model.AnalyticsSession{
+		ProfileID:  profileID,
+		SessionID:  "check-error-session",
+		IPHash:     "hash123",
+		DeviceType: model.DeviceTypeDesktop,
+		CreatedAt:  time.Now(),
+	}
+
+	err = svc.TrackSession(session)
+	if err == nil {
+		t.Error("TrackSession with dropped sessions table should return an error from sessionExists")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TrackSession — DB error on insert (duplicate primary key)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackSession_InsertError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	const conflictID = "conflict-id-0001"
+	const conflictSessionID = "conflict-session-unique"
+
+	// Pre-insert a row using the ID we will force the service to use.
+	_, err := db.Exec(`
+		INSERT INTO analytics_sessions (id, profile_id, session_id, ip_hash, created_at)
+		VALUES (?, ?, 'pre-existing-session', 'hash', CURRENT_TIMESTAMP)
+	`, conflictID, profileID)
+	if err != nil {
+		t.Fatalf("pre-insert session: %v", err)
+	}
+
+	// Create a session with the same ID — INSERT will fail with PK conflict.
+	session := &model.AnalyticsSession{
+		ID:         conflictID, // forced duplicate PK
+		ProfileID:  profileID,
+		SessionID:  conflictSessionID, // new session_id so sessionExists returns false
+		IPHash:     "hash123",
+		DeviceType: model.DeviceTypeDesktop,
+		CreatedAt:  time.Now(),
+	}
+
+	err = svc.TrackSession(session)
+	if err == nil {
+		t.Error("TrackSession with duplicate primary key should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TrackSession — DB error on update (BEFORE UPDATE trigger raises an error)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_TrackSession_UpdateError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Create session first.
+	session := &model.AnalyticsSession{
+		ProfileID:  profileID,
+		SessionID:  "update-error-001",
+		IPHash:     "hash456",
+		DeviceType: model.DeviceTypeDesktop,
+		CreatedAt:  time.Now(),
+	}
+	if err := svc.TrackSession(session); err != nil {
+		t.Fatalf("TrackSession (create): %v", err)
+	}
+
+	// Install a trigger that blocks UPDATE on analytics_sessions.
+	_, err := db.Exec(`
+		CREATE TRIGGER block_sessions_update
+		BEFORE UPDATE ON analytics_sessions
+		BEGIN
+			SELECT RAISE(ABORT, 'updates blocked by test trigger');
+		END
+	`)
+	if err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	session.DurationSeconds = 60
+	err = svc.TrackSession(session)
+	if err == nil {
+		t.Error("TrackSession update with blocking trigger should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AggregateHourly — DB error path
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_AggregateHourly_DBError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics_hourly`)
+	if err != nil {
+		t.Fatalf("drop analytics_hourly: %v", err)
+	}
+
+	err = svc.AggregateHourly(profileID, time.Now())
+	if err == nil {
+		t.Error("AggregateHourly with dropped table should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetSummary — DB error paths (various query failures)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_GetSummary_AnalyticsTableDropped(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics`)
+	if err != nil {
+		t.Fatalf("drop analytics: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	_, err = svc.GetSummary(profileID, start, end)
+	if err == nil {
+		t.Error("GetSummary with dropped analytics table should return an error")
+	}
+}
+
+func TestAnalyticsService_GetSummary_SessionsTableDropped(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics_sessions`)
+	if err != nil {
+		t.Fatalf("drop analytics_sessions: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	_, err = svc.GetSummary(profileID, start, end)
+	if err == nil {
+		t.Error("GetSummary with dropped analytics_sessions table should return an error")
+	}
+}
+
+func TestAnalyticsService_GetSummary_HourlyTableDropped(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Need analytics and analytics_sessions intact, only drop analytics_hourly.
+	_, err := db.Exec(`DROP TABLE analytics_hourly`)
+	if err != nil {
+		t.Fatalf("drop analytics_hourly: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	_, err = svc.GetSummary(profileID, start, end)
+	if err == nil {
+		t.Error("GetSummary with dropped analytics_hourly table should return an error")
+	}
+}
+
+func TestAnalyticsService_GetSummary_LinksTableDropped(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Drop only links so that analytics/sessions/device/referrer/country queries succeed
+	// but the link click stats query (JOIN with links) fails.
+	_, err := db.Exec(`DROP TABLE links`)
+	if err != nil {
+		t.Fatalf("drop links: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	_, err = svc.GetSummary(profileID, start, end)
+	if err == nil {
+		t.Error("GetSummary with dropped links table should return an error")
+	}
+}
+
+func TestAnalyticsService_GetSummary_WithReferrersAndCountries(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Insert a link for the click event.
+	_, err := db.Exec(`
+		INSERT INTO links (id, profile_id, title, url, position, is_active, click_count, created_at, updated_at)
+		VALUES ('sum-link-001', ?, 'Example', 'https://example.com', 1, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, profileID)
+	if err != nil {
+		t.Fatalf("insert link: %v", err)
+	}
+
+	// Insert views with referrer and country, and a click with a link_id.
+	_, err = db.Exec(`
+		INSERT INTO analytics (id, profile_id, link_id, event_type, ip_hash, user_agent, referrer, country, device_type, created_at)
+		VALUES ('sum-001', ?, NULL,          'view',  'hash1', 'Mozilla', 'https://google.com',  'US', 'desktop', CURRENT_TIMESTAMP),
+		       ('sum-002', ?, NULL,          'view',  'hash2', 'Mozilla', 'https://twitter.com', 'GB', 'mobile',  CURRENT_TIMESTAMP),
+		       ('sum-003', ?, 'sum-link-001','click', 'hash3', 'Mozilla', '',                    'US', 'desktop', CURRENT_TIMESTAMP)
+	`, profileID, profileID, profileID)
+	if err != nil {
+		t.Fatalf("insert analytics rows: %v", err)
+	}
+
+	// Aggregate hourly data so hourly stats are present.
+	hour := time.Now().Truncate(time.Hour)
+	if err := svc.AggregateHourly(profileID, hour); err != nil {
+		t.Fatalf("AggregateHourly: %v", err)
+	}
+
+	// Also insert a session so avg duration is non-zero.
+	_, err = db.Exec(`
+		INSERT INTO analytics_sessions (id, profile_id, session_id, ip_hash, device_type, duration_seconds, created_at)
+		VALUES ('sum-sess-001', ?, 'sum-sess-id', 'hash9', 'desktop', 120, CURRENT_TIMESTAMP)
+	`, profileID)
+	if err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	summary, err := svc.GetSummary(profileID, start, end)
+	if err != nil {
+		t.Fatalf("GetSummary with data: %v", err)
+	}
+	if summary.TotalViews != 2 {
+		t.Errorf("TotalViews = %d, want 2", summary.TotalViews)
+	}
+	if summary.TotalClicks != 1 {
+		t.Errorf("TotalClicks = %d, want 1", summary.TotalClicks)
+	}
+	if len(summary.TopReferrers) == 0 {
+		t.Error("TopReferrers should have at least one entry")
+	}
+	if len(summary.TopCountries) == 0 {
+		t.Error("TopCountries should have at least one entry")
+	}
+	if len(summary.DeviceBreakdown) == 0 {
+		t.Error("DeviceBreakdown should have at least one entry")
+	}
+	if len(summary.LinkClickStats) == 0 {
+		t.Error("LinkClickStats should have at least one entry")
+	}
+	if len(summary.HourlyStats) == 0 {
+		t.Error("HourlyStats should have at least one entry")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetSummary — scan error in hourly loop (analytics_hourly has wrong schema)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_GetSummary_HourlyScanError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Replace analytics_hourly with a table that has fewer columns — scan will fail.
+	if _, err := db.Exec(`DROP TABLE analytics_hourly`); err != nil {
+		t.Fatalf("drop analytics_hourly: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE analytics_hourly (profile_id TEXT, hour TIMESTAMP)`); err != nil {
+		t.Fatalf("create narrow analytics_hourly: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO analytics_hourly VALUES (?, CURRENT_TIMESTAMP)`, profileID); err != nil {
+		t.Fatalf("insert narrow hourly row: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	_, err := svc.GetSummary(profileID, start, end)
+	if err == nil {
+		t.Error("GetSummary with malformed analytics_hourly schema should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetSummary — scan error in link click stats loop (links table has wrong schema)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_GetSummary_LinkScanError(t *testing.T) {
+	db, profileID := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Insert a link and a click event so the linkQuery returns rows.
+	if _, err := db.Exec(`
+		INSERT INTO links (id, profile_id, title, url, position, is_active, click_count, created_at, updated_at)
+		VALUES ('scan-link-001', ?, 'Test', 'https://example.com', 1, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, profileID); err != nil {
+		t.Fatalf("insert link: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO analytics (id, profile_id, link_id, event_type, ip_hash, created_at)
+		VALUES ('scan-click-001', ?, 'scan-link-001', 'click', 'hash', CURRENT_TIMESTAMP)
+	`, profileID); err != nil {
+		t.Fatalf("insert click: %v", err)
+	}
+
+	// Rename links to links_backup, create a narrow fake links table with only one column
+	// so the 3-column scan in GetSummary fails.
+	if _, err := db.Exec(`ALTER TABLE links RENAME TO links_backup`); err != nil {
+		t.Fatalf("rename links: %v", err)
+	}
+	// Create a fake links with only one column (id) — the query selects l.id, l.title, COUNT(*)
+	// but l.title won't exist → query itself fails with "no such column".
+	if _, err := db.Exec(`CREATE TABLE links (id TEXT PRIMARY KEY)`); err != nil {
+		t.Fatalf("create narrow links: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO links (id) VALUES ('scan-link-001')`); err != nil {
+		t.Fatalf("insert into narrow links: %v", err)
+	}
+
+	start := time.Now().Add(-time.Hour)
+	end := time.Now().Add(time.Hour)
+	_, err := svc.GetSummary(profileID, start, end)
+	if err == nil {
+		t.Error("GetSummary with narrow links table should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CleanupOldData — second DELETE error (sessions table dropped after first)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_CleanupOldData_SessionDeleteError(t *testing.T) {
+	db, _ := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	// Drop only analytics_sessions so the first DELETE succeeds but second fails.
+	_, err := db.Exec(`DROP TABLE analytics_sessions`)
+	if err != nil {
+		t.Fatalf("drop analytics_sessions: %v", err)
+	}
+
+	err = svc.CleanupOldData()
+	if err == nil {
+		t.Error("CleanupOldData with dropped sessions table should return an error")
+	}
+}
+
+func TestAnalyticsService_CleanupOldData_AnalyticsDeleteError(t *testing.T) {
+	db, _ := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics`)
+	if err != nil {
+		t.Fatalf("drop analytics: %v", err)
+	}
+
+	err = svc.CleanupOldData()
+	if err == nil {
+		t.Error("CleanupOldData with dropped analytics table should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isAnalyticsEnabled — profile not found (DB error)
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_IsAnalyticsEnabled_ProfileNotFound(t *testing.T) {
+	db, _ := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := svc.isAnalyticsEnabled("nonexistent-profile-id")
+	if err == nil {
+		t.Error("isAnalyticsEnabled for non-existent profile should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// sessionExists — DB error path
+// ---------------------------------------------------------------------------
+
+func TestAnalyticsService_SessionExists_DBError(t *testing.T) {
+	db, _ := newTestAnalyticsDB(t)
+	svc := NewAnalyticsService(db)
+
+	_, err := db.Exec(`DROP TABLE analytics_sessions`)
+	if err != nil {
+		t.Fatalf("drop analytics_sessions: %v", err)
+	}
+
+	_, err = svc.sessionExists("any-session")
+	if err == nil {
+		t.Error("sessionExists with dropped table should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// getRetentionDays — non-numeric setting value falls back to default
+// ---------------------------------------------------------------------------
+
+func TestGetRetentionDays_NonNumericFallback(t *testing.T) {
+	s := newTestAnalyticsService(t)
+
+	if err := s.db.SetSetting("analytics_retention_days", "not-a-number"); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	days, err := s.getRetentionDays()
+	if err != nil {
+		t.Fatalf("getRetentionDays returned error: %v", err)
+	}
+	if days != 90 {
+		t.Errorf("getRetentionDays with non-numeric value = %d, want 90 (default)", days)
+	}
+}

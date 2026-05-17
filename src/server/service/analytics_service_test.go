@@ -137,3 +137,20 @@ func TestGetRetentionDays_CustomValue(t *testing.T) {
 		t.Errorf("getRetentionDays returned %d, want 30", days)
 	}
 }
+
+func TestGetRetentionDays_SettingMissing(t *testing.T) {
+	s := newTestAnalyticsService(t)
+
+	// Delete the setting so GetSetting returns sql.ErrNoRows.
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = 'analytics_retention_days'`); err != nil {
+		t.Fatalf("delete setting: %v", err)
+	}
+
+	days, err := s.getRetentionDays()
+	if err != nil {
+		t.Fatalf("getRetentionDays with missing setting returned error: %v", err)
+	}
+	if days != 90 {
+		t.Errorf("getRetentionDays with missing setting = %d, want 90 (default)", days)
+	}
+}
