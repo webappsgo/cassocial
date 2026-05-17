@@ -355,6 +355,72 @@ func TestGet2FAStatus_Enabled(t *testing.T) {
 	}
 }
 
+// TestGenerate2FASecret_MissingSiteName verifies that Generate2FASecret falls back to
+// "Cassocial" when site_name is missing from the settings table.
+func TestGenerate2FASecret_MissingSiteName(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("DELETE FROM settings WHERE key = 'site_name'"); err != nil {
+		t.Fatalf("DELETE settings: %v", err)
+	}
+
+	user := &model.User{
+		ID:       "test-id",
+		Username: "nositeuser",
+	}
+	setup, err := a.Generate2FASecret(user)
+	if err != nil {
+		t.Fatalf("Generate2FASecret with missing site_name: %v", err)
+	}
+	if setup.Secret == "" {
+		t.Error("setup.Secret is empty")
+	}
+	// QR code should use the fallback site name "Cassocial".
+	if !strings.Contains(setup.QRCodeURL, "Cassocial") {
+		t.Errorf("QRCodeURL %q does not contain fallback site name 'Cassocial'", setup.QRCodeURL)
+	}
+}
+
+// TestVerifyTOTP_WithPadding verifies that verifyTOTP correctly pads a secret whose
+// length is not a multiple of 8 before base32 decoding.
+func TestVerifyTOTP_WithPadding(t *testing.T) {
+	a := newTestAuth(t)
+
+	// "JBSWY3D" is 7 chars — not a multiple of 8, so padding must be added.
+	// Re-encode to get a valid base32 string of non-padded length.
+	// Use a raw 5-byte secret so base32 encoding produces 8 chars without trailing '='.
+	// Instead, use base32 encode of some bytes that gives non-mult-of-8 when padding stripped.
+	rawBytes := []byte("hello") // 5 bytes → base32 is "NBSWY3DPEB3W64TMMQ======" → strip = → "NBSWY3DPEB3W64TMMQ" (18 chars, 18%8=2, needs 6 padding)
+	// Actually use raw bytes that produce a clean unpadded length not divisible by 8.
+	// 5 bytes → base32 (8 chars before padding, actually ceil(5*8/5)=8) — let's compute:
+	// 5 bytes = 40 bits / 5 = 8 base32 chars. That IS divisible by 8.
+	// 4 bytes = 32 bits → ceil(32/5) = 7 base32 chars → needs 1 '='
+	// Strip padding from 4 bytes:
+	rawBytes = []byte("test") // 4 bytes → base32 "ORSXG5A=" → without padding "ORSXG5A" (7 chars, 7%8=7, needs 1 padding)
+	secretNoPad := strings.TrimRight(base32.StdEncoding.EncodeToString(rawBytes), "=")
+
+	// Verify that the secret length is not divisible by 8.
+	if len(secretNoPad)%8 == 0 {
+		t.Skipf("test setup error: %q has length %d divisible by 8", secretNoPad, len(secretNoPad))
+	}
+
+	// Generate the current code using the padded secret.
+	paddedSecret := secretNoPad
+	if len(paddedSecret)%8 != 0 {
+		paddedSecret += strings.Repeat("=", 8-len(paddedSecret)%8)
+	}
+	decoded, err := base32.StdEncoding.DecodeString(paddedSecret)
+	if err != nil {
+		t.Fatalf("base32 decode: %v", err)
+	}
+	counter := time.Now().Unix() / TOTPPeriod
+	code := a.generateTOTP(decoded, counter)
+
+	// verifyTOTP must add the padding itself and accept the valid code.
+	if !a.verifyTOTP(secretNoPad, code) {
+		t.Error("verifyTOTP should return true for valid code with unpadded secret")
+	}
+}
+
 // TestGet2FAStatus_UnknownUser verifies that an unknown user returns an error.
 func TestGet2FAStatus_UnknownUser(t *testing.T) {
 	a := newTestAuth(t)

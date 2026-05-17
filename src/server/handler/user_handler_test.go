@@ -416,3 +416,568 @@ func TestUserHandler_Handle2FASetup_NotImplemented(t *testing.T) {
 		t.Errorf("Handle2FASetup returned %d, want %d", rr.Code, http.StatusNotImplemented)
 	}
 }
+
+// HandleVerifyEmail — valid token must mark email verified and return 200.
+func TestUserHandler_HandleVerifyEmail_Success(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	// Create a user first.
+	user := &store.User{
+		ID:            "verify-user-001",
+		Username:      "verifyuser",
+		Email:         "verify@example.com",
+		PasswordHash:  "x",
+		Role:          "user",
+		Status:        "pending",
+		EmailVerified: false,
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	// Generate a verification token using the helper.
+	token, err := h.generateVerificationToken(user.Email)
+	if err != nil {
+		t.Fatalf("generateVerificationToken returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/verify-email?token="+token, nil)
+	rr := httptest.NewRecorder()
+	h.HandleVerifyEmail(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleVerifyEmail (valid token) returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["status"] != "success" {
+		t.Errorf("HandleVerifyEmail status = %q, want success", resp["status"])
+	}
+}
+
+// HandleVerifyEmail — getUserByID failure after token lookup returns 500.
+// We simulate this by deleting the user after the token is created.
+func TestUserHandler_HandleVerifyEmail_UserNotFound(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "verify-user-002",
+		Username:     "verifyuser2",
+		Email:        "verify2@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "pending",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	token, err := h.generateVerificationToken(user.Email)
+	if err != nil {
+		t.Fatalf("generateVerificationToken returned error: %v", err)
+	}
+
+	// Delete the user so GetUserByID fails.
+	if _, err := db.Exec(`DELETE FROM users WHERE id = ?`, user.ID); err != nil {
+		t.Fatalf("DELETE user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/verify-email?token="+token, nil)
+	rr := httptest.NewRecorder()
+	h.HandleVerifyEmail(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleVerifyEmail (user deleted) returned %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+// generateVerificationToken — unknown email returns error.
+func TestUserHandler_GenerateVerificationToken_UnknownEmail(t *testing.T) {
+	h, _ := newTestUserHandler(t)
+
+	_, err := h.generateVerificationToken("nobody@nowhere.invalid")
+	if err == nil {
+		t.Error("generateVerificationToken with unknown email: expected error, got nil")
+	}
+}
+
+// generatePasswordResetToken — success path creates a token.
+func TestUserHandler_GeneratePasswordResetToken_Success(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "reset-token-user-001",
+		Username:     "resetuser",
+		Email:        "reset@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	token, err := h.generatePasswordResetToken(user.Email)
+	if err != nil {
+		t.Fatalf("generatePasswordResetToken returned error: %v", err)
+	}
+	if token == "" {
+		t.Error("generatePasswordResetToken returned empty token")
+	}
+}
+
+// generatePasswordResetToken — unknown email returns error.
+func TestUserHandler_GeneratePasswordResetToken_UnknownEmail(t *testing.T) {
+	h, _ := newTestUserHandler(t)
+
+	_, err := h.generatePasswordResetToken("nobody@nowhere.invalid")
+	if err == nil {
+		t.Error("generatePasswordResetToken with unknown email: expected error, got nil")
+	}
+}
+
+// HandleResetPassword — valid token resets password and returns 200.
+func TestUserHandler_HandleResetPassword_Success(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "reset-user-001",
+		Username:     "resetpassuser",
+		Email:        "resetpass@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	token, err := h.generatePasswordResetToken(user.Email)
+	if err != nil {
+		t.Fatalf("generatePasswordResetToken returned error: %v", err)
+	}
+
+	body := map[string]string{"token": token, "new_password": "NewSecurePass1!"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/reset-password", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.HandleResetPassword(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleResetPassword (valid token) returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["status"] != "success" {
+		t.Errorf("HandleResetPassword status = %q, want success", resp["status"])
+	}
+}
+
+// HandleResetPassword — user deleted after token created returns 500.
+func TestUserHandler_HandleResetPassword_UserNotFound(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "reset-user-002",
+		Username:     "resetpassuser2",
+		Email:        "resetpass2@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	token, err := h.generatePasswordResetToken(user.Email)
+	if err != nil {
+		t.Fatalf("generatePasswordResetToken returned error: %v", err)
+	}
+
+	// Delete user to trigger GetUserByID failure.
+	if _, err := db.Exec(`DELETE FROM users WHERE id = ?`, user.ID); err != nil {
+		t.Fatalf("DELETE user: %v", err)
+	}
+
+	body := map[string]string{"token": token, "new_password": "NewSecurePass1!"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/reset-password", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.HandleResetPassword(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleResetPassword (user deleted) returned %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+// HandleAccountSettings POST — updates email field.
+func TestUserHandler_HandleAccountSettings_POST_WithAuth(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "settings-user-post-001",
+		Username:     "settingsuserpost",
+		Email:        "settingspost@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	updates := map[string]string{"email": "updated@example.com"}
+	data, _ := json.Marshal(updates)
+	req := httptest.NewRequest(http.MethodPost, "/settings", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, user.ID)
+	rr := httptest.NewRecorder()
+	h.HandleAccountSettings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleAccountSettings POST returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// HandleAccountSettings GET — invalid user ID returns 500.
+func TestUserHandler_HandleAccountSettings_GET_InvalidUser(t *testing.T) {
+	h, _ := newTestUserHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/settings", nil)
+	req = withUserID(req, "nonexistent-user-id-xyz")
+	rr := httptest.NewRecorder()
+	h.HandleAccountSettings(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleAccountSettings GET (bad user) returned %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+// HandleAccountSettings POST — invalid JSON returns 400.
+func TestUserHandler_HandleAccountSettings_POST_InvalidBody(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "settings-user-badjson-001",
+		Username:     "settingsuserj",
+		Email:        "settingsj@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/settings", bytes.NewBufferString("{bad json"))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, user.ID)
+	rr := httptest.NewRecorder()
+	h.HandleAccountSettings(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleAccountSettings POST (bad JSON) returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+// HandleAccountSettings POST — user deleted between auth and update returns 500.
+func TestUserHandler_HandleAccountSettings_POST_UserNotFound(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "settings-user-del2-001",
+		Username:     "settingsdel2",
+		Email:        "settingsdel2@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	// Delete user to trigger GetUserByID failure during POST.
+	if _, err := db.Exec(`DELETE FROM users WHERE id = ?`, user.ID); err != nil {
+		t.Fatalf("DELETE user: %v", err)
+	}
+
+	updates := map[string]string{"email": "new@example.com"}
+	data, _ := json.Marshal(updates)
+	req := httptest.NewRequest(http.MethodPost, "/settings", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, user.ID)
+	rr := httptest.NewRecorder()
+	h.HandleAccountSettings(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleAccountSettings POST (user deleted) returned %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+// HandleRegister — duplicate username/email causes CreateUser to fail and returns 500.
+func TestUserHandler_HandleRegister_DuplicateUser(t *testing.T) {
+	h, _ := newTestUserHandler(t)
+
+	body := map[string]string{
+		"username": "dupuser",
+		"email":    "dup@example.com",
+		"password": "SecurePass1!",
+	}
+	data, _ := json.Marshal(body)
+
+	// First registration should succeed.
+	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.HandleRegister(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("first register returned %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	// Second registration with same email should fail at CreateUser.
+	data2, _ := json.Marshal(map[string]string{
+		"username": "dupuser2",
+		"email":    "dup@example.com",
+		"password": "SecurePass1!",
+	})
+	req2 := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(data2))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	h.HandleRegister(rr2, req2)
+	if rr2.Code != http.StatusInternalServerError {
+		t.Errorf("duplicate register returned %d, want %d; body: %s", rr2.Code, http.StatusInternalServerError, rr2.Body.String())
+	}
+}
+
+// HandleRegister — username too long (>30 chars) must return 400.
+func TestUserHandler_HandleRegister_UsernameTooLong(t *testing.T) {
+	h, _ := newTestUserHandler(t)
+
+	body := map[string]string{
+		"username": "this_username_is_way_too_long_x",
+		"email":    "a@b.com",
+		"password": "SecurePass1!",
+	}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.HandleRegister(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleRegister (long username) returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+// HandleVerifyEmail — UpdateUser failure returns 500.
+// A trigger blocks UPDATE on the users table after the user is loaded.
+func TestUserHandler_HandleVerifyEmail_UpdateUserFails(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "verify-user-003",
+		Username:     "verifyuser3",
+		Email:        "verify3@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "pending",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	token, err := h.generateVerificationToken(user.Email)
+	if err != nil {
+		t.Fatalf("generateVerificationToken returned error: %v", err)
+	}
+
+	// Install a BEFORE UPDATE trigger that raises an error.
+	if _, err := db.Exec(`CREATE TRIGGER block_user_update BEFORE UPDATE ON users BEGIN SELECT RAISE(ABORT,'update blocked'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DROP TRIGGER IF EXISTS block_user_update`) })
+
+	req := httptest.NewRequest(http.MethodGet, "/verify-email?token="+token, nil)
+	rr := httptest.NewRecorder()
+	h.HandleVerifyEmail(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleVerifyEmail (UpdateUser fails) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+// HandleResetPassword — UpdateUser failure returns 500.
+func TestUserHandler_HandleResetPassword_UpdateUserFails(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "reset-user-003",
+		Username:     "resetpassuser3",
+		Email:        "resetpass3@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	token, err := h.generatePasswordResetToken(user.Email)
+	if err != nil {
+		t.Fatalf("generatePasswordResetToken returned error: %v", err)
+	}
+
+	// Install a BEFORE UPDATE trigger that raises an error.
+	if _, err := db.Exec(`CREATE TRIGGER block_user_update2 BEFORE UPDATE ON users BEGIN SELECT RAISE(ABORT,'update blocked'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DROP TRIGGER IF EXISTS block_user_update2`) })
+
+	body := map[string]string{"token": token, "new_password": "NewSecurePass1!"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/reset-password", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.HandleResetPassword(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleResetPassword (UpdateUser fails) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+// HandleAccountSettings POST — UpdateUser failure returns 500.
+func TestUserHandler_HandleAccountSettings_POST_UpdateUserFails(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "settings-user-updfail-001",
+		Username:     "settingsupdfail",
+		Email:        "settingsupdfail@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	// Install a BEFORE UPDATE trigger that raises an error.
+	if _, err := db.Exec(`CREATE TRIGGER block_user_update3 BEFORE UPDATE ON users BEGIN SELECT RAISE(ABORT,'update blocked'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DROP TRIGGER IF EXISTS block_user_update3`) })
+
+	updates := map[string]string{"email": "new@example.com"}
+	data, _ := json.Marshal(updates)
+	req := httptest.NewRequest(http.MethodPost, "/settings", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, user.ID)
+	rr := httptest.NewRecorder()
+	h.HandleAccountSettings(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("HandleAccountSettings POST (UpdateUser fails) returned %d, want %d; body: %s",
+			rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+// generateVerificationToken — CreateEmailVerificationToken failure returns error.
+func TestUserHandler_GenerateVerificationToken_TokenCreateFails(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "verify-token-fail-001",
+		Username:     "tokenfailuser",
+		Email:        "tokenfail@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "pending",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	// Rename the token table so CreateEmailVerificationToken fails.
+	if _, err := db.Exec(`ALTER TABLE email_verification_tokens RENAME TO email_verification_tokens_bak`); err != nil {
+		t.Fatalf("rename table: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Exec(`ALTER TABLE email_verification_tokens_bak RENAME TO email_verification_tokens`)
+	})
+
+	_, err := h.generateVerificationToken(user.Email)
+	if err == nil {
+		t.Error("generateVerificationToken with broken token table: expected error, got nil")
+	}
+}
+
+// generatePasswordResetToken — CreatePasswordResetToken failure returns error.
+func TestUserHandler_GeneratePasswordResetToken_TokenCreateFails(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "reset-token-fail-001",
+		Username:     "resettokenfailuser",
+		Email:        "resettokenfail@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	// Rename the token table so CreatePasswordResetToken fails.
+	if _, err := db.Exec(`ALTER TABLE password_reset_tokens RENAME TO password_reset_tokens_bak`); err != nil {
+		t.Fatalf("rename table: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Exec(`ALTER TABLE password_reset_tokens_bak RENAME TO password_reset_tokens`)
+	})
+
+	_, err := h.generatePasswordResetToken(user.Email)
+	if err == nil {
+		t.Error("generatePasswordResetToken with broken token table: expected error, got nil")
+	}
+}
+
+// HandleRequestPasswordReset — known email returns 200 (same message for enumeration safety).
+func TestUserHandler_HandleRequestPasswordReset_KnownEmail(t *testing.T) {
+	h, db := newTestUserHandler(t)
+
+	user := &store.User{
+		ID:           "pwreset-req-user-001",
+		Username:     "pwresetuser",
+		Email:        "pwreset@example.com",
+		PasswordHash: "x",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	body := map[string]string{"email": user.Email}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/forgot-password", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.HandleRequestPasswordReset(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleRequestPasswordReset (known email) returned %d, want %d", rr.Code, http.StatusOK)
+	}
+}

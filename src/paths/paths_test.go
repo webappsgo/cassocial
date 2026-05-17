@@ -417,6 +417,70 @@ func TestResolve_BothPrivilegeLevels(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Resolve — docker branch via "container" env var
+// ---------------------------------------------------------------------------
+
+func TestResolve_DockerBranch_ViaEnvVar(t *testing.T) {
+	// Force isRunningInDocker() to return true via the "container" env var.
+	t.Setenv("container", "docker")
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() in docker mode returned nil")
+	}
+	// Docker paths are fixed values — verify the known ones.
+	if p.Config != "/config" {
+		t.Errorf("Resolve docker Config = %q, want /config", p.Config)
+	}
+	if p.Data != "/data" {
+		t.Errorf("Resolve docker Data = %q, want /data", p.Data)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isRunningInDocker — tini branch (ppid==1, /usr/bin/tini present)
+// We cannot reliably fake ppid==1 in tests, but we exercise the function path
+// by calling it directly and asserting it returns a bool without panicking.
+// ---------------------------------------------------------------------------
+
+func TestIsRunningInDocker_NoPanic(t *testing.T) {
+	// Ensure "container" env is unset so we don't short-circuit.
+	t.Setenv("container", "")
+	// Just call it — result depends on environment; we only need no panic.
+	_ = isRunningInDocker()
+}
+
+// ---------------------------------------------------------------------------
+// isPrivileged — Windows branch (always returns false on Windows; on Linux
+// returns os.Geteuid()==0, which we can observe but not force to the root path
+// in an unprivileged test run)
+// ---------------------------------------------------------------------------
+
+func TestIsPrivileged_NoPanic(t *testing.T) {
+	got := isPrivileged()
+	// On Linux/macOS in CI (non-root) this must be false.
+	// We cannot assert the value since tests may run as root in containers.
+	_ = got
+}
+
+// ---------------------------------------------------------------------------
+// Resolve — non-docker, current GOOS: exercise both privilege levels through
+// the Resolve entry point by calling the appropriate helper directly.
+// ---------------------------------------------------------------------------
+
+func TestResolve_AllFieldsFromHelpers(t *testing.T) {
+	// Make sure "container" env is unset so Resolve takes the GOOS branch.
+	t.Setenv("container", "")
+
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+	if p.Config == "" || p.Data == "" || p.Log == "" {
+		t.Errorf("Resolve() returned empty path(s): Config=%q Data=%q Log=%q", p.Config, p.Data, p.Log)
+	}
+}
+
 func TestWindowsPaths_AllFieldsNonEmpty(t *testing.T) {
 	for _, isRoot := range []bool{true, false} {
 		p := windowsPaths(isRoot)

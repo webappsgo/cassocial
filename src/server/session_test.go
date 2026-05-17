@@ -315,6 +315,41 @@ func TestGetSessionInfo_OtherSession(t *testing.T) {
 	}
 }
 
+// TestCleanupLoop_Fires verifies that the background cleanup goroutine actually executes
+// by setting an extremely short cleanup interval and waiting for it to fire.
+func TestCleanupLoop_Fires(t *testing.T) {
+	sm := NewSessionManager(60)
+	// Override the cleanup interval to 1 ms so the ticker fires immediately.
+	sm.mu.Lock()
+	sm.cleanup = time.Millisecond
+	sm.mu.Unlock()
+
+	// Create an already-expired session.
+	created, err := sm.CreateSession("u-loop", "alice", "user", "127.0.0.1", "")
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	sm.mu.Lock()
+	sm.sessions[created.ID].ExpiresAt = time.Now().Add(-time.Hour)
+	sm.mu.Unlock()
+
+	// Restart the cleanup goroutine with the new short interval.
+	go sm.cleanupLoop()
+
+	// Wait up to 200 ms for the expired session to be removed.
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		sm.mu.RLock()
+		_, still := sm.sessions[created.ID]
+		sm.mu.RUnlock()
+		if !still {
+			return // cleaned up — success
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Error("cleanupLoop did not remove expired session within 200 ms")
+}
+
 func TestGetUserSessionsInfo(t *testing.T) {
 	sm := newTestSessionManager(t)
 	s1, _ := sm.CreateSession("u1", "alice", "user", "127.0.0.1", "")

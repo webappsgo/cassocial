@@ -689,6 +689,105 @@ func TestEnsureDirectories_Error(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Save — error on os.WriteFile (directory is read-only)
+// ---------------------------------------------------------------------------
+
+func TestSave_ReadOnlyDir_ReturnsError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test read-only directory as root")
+	}
+	tmp := t.TempDir()
+	// Create the config dir and make it read-only so WriteFile fails.
+	configDir := filepath.Join(tmp, "roconfig")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.Chmod(configDir, 0555); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	defer os.Chmod(configDir, 0755) //nolint:errcheck
+
+	cfg := &Config{ConfigDir: configDir}
+	if err := cfg.setDefaults(); err != nil {
+		t.Fatalf("setDefaults: %v", err)
+	}
+	if err := cfg.Save(); err == nil {
+		t.Error("Save() to read-only dir should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Load — Save fails during default config creation
+// ---------------------------------------------------------------------------
+
+func TestLoad_SaveFails_ReturnsError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test read-only directory as root")
+	}
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "rocfg")
+	dataDir := filepath.Join(tmp, "data")
+	logDir := filepath.Join(tmp, "logs")
+
+	// Pre-create configDir so ensureDirectories succeeds, then make it read-only
+	// so Save() cannot write server.yml.
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("MkdirAll configDir: %v", err)
+	}
+	// Also create sub-dirs that ensureDirectories would create.
+	for _, sub := range []string{"ssl", "security"} {
+		if err := os.MkdirAll(filepath.Join(configDir, sub), 0755); err != nil {
+			t.Fatalf("MkdirAll sub %s: %v", sub, err)
+		}
+	}
+	for _, sub := range []string{"db", "backup"} {
+		if err := os.MkdirAll(filepath.Join(dataDir, sub), 0755); err != nil {
+			t.Fatalf("MkdirAll data sub %s: %v", sub, err)
+		}
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		t.Fatalf("MkdirAll logDir: %v", err)
+	}
+
+	// Now lock the config dir so no server.yml can be written.
+	if err := os.Chmod(configDir, 0555); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	defer os.Chmod(configDir, 0755) //nolint:errcheck
+
+	_, err := Load(configDir, dataDir, logDir)
+	if err == nil {
+		t.Error("Load() should return error when Save() cannot write server.yml")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Load — Validate fails (env overrides produce invalid config)
+// ---------------------------------------------------------------------------
+
+func TestLoad_ValidateFails_ReturnsError(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "config")
+	dataDir := filepath.Join(tmp, "data")
+	logDir := filepath.Join(tmp, "logs")
+
+	// Clear all env overrides first, then set an invalid port.
+	for _, env := range []string{
+		"CASSOCIAL_ADDRESS", "CASSOCIAL_MODE", "CASSOCIAL_DEBUG",
+		"CASSOCIAL_DB_DRIVER", "CASSOCIAL_DB_HOST", "CASSOCIAL_DB_PORT",
+		"CASSOCIAL_DB_NAME", "CASSOCIAL_DB_USER", "CASSOCIAL_DB_PASSWORD",
+	} {
+		t.Setenv(env, "")
+	}
+	t.Setenv("CASSOCIAL_PORT", "99999") // invalid port — triggers Validate error
+
+	_, err := Load(configDir, dataDir, logDir)
+	if err == nil {
+		t.Error("Load() should return error when Validate fails")
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
 	tmp := t.TempDir()
 	configDir := filepath.Join(tmp, "config")

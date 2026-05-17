@@ -205,6 +205,42 @@ func TestGeoIPMiddleware_BlockedCountry(t *testing.T) {
 	}
 }
 
+// TestGeoIPMiddleware_NotBlockedCountry verifies that a request from a non-blocked country
+// passes through when GeoIP is enabled. The stub Lookup returns "XX", so blocking "US" only
+// exercises the pass-through branch.
+func TestGeoIPMiddleware_NotBlockedCountry(t *testing.T) {
+	dir := t.TempDir()
+	dbDir := filepath.Join(dir, "security", "geoip")
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dbDir, "GeoLite2-Country.mmdb"), []byte("placeholder"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	g := NewGeoIP(dir)
+	// Block "US" only; stub Lookup returns "XX", so the request should pass through.
+	mw := GeoIPMiddleware(g, []string{"US"})
+
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "1.2.3.4:1234"
+	rr := httptest.NewRecorder()
+	mw(next).ServeHTTP(rr, req)
+
+	if !called {
+		t.Error("GeoIPMiddleware should call next handler when country is not in the blocked list")
+	}
+	if rr.Code == http.StatusForbidden {
+		t.Error("GeoIPMiddleware should not return 403 for a non-blocked country")
+	}
+}
+
+
 // TestGetStats_Disabled verifies that GetStats returns correct fields when disabled.
 func TestGetStats_Disabled(t *testing.T) {
 	g := NewGeoIP(t.TempDir())

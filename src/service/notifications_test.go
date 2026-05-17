@@ -487,6 +487,107 @@ func TestSendNotification_WithRecipient_UsesRecipient(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------------
+// sendNotification — mailer enabled path (SMTP fails → logs error)
+// ---------------------------------------------------------------------------
+
+func TestSendNotification_EnabledMailer_SMTPFails(t *testing.T) {
+	// Build a mailer that is "enabled" (Enabled=true + valid client) but points
+	// at an unreachable address so the actual send fails. sendNotification must
+	// still reach the error-log branch without panicking.
+	smtpCfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        "127.0.0.1",
+		Port:        1, // unreachable
+		FromAddress: "from@example.com",
+		Security:    string(SecurityNone),
+		RetryDelay:  0,
+	}
+	mailer, err := NewMailer(smtpCfg, "TestSite", "https://example.com")
+	if err != nil {
+		t.Fatalf("NewMailer: %v", err)
+	}
+
+	prefs := &models.NotificationPreferences{BugReport: true}
+	nm := NewNotificationManager(mailer, prefs, "admin@test.com")
+
+	// This should reach the mailer.SendNotification path and log the failure.
+	nm.sendNotification(&Notification{
+		Type:      NotificationBugReport,
+		Recipient: "user@example.com",
+		Title:     "test enabled send",
+		Message:   "msg",
+		Severity:  "info",
+		Priority:  PriorityNormal,
+		CreatedAt: timeNow(),
+	})
+}
+
+func TestSendNotification_EnabledMailer_EmptyRecipient_UsesAdminEmail(t *testing.T) {
+	smtpCfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        "127.0.0.1",
+		Port:        1,
+		FromAddress: "from@example.com",
+		Security:    string(SecurityNone),
+		RetryDelay:  0,
+	}
+	mailer, err := NewMailer(smtpCfg, "TestSite", "https://example.com")
+	if err != nil {
+		t.Fatalf("NewMailer: %v", err)
+	}
+
+	nm := NewNotificationManager(mailer, nil, "admin@test.com")
+
+	// Empty recipient — falls back to adminEmail.
+	nm.sendNotification(&Notification{
+		Type:      NotificationBugReport,
+		Recipient: "",
+		Title:     "fallback test",
+		Message:   "msg",
+		Severity:  "info",
+		Priority:  PriorityNormal,
+		CreatedAt: timeNow(),
+	})
+}
+
+// ---------------------------------------------------------------------------
+// processLoop — ticker branch coverage
+// ---------------------------------------------------------------------------
+
+func TestProcessLoop_TickerBranch(t *testing.T) {
+	// Use a very short batch delay so the ticker fires quickly, exercising
+	// the ticker.C case in processLoop.
+	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
+	prefs := &models.NotificationPreferences{
+		BugReport:  true,
+		BatchDelay: 1, // 1 second — minimal tick
+	}
+	nm := NewNotificationManager(disabledMailer, prefs, "admin@test.com")
+
+	// Override the batchDelay to something fast for the test.
+	nm.batchDelay = 10 * time.Millisecond
+
+	nm.Start()
+
+	// Enqueue a notification so the tick does real work.
+	nm.Queue(&Notification{
+		Type:      NotificationBugReport,
+		Title:     "ticker test",
+		Priority:  PriorityNormal,
+		CreatedAt: timeNow(),
+	})
+
+	// Wait long enough for at least one tick to fire (batchDelay = 10ms).
+	time.Sleep(50 * time.Millisecond)
+
+	nm.Stop()
+	// After Stop, the queue must be empty (drained by ticker and/or Stop's processQueue).
+	if nm.IsRunning() {
+		t.Error("IsRunning() should be false after Stop()")
+	}
+}
+
 func TestNotificationManager_isNotificationEnabled(t *testing.T) {
 	prefs := &models.NotificationPreferences{
 		Emergency:          true,

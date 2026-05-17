@@ -1,11 +1,21 @@
 package service
 
 import (
+	"fmt"
+	"net"
+	"net/smtp"
 	"strings"
 	"testing"
+	"time"
 
 	models "github.com/casapps/cassocial/src/server/model"
 )
+
+// smtpNewClient wraps smtp.NewClient — the stdlib function that turns a net.Conn
+// into an *smtp.Client — so tests can call it without a direct import clash.
+func smtpNewClient(conn net.Conn, host string) (*smtp.Client, error) {
+	return smtp.NewClient(conn, host)
+}
 
 // ---- NewClient ----
 
@@ -486,6 +496,278 @@ func TestSendWithRetry_ZeroRetries_ReturnsError(t *testing.T) {
 	err := client.SendWithRetry([]string{"to@example.com"}, "Sub", "body", false, 0)
 	if err == nil {
 		t.Error("SendWithRetry(0 retries) should return error on connection failure")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// fakeSMTPServer — minimal SMTP server for testing sendMessage without a real
+// mail relay. It speaks just enough SMTP to let net/smtp.Client walk through
+// EHLO → MAIL FROM → RCPT TO → DATA → (body) → QUIT.
+// ---------------------------------------------------------------------------
+
+// startFakeSMTPServer starts a minimal TCP SMTP server on a random local port.
+// It handles a single connection, then closes. Returns the listening address
+// and a channel that is closed once the connection has been fully handled.
+func startFakeSMTPServer(t *testing.T) (addr string, done <-chan struct{}) {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("startFakeSMTPServer: listen: %v", err)
+	}
+
+	doneCh := make(chan struct{})
+
+	go func() {
+		defer close(doneCh)
+		defer ln.Close()
+
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// SMTP greeting
+		fmt.Fprintf(conn, "220 localhost ESMTP\r\n")
+
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			line := string(buf[:n])
+
+			switch {
+			case strings.HasPrefix(line, "EHLO") || strings.HasPrefix(line, "HELO"):
+				fmt.Fprintf(conn, "250-localhost\r\n250 OK\r\n")
+			case strings.HasPrefix(line, "MAIL FROM"):
+				fmt.Fprintf(conn, "250 OK\r\n")
+			case strings.HasPrefix(line, "RCPT TO"):
+				fmt.Fprintf(conn, "250 OK\r\n")
+			case strings.HasPrefix(line, "DATA"):
+				fmt.Fprintf(conn, "354 Start input\r\n")
+			case line == ".\r\n" || strings.HasSuffix(strings.TrimRight(line, "\r\n"), "\r\n."):
+				fmt.Fprintf(conn, "250 OK: queued\r\n")
+			case strings.HasPrefix(line, "QUIT"):
+				fmt.Fprintf(conn, "221 Bye\r\n")
+				return
+			default:
+				// Accept any other data (message body lines)
+			}
+		}
+	}()
+
+	return ln.Addr().String(), doneCh
+}
+
+// startFakeSMTPServerWithMAILError is like startFakeSMTPServer but rejects MAIL FROM.
+func startFakeSMTPServerWithMAILError(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("startFakeSMTPServerWithMAILError: listen: %v", err)
+	}
+
+	go func() {
+		defer ln.Close()
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		fmt.Fprintf(conn, "220 localhost ESMTP\r\n")
+
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			line := string(buf[:n])
+			switch {
+			case strings.HasPrefix(line, "EHLO") || strings.HasPrefix(line, "HELO"):
+				fmt.Fprintf(conn, "250-localhost\r\n250 OK\r\n")
+			case strings.HasPrefix(line, "MAIL FROM"):
+				fmt.Fprintf(conn, "550 Rejected\r\n")
+			case strings.HasPrefix(line, "QUIT"):
+				fmt.Fprintf(conn, "221 Bye\r\n")
+				return
+			}
+		}
+	}()
+
+	return ln.Addr().String()
+}
+
+// startFakeSMTPServerWithRCPTError rejects RCPT TO.
+func startFakeSMTPServerWithRCPTError(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("startFakeSMTPServerWithRCPTError: listen: %v", err)
+	}
+
+	go func() {
+		defer ln.Close()
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		fmt.Fprintf(conn, "220 localhost ESMTP\r\n")
+
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			line := string(buf[:n])
+			switch {
+			case strings.HasPrefix(line, "EHLO") || strings.HasPrefix(line, "HELO"):
+				fmt.Fprintf(conn, "250-localhost\r\n250 OK\r\n")
+			case strings.HasPrefix(line, "MAIL FROM"):
+				fmt.Fprintf(conn, "250 OK\r\n")
+			case strings.HasPrefix(line, "RCPT TO"):
+				fmt.Fprintf(conn, "550 No such user\r\n")
+			case strings.HasPrefix(line, "QUIT"):
+				fmt.Fprintf(conn, "221 Bye\r\n")
+				return
+			}
+		}
+	}()
+
+	return ln.Addr().String()
+}
+
+// ---------------------------------------------------------------------------
+// sendMessage tests — require a real (fake) SMTP connection
+// ---------------------------------------------------------------------------
+
+// newClientForAddr builds a Client for a fake SMTP server address.
+func newClientForAddr(t *testing.T, addr, security string) *Client {
+	t.Helper()
+	// Parse host and port from addr (e.g., "127.0.0.1:12345")
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("SplitHostPort(%q): %v", addr, err)
+	}
+	var port int
+	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
+		t.Fatalf("parse port %q: %v", portStr, err)
+	}
+	cfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        host,
+		Port:        port,
+		FromAddress: "from@example.com",
+		Security:    security,
+		RetryDelay:  0,
+	}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	return client
+}
+
+func TestSendMessage_Success(t *testing.T) {
+	addr, done := startFakeSMTPServer(t)
+
+	client := newClientForAddr(t, addr, string(SecurityNone))
+	err := client.Send([]string{"to@example.com"}, "Test Subject", "Hello", false)
+
+	// Wait for fake server to finish
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Error("fake SMTP server did not finish in time")
+	}
+
+	if err != nil {
+		t.Errorf("Send() to fake SMTP server returned unexpected error: %v", err)
+	}
+}
+
+func TestSendMessage_MailFromError(t *testing.T) {
+	addr := startFakeSMTPServerWithMAILError(t)
+	time.Sleep(10 * time.Millisecond) // let server start
+
+	client := newClientForAddr(t, addr, string(SecurityNone))
+	// Build a direct connection and call sendMessage directly to exercise the
+	// MAIL FROM error path.
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial fake server: %v", err)
+	}
+	defer conn.Close()
+
+	smtpClient, err := smtpNewClient(conn, client.config.Host)
+	if err != nil {
+		t.Fatalf("smtp.NewClient: %v", err)
+	}
+	defer smtpClient.Quit() //nolint:errcheck
+
+	msg := buildMessage("", "from@example.com", []string{"to@example.com"}, "Sub", "body", false)
+	sendErr := client.sendMessage(smtpClient, []string{"to@example.com"}, msg)
+	if sendErr == nil {
+		t.Error("sendMessage should return error when MAIL FROM is rejected")
+	}
+	if !smtpErrWraps(sendErr, ErrSendFailed) {
+		t.Errorf("sendMessage MAIL FROM error should wrap ErrSendFailed, got: %v", sendErr)
+	}
+}
+
+func TestSendMessage_RcptToError(t *testing.T) {
+	addr := startFakeSMTPServerWithRCPTError(t)
+	time.Sleep(10 * time.Millisecond)
+
+	client := newClientForAddr(t, addr, string(SecurityNone))
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial fake server: %v", err)
+	}
+	defer conn.Close()
+
+	smtpClient, err := smtpNewClient(conn, client.config.Host)
+	if err != nil {
+		t.Fatalf("smtp.NewClient: %v", err)
+	}
+	defer smtpClient.Quit() //nolint:errcheck
+
+	msg := buildMessage("", "from@example.com", []string{"to@example.com"}, "Sub", "body", false)
+	sendErr := client.sendMessage(smtpClient, []string{"to@example.com"}, msg)
+	if sendErr == nil {
+		t.Error("sendMessage should return error when RCPT TO is rejected")
+	}
+	if !smtpErrWraps(sendErr, ErrSendFailed) {
+		t.Errorf("sendMessage RCPT TO error should wrap ErrSendFailed, got: %v", sendErr)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// sendWithPlain — connects through the fake server to reach sendMessage
+// ---------------------------------------------------------------------------
+
+func TestSendWithPlain_Success_None(t *testing.T) {
+	addr, done := startFakeSMTPServer(t)
+
+	client := newClientForAddr(t, addr, string(SecurityNone))
+	msg := buildMessage("", "from@example.com", []string{"to@example.com"}, "Sub", "body", false)
+	err := client.sendWithPlain(addr, []string{"to@example.com"}, msg)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Error("fake SMTP server did not finish in time")
+	}
+
+	if err != nil {
+		t.Errorf("sendWithPlain(NONE) to fake server returned unexpected error: %v", err)
 	}
 }
 

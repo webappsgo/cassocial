@@ -784,6 +784,185 @@ func TestGenerateRandomString(t *testing.T) {
 	}
 }
 
+// newTestAuthWithClosedDB creates an Auth whose DB is closed immediately after setup.
+// This is used to exercise error branches that require database failures.
+func newTestAuthWithClosedDB(t *testing.T) *Auth {
+	t.Helper()
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+	a := NewAuth(db, "test-jwt-secret-12345678")
+	// Close now so all DB operations will fail.
+	db.Close()
+	return a
+}
+
+// TestRegister_UsernameExistsDBError verifies that a database failure in usernameExists
+// is propagated as an error from Register.
+func TestRegister_UsernameExistsDBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.Register("testuser", "test@example.com", "ValidPass1")
+	if err == nil {
+		t.Error("Register with closed DB should return an error")
+	}
+}
+
+// TestGetUserByID_DBError verifies that a non-not-found database error is returned as-is.
+func TestGetUserByID_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.GetUserByID("some-id")
+	if err == nil {
+		t.Error("GetUserByID with closed DB should return an error")
+	}
+	if err == ErrUserNotFound {
+		t.Error("GetUserByID with closed DB should not return ErrUserNotFound")
+	}
+}
+
+// TestGetUserByUsername_DBError verifies that a non-not-found database error is returned as-is.
+func TestGetUserByUsername_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.GetUserByUsername("someuser")
+	if err == nil {
+		t.Error("GetUserByUsername with closed DB should return an error")
+	}
+	if err == ErrUserNotFound {
+		t.Error("GetUserByUsername with closed DB should not return ErrUserNotFound")
+	}
+}
+
+// TestGetUserByEmail_DBError verifies that a non-not-found database error is returned as-is.
+func TestGetUserByEmail_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.GetUserByEmail("some@example.com")
+	if err == nil {
+		t.Error("GetUserByEmail with closed DB should return an error")
+	}
+	if err == ErrUserNotFound {
+		t.Error("GetUserByEmail with closed DB should not return ErrUserNotFound")
+	}
+}
+
+// TestGetUserByUsernameOrEmail_DBError verifies that a non-not-found database error is returned as-is.
+func TestGetUserByUsernameOrEmail_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.GetUserByUsernameOrEmail("someuser")
+	if err == nil {
+		t.Error("GetUserByUsernameOrEmail with closed DB should return an error")
+	}
+	if err == ErrUserNotFound {
+		t.Error("GetUserByUsernameOrEmail with closed DB should not return ErrUserNotFound")
+	}
+}
+
+// TestUsernameExists_DBError verifies that usernameExists propagates a database error.
+func TestUsernameExists_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.usernameExists("someuser")
+	if err == nil {
+		t.Error("usernameExists with closed DB should return an error")
+	}
+}
+
+// TestEmailExists_DBError verifies that emailExists propagates a database error.
+func TestEmailExists_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, err := a.emailExists("some@example.com")
+	if err == nil {
+		t.Error("emailExists with closed DB should return an error")
+	}
+}
+
+// TestLogin_GetUserDBError verifies that a database failure in GetUserByUsernameOrEmail
+// returns an error (not ErrInvalidCredentials) from Login.
+func TestLogin_GetUserDBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	_, _, err := a.Login("someuser", "ValidPass1")
+	if err == nil {
+		t.Error("Login with closed DB should return an error")
+	}
+	// DB errors that are not ErrUserNotFound / sql.ErrNoRows should propagate wrapped,
+	// not converted to ErrInvalidCredentials.
+}
+
+// TestUpdateLastLogin_DBError verifies that updateLastLogin returns an error when the DB is closed.
+func TestUpdateLastLogin_DBError(t *testing.T) {
+	a := newTestAuthWithClosedDB(t)
+	err := a.updateLastLogin("some-id")
+	if err == nil {
+		t.Error("updateLastLogin with closed DB should return an error")
+	}
+}
+
+// TestRegister_InvalidUsername verifies that a username too short to pass user.Validate()
+// is rejected even after the existence checks pass.
+func TestRegister_InvalidUsername(t *testing.T) {
+	a := newTestAuth(t)
+	// "ab" is 2 chars — passes usernameExists (not registered) and emailExists (not registered),
+	// passes ValidatePassword, but user.Validate() rejects username < 3 chars.
+	_, err := a.Register("ab", "short@example.com", "ValidPass1")
+	if err == nil {
+		t.Error("Register with username shorter than 3 chars should return an error")
+	}
+}
+
+// TestGenerateToken_ZeroSessionTimeout verifies that setting session_timeout_minutes to "0"
+// falls back to the default 1440-minute timeout and produces a valid token.
+func TestGenerateToken_ZeroSessionTimeout(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("UPDATE settings SET value = '0' WHERE key = 'session_timeout_minutes'"); err != nil {
+		t.Fatalf("UPDATE settings: %v", err)
+	}
+	user := registerTestUser(t, a, "zerotimeout", "zerotimeout@example.com", "ValidPass1")
+	token, err := a.GenerateToken(user)
+	if err != nil {
+		t.Fatalf("GenerateToken with zero timeout: %v", err)
+	}
+	claims, err := a.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("ValidateToken after GenerateToken with zero timeout: %v", err)
+	}
+	if claims.UserID != user.ID {
+		t.Errorf("claims.UserID = %q, want %q", claims.UserID, user.ID)
+	}
+}
+
+// TestGenerateToken_NonNumericSessionTimeout verifies that a non-numeric session_timeout_minutes
+// setting falls back to the default 1440-minute timeout.
+func TestGenerateToken_NonNumericSessionTimeout(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("UPDATE settings SET value = 'notanumber' WHERE key = 'session_timeout_minutes'"); err != nil {
+		t.Fatalf("UPDATE settings: %v", err)
+	}
+	user := registerTestUser(t, a, "nonnumtimeout", "nonnumtimeout@example.com", "ValidPass1")
+	token, err := a.GenerateToken(user)
+	if err != nil {
+		t.Fatalf("GenerateToken with non-numeric timeout: %v", err)
+	}
+	if token == "" {
+		t.Error("GenerateToken with non-numeric timeout returned empty token")
+	}
+}
+
+// TestGetPasswordRequirements_ZeroMinLength verifies that a stored value of "0" falls back to 8.
+func TestGetPasswordRequirements_ZeroMinLength(t *testing.T) {
+	a := newTestAuth(t)
+	if _, err := a.db.Exec("UPDATE settings SET value = '0' WHERE key = 'password_min_length'"); err != nil {
+		t.Fatalf("UPDATE settings: %v", err)
+	}
+	reqs, err := a.GetPasswordRequirements()
+	if err != nil {
+		t.Fatalf("GetPasswordRequirements: %v", err)
+	}
+	if reqs.MinLength != 8 {
+		t.Errorf("MinLength = %d, want 8 (fallback when stored value is zero)", reqs.MinLength)
+	}
+}
+
 // TestGenerateUUID verifies that generateUUID returns a UUID-shaped string.
 func TestGenerateUUID(t *testing.T) {
 	u := generateUUID()

@@ -538,3 +538,134 @@ func TestGenerateShortCode_Uniqueness(t *testing.T) {
 		seen[code] = true
 	}
 }
+
+// ---- HandleShortlinkAnalytics ----
+
+func TestHandleShortlinkAnalytics_Unauthenticated(t *testing.T) {
+	h, _, _ := newTestShortlinkHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/analytics?code=abc", nil)
+	rr := httptest.NewRecorder()
+	h.HandleShortlinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("HandleShortlinkAnalytics unauthenticated returned %d, want %d; body: %s",
+			rr.Code, http.StatusUnauthorized, rr.Body.String())
+	}
+}
+
+func TestHandleShortlinkAnalytics_MissingCode(t *testing.T) {
+	h, _, userID := newTestShortlinkHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/analytics", nil)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.HandleShortlinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleShortlinkAnalytics missing code returned %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestHandleShortlinkAnalytics_NotFound(t *testing.T) {
+	h, _, userID := newTestShortlinkHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/analytics?code=nosuchcode", nil)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.HandleShortlinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("HandleShortlinkAnalytics not found returned %d, want %d; body: %s",
+			rr.Code, http.StatusNotFound, rr.Body.String())
+	}
+}
+
+func TestHandleShortlinkAnalytics_Forbidden(t *testing.T) {
+	h, db, owner := newTestShortlinkHandler(t)
+	otherUser := createTestUser(t, db, "analyticsother", "analyticsother@example.com")
+
+	rr := postShortlinkCreate(t, h, owner, map[string]interface{}{
+		"url":         "https://example.com",
+		"custom_code": "analyticscode",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create shortlink returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/analytics?code=analyticscode", nil)
+	req = withUserID(req, otherUser)
+	rr = httptest.NewRecorder()
+	h.HandleShortlinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("HandleShortlinkAnalytics foreign user returned %d, want %d; body: %s",
+			rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestHandleShortlinkAnalytics_Success(t *testing.T) {
+	h, _, userID := newTestShortlinkHandler(t)
+
+	rr := postShortlinkCreate(t, h, userID, map[string]interface{}{
+		"url":         "https://example.com",
+		"custom_code": "myanalytics",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create shortlink returned %d; body: %s", rr.Code, rr.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/analytics?code=myanalytics", nil)
+	req = withUserID(req, userID)
+	rr = httptest.NewRecorder()
+	h.HandleShortlinkAnalytics(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("HandleShortlinkAnalytics success returned %d, want %d; body: %s",
+			rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["code"] != "myanalytics" {
+		t.Errorf("analytics code = %v, want myanalytics", resp["code"])
+	}
+	if _, ok := resp["total_clicks"]; !ok {
+		t.Error("analytics response missing total_clicks")
+	}
+}
+
+// ---- HandleShortlinkQR ----
+
+func TestHandleShortlinkQR_MissingCode(t *testing.T) {
+	h, _, _ := newTestShortlinkHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/qr", nil)
+	rr := httptest.NewRecorder()
+	h.HandleShortlinkQR(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("HandleShortlinkQR missing code returned %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestHandleShortlinkQR_Success(t *testing.T) {
+	h, _, _ := newTestShortlinkHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shortlinks/qr?code=someqrcode", nil)
+	rr := httptest.NewRecorder()
+	h.HandleShortlinkQR(rr, req)
+
+	if rr.Code != http.StatusTemporaryRedirect {
+		t.Errorf("HandleShortlinkQR returned %d, want %d; body: %s",
+			rr.Code, http.StatusTemporaryRedirect, rr.Body.String())
+	}
+	loc := rr.Header().Get("Location")
+	if loc == "" {
+		t.Error("HandleShortlinkQR did not set Location header")
+	}
+}

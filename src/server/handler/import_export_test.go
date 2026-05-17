@@ -365,3 +365,86 @@ func TestExportVCard(t *testing.T) {
 		t.Error("exportVCard output missing VERSION:3.0")
 	}
 }
+
+// TestGenerateGraphiQLHTML verifies the generated HTML is a complete document
+// and embeds the supplied theme value.
+func TestGenerateGraphiQLHTML(t *testing.T) {
+	tests := []struct {
+		theme string
+	}{
+		{"dark"},
+		{"light"},
+		{""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run("theme="+tt.theme, func(t *testing.T) {
+			html := generateGraphiQLHTML(tt.theme)
+
+			if !strings.Contains(html, "<!DOCTYPE html>") {
+				t.Error("generateGraphiQLHTML: missing DOCTYPE")
+			}
+			if !strings.Contains(html, "</html>") {
+				t.Error("generateGraphiQLHTML: missing closing html tag")
+			}
+			if !strings.Contains(html, "GraphiQL") {
+				t.Error("generateGraphiQLHTML: missing GraphiQL reference")
+			}
+			if !strings.Contains(html, "/graphql") {
+				t.Error("generateGraphiQLHTML: missing /graphql endpoint reference")
+			}
+			if !strings.Contains(html, tt.theme) && tt.theme != "" {
+				t.Errorf("generateGraphiQLHTML: theme %q not embedded in output", tt.theme)
+			}
+		})
+	}
+}
+
+// TestGetThemePreference verifies theme resolution from query param and cookie.
+func TestGetThemePreference(t *testing.T) {
+	t.Run("query param dark", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/graphql?theme=dark", nil)
+		if got := getThemePreference(req); got != "dark" {
+			t.Errorf("got %q, want dark", got)
+		}
+	})
+
+	t.Run("query param light", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/graphql?theme=light", nil)
+		if got := getThemePreference(req); got != "light" {
+			t.Errorf("got %q, want light", got)
+		}
+	})
+
+	t.Run("invalid query param falls through to cookie", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/graphql?theme=blue", nil)
+		req.AddCookie(&http.Cookie{Name: "theme", Value: "light"})
+		if got := getThemePreference(req); got != "light" {
+			t.Errorf("got %q, want light", got)
+		}
+	})
+
+	t.Run("invalid query param invalid cookie returns dark default", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/graphql?theme=invalid", nil)
+		req.AddCookie(&http.Cookie{Name: "theme", Value: "custom"})
+		if got := getThemePreference(req); got != "dark" {
+			t.Errorf("got %q, want dark", got)
+		}
+	})
+
+	t.Run("no param no cookie returns dark default", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
+		if got := getThemePreference(req); got != "dark" {
+			t.Errorf("got %q, want dark", got)
+		}
+	})
+
+	t.Run("cookie dark no query param", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
+		req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
+		if got := getThemePreference(req); got != "dark" {
+			t.Errorf("got %q, want dark", got)
+		}
+	})
+}

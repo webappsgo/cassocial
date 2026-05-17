@@ -317,3 +317,490 @@ func TestGenerateQRCode_Valid(t *testing.T) {
 		t.Errorf("GenerateQRCode returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
 	}
 }
+
+// ---------------------------------------------------------------------------
+// ListProfiles – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestListProfiles_IsolatedByUser(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	ownerID := createTestUser(t, db, "listowner", "listowner@example.com")
+	otherID := createTestUser(t, db, "listother", "listother@example.com")
+	createTestProfile(t, h, ownerID, "owner-slug")
+
+	// otherID should see zero profiles even though ownerID has one.
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles", nil)
+	req = withUserID(req, otherID)
+	rr := httptest.NewRecorder()
+	h.ListProfiles(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("ListProfiles returned %d, want %d", rr.Code, http.StatusOK)
+	}
+	var profiles []interface{}
+	json.NewDecoder(rr.Body).Decode(&profiles)
+	if len(profiles) != 0 {
+		t.Errorf("expected 0 profiles for other user, got %d", len(profiles))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CreateProfile – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestCreateProfile_MaxProfilesReached(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "maxprofuser", "maxprof@example.com")
+
+	// Set max_profiles_per_user to 1.
+	db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('max_profiles_per_user', '1')")
+
+	createTestProfile(t, h, userID, "firstslug")
+
+	body := map[string]interface{}{"slug": "secondslug", "display_name": "Second"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.CreateProfile(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("CreateProfile over max returned %d, want %d; body: %s", rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestCreateProfile_ValidationFailure(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "valuser", "val@example.com")
+
+	// Slug with invalid characters triggers Validate().
+	body := map[string]interface{}{"slug": "bad slug!", "display_name": "Bad"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.CreateProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("CreateProfile with invalid slug returned %d, want %d; body: %s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// UpdateProfile – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestUpdateProfile_NoProfileID(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "updnoid", "updnoid@example.com")
+
+	data, _ := json.Marshal(map[string]interface{}{"display_name": "x"})
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/", bytes.NewReader(data))
+	// No SetPathValue → path value is empty string.
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("UpdateProfile with empty profile ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestUpdateProfile_ProfileNotFound(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "updnotfound", "updnotfound@example.com")
+
+	data, _ := json.Marshal(map[string]interface{}{"display_name": "x"})
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/ghost", bytes.NewReader(data))
+	req.SetPathValue("id", "ghost-id")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("UpdateProfile with nonexistent ID returned %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestUpdateProfile_WrongUser(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	ownerID := createTestUser(t, db, "updowner", "updowner@example.com")
+	otherID := createTestUser(t, db, "updother", "updother@example.com")
+	profileID := createTestProfile(t, h, ownerID, "updowned")
+
+	data, _ := json.Marshal(map[string]interface{}{"display_name": "Hacked"})
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+profileID, bytes.NewReader(data))
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, otherID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("UpdateProfile by wrong user returned %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestUpdateProfile_InvalidBody(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "updbadjson", "updbadjson@example.com")
+	profileID := createTestProfile(t, h, userID, "updbadslug")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+profileID, bytes.NewBufferString("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("UpdateProfile with bad JSON returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestUpdateProfile_ValidationFailure(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "updvaluser", "updval@example.com")
+	profileID := createTestProfile(t, h, userID, "updvalslug")
+
+	// bio over 500 chars triggers Validate().
+	longBio := make([]byte, 501)
+	for i := range longBio {
+		longBio[i] = 'x'
+	}
+	body := map[string]interface{}{"bio": string(longBio)}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+profileID, bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("UpdateProfile with invalid bio returned %d, want %d; body: %s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestUpdateProfile_AllOptionalFields(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "updallfields", "updallfields@example.com")
+	profileID := createTestProfile(t, h, userID, "updallfslug")
+
+	trueVal := true
+	falseVal := false
+	body := map[string]interface{}{
+		"avatar_url":          "https://example.com/avatar.png",
+		"header_image_url":    "https://example.com/header.png",
+		"show_usernames":      &trueVal,
+		"is_public":           &falseVal,
+		"password_protected":  &trueVal,
+		"protection_password": "secret",
+		"analytics_enabled":   &falseVal,
+		"qr_code_enabled":     &falseVal,
+		"meta_title":          "Meta",
+		"meta_description":    "Desc",
+		"og_image_url":        "https://example.com/og.png",
+		"custom_css":          "body { color: red; }",
+	}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+profileID, bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("UpdateProfile all fields returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DeleteProfile – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestDeleteProfile_NoProfileID(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "delnoid", "delnoid@example.com")
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/profiles/", nil)
+	// No SetPathValue → empty path value.
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DeleteProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("DeleteProfile with empty profile ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestDeleteProfile_NotFound(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "delnotfound", "delnotfound@example.com")
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/profiles/ghost", nil)
+	req.SetPathValue("id", "ghost-id")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DeleteProfile(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("DeleteProfile with nonexistent ID returned %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DuplicateProfile – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestDuplicateProfile_NoAuth(t *testing.T) {
+	h, _ := newTestProfileHandlers(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/someid/duplicate", nil)
+	req.SetPathValue("id", "someid")
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("DuplicateProfile without auth returned %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestDuplicateProfile_NoProfileID(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "dupnoid", "dupnoid@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles//duplicate", nil)
+	// No SetPathValue → empty path value.
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("DuplicateProfile with empty profile ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestDuplicateProfile_NotFound(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "dupnotfound", "dupnf@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ghost/duplicate", nil)
+	req.SetPathValue("id", "ghost-id")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("DuplicateProfile with nonexistent ID returned %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestDuplicateProfile_WrongUser(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	ownerID := createTestUser(t, db, "dupowner", "dupowner@example.com")
+	otherID := createTestUser(t, db, "dupother", "dupother@example.com")
+	profileID := createTestProfile(t, h, ownerID, "dupownedslug")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/duplicate", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, otherID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("DuplicateProfile by wrong user returned %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestDuplicateProfile_MaxProfilesReached(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "dupmaxuser", "dupmax@example.com")
+
+	db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('max_profiles_per_user', '1')")
+
+	profileID := createTestProfile(t, h, userID, "dupmaxslug")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/duplicate", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("DuplicateProfile over max returned %d, want %d; body: %s", rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+}
+
+func TestDuplicateProfile_SlugCollision(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "dupslugcoll", "dupslugcoll@example.com")
+
+	db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('max_profiles_per_user', '10')")
+
+	profileID := createTestProfile(t, h, userID, "collslug")
+	// Pre-create the first -copy slug so the handler must try -copy-1.
+	createTestProfile(t, h, userID, "collslug-copy")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/duplicate", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Errorf("DuplicateProfile slug collision returned %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	slug, _ := resp["slug"].(string)
+	if slug != "collslug-copy-1" {
+		t.Errorf("expected slug 'collslug-copy-1', got %q", slug)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GenerateQRCode – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestGenerateQRCode_NoAuth(t *testing.T) {
+	h, _ := newTestProfileHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles/someid/qr", nil)
+	req.SetPathValue("id", "someid")
+	rr := httptest.NewRecorder()
+	h.GenerateQRCode(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("GenerateQRCode without auth returned %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestGenerateQRCode_NoProfileID(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "qrnoid", "qrnoid@example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles//qr", nil)
+	// No SetPathValue → empty path value.
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.GenerateQRCode(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("GenerateQRCode with empty profile ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestGenerateQRCode_NotFound(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "qrnotfound", "qrnf@example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles/ghost/qr", nil)
+	req.SetPathValue("id", "ghost-id")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.GenerateQRCode(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("GenerateQRCode with nonexistent ID returned %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestGenerateQRCode_WrongUser(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	ownerID := createTestUser(t, db, "qrowner", "qrowner@example.com")
+	otherID := createTestUser(t, db, "qrother", "qrother@example.com")
+	profileID := createTestProfile(t, h, ownerID, "qrownedslug")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles/"+profileID+"/qr", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, otherID)
+	rr := httptest.NewRecorder()
+	h.GenerateQRCode(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("GenerateQRCode by wrong user returned %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// VerifyDomain – full coverage (was 0%)
+// ---------------------------------------------------------------------------
+
+func TestVerifyDomain_NoAuth(t *testing.T) {
+	h, _ := newTestProfileHandlers(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/someid/verify-domain", nil)
+	req.SetPathValue("id", "someid")
+	rr := httptest.NewRecorder()
+	h.VerifyDomain(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("VerifyDomain without auth returned %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestVerifyDomain_NoProfileID(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "vdnoid", "vdnoid@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles//verify-domain", nil)
+	// No SetPathValue → empty path value.
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.VerifyDomain(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("VerifyDomain with empty profile ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestVerifyDomain_NotFound(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "vdnotfound", "vdnf@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/ghost/verify-domain", nil)
+	req.SetPathValue("id", "ghost-id")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.VerifyDomain(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("VerifyDomain with nonexistent ID returned %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestVerifyDomain_WrongUser(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	ownerID := createTestUser(t, db, "vdowner", "vdowner@example.com")
+	otherID := createTestUser(t, db, "vdother", "vdother@example.com")
+	profileID := createTestProfile(t, h, ownerID, "vdownedslug")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/verify-domain", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, otherID)
+	rr := httptest.NewRecorder()
+	h.VerifyDomain(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("VerifyDomain by wrong user returned %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestVerifyDomain_Valid(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "vdvalid", "vdvalid@example.com")
+	profileID := createTestProfile(t, h, userID, "vdvalidslug")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/verify-domain", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.VerifyDomain(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("VerifyDomain valid returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
