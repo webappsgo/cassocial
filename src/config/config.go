@@ -77,6 +77,13 @@ type CassocialConfig struct {
 	MaxLinksPerProfile int `yaml:"max_links_per_profile"`
 }
 
+// getEUID is the function used to obtain the effective UID. It defaults to
+// os.Geteuid() and can be overridden in tests to simulate non-root environments.
+var getEUID = os.Geteuid
+
+// writeFileFn is used by Save to write the config file. Overridable in tests.
+var writeFileFn = os.WriteFile
+
 // Load loads configuration from file, environment variables, and CLI flags
 func Load(configDir, dataDir, logDir string) (*Config, error) {
 	cfg := &Config{}
@@ -262,7 +269,7 @@ func (cfg *Config) Save() error {
 	}
 
 	configFile := filepath.Join(cfg.ConfigDir, "server.yml")
-	if err := os.WriteFile(configFile, data, 0644); err != nil {
+	if err := writeFileFn(configFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
@@ -285,7 +292,7 @@ func determineConfigDir(flagValue string) string {
 	}
 
 	// System or user install
-	if os.Geteuid() == 0 {
+	if getEUID() == 0 {
 		return "/etc/casapps/cassocial"
 	}
 
@@ -309,7 +316,7 @@ func determineDataDir(flagValue string) string {
 	}
 
 	// System or user install
-	if os.Geteuid() == 0 {
+	if getEUID() == 0 {
 		return "/var/lib/casapps/cassocial"
 	}
 
@@ -333,7 +340,7 @@ func determineLogDir(flagValue string) string {
 	}
 
 	// System or user install
-	if os.Geteuid() == 0 {
+	if getEUID() == 0 {
 		return "/var/log/casapps/cassocial"
 	}
 
@@ -357,7 +364,7 @@ func DeterminePIDFile(flagValue string) string {
 	}
 
 	// System or user install
-	if os.Geteuid() == 0 {
+	if getEUID() == 0 {
 		return "/var/run/casapps/cassocial.pid"
 	}
 

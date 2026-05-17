@@ -11,6 +11,18 @@ const (
 	projectOrg  = "casapps"
 )
 
+// statFn is used to check for /.dockerenv. Overridable in tests.
+var statFn = os.Stat
+
+// getGOOS returns the current OS. Overridable in tests to simulate other platforms.
+var getGOOS = func() string { return runtime.GOOS }
+
+// getEUID returns the effective UID. Overridable in tests to simulate non-root.
+var getEUID = os.Geteuid
+
+// getPpid returns the parent process ID. Overridable in tests.
+var getPpid = os.Getppid
+
 // Paths holds all application paths
 type Paths struct {
 	Config string
@@ -32,7 +44,7 @@ func Resolve() *Paths {
 		return dockerPaths()
 	}
 
-	switch runtime.GOOS {
+	switch getGOOS() {
 	case "linux":
 		return linuxPaths(isRoot)
 	case "darwin":
@@ -48,18 +60,18 @@ func Resolve() *Paths {
 
 // isPrivileged checks if running with elevated privileges
 func isPrivileged() bool {
-	if runtime.GOOS == "windows" {
+	if getGOOS() == "windows" {
 		// On Windows, check if running as Administrator
 		// For now, assume non-privileged
 		return false
 	}
-	return os.Geteuid() == 0
+	return getEUID() == 0
 }
 
 // isRunningInDocker checks if running inside a Docker container
 func isRunningInDocker() bool {
 	// Check for .dockerenv file
-	if _, err := os.Stat("/.dockerenv"); err == nil {
+	if _, err := statFn("/.dockerenv"); err == nil {
 		return true
 	}
 
@@ -69,8 +81,8 @@ func isRunningInDocker() bool {
 	}
 
 	// Check if running under tini or other container init
-	if os.Getppid() == 1 {
-		if _, err := os.Stat("/usr/bin/tini"); err == nil {
+	if getPpid() == 1 {
+		if _, err := statFn("/usr/bin/tini"); err == nil {
 			return true
 		}
 	}

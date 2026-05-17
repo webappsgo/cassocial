@@ -64,7 +64,8 @@ var (
 
 // Client represents an SMTP client
 type Client struct {
-	config *models.SMTPConfig
+	config    *models.SMTPConfig
+	tlsConfig *tls.Config // optional override; nil uses the default per-connection config
 }
 
 // NewClient creates a new SMTP client
@@ -115,9 +116,12 @@ func (c *Client) TestConnection() error {
 // testTLSConnection tests SSL/TLS connection (port 465)
 func (c *Client) testTLSConnection(addr string) error {
 	// Create TLS configuration
-	tlsConfig := &tls.Config{
-		ServerName: c.config.Host,
-		MinVersion: tls.VersionTLS12,
+	tlsConfig := c.tlsConfig
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{
+			ServerName: c.config.Host,
+			MinVersion: tls.VersionTLS12,
+		}
 	}
 
 	// Connect with TLS
@@ -163,12 +167,15 @@ func (c *Client) testPlainConnection(addr string) error {
 
 	// Use STARTTLS if required
 	if SecurityType(c.config.Security) == SecuritySTARTTLS {
-		tlsConfig := &tls.Config{
-			ServerName: c.config.Host,
-			MinVersion: tls.VersionTLS12,
+		startTLSConfig := c.tlsConfig
+		if startTLSConfig == nil {
+			startTLSConfig = &tls.Config{
+				ServerName: c.config.Host,
+				MinVersion: tls.VersionTLS12,
+			}
 		}
 
-		if err := client.StartTLS(tlsConfig); err != nil {
+		if err := client.StartTLS(startTLSConfig); err != nil {
 			return fmt.Errorf("%w: STARTTLS failed: %v", ErrConnectionFailed, err)
 		}
 	}
@@ -209,9 +216,12 @@ func (c *Client) Send(to []string, subject, body string, isHTML bool) error {
 // sendWithTLS sends email using SSL/TLS (port 465)
 func (c *Client) sendWithTLS(addr string, to []string, message []byte) error {
 	// Create TLS configuration
-	tlsConfig := &tls.Config{
-		ServerName: c.config.Host,
-		MinVersion: tls.VersionTLS12,
+	tlsConfig := c.tlsConfig
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{
+			ServerName: c.config.Host,
+			MinVersion: tls.VersionTLS12,
+		}
 	}
 
 	// Connect with TLS
@@ -258,12 +268,15 @@ func (c *Client) sendWithPlain(addr string, to []string, message []byte) error {
 
 	// Use STARTTLS if required
 	if SecurityType(c.config.Security) == SecuritySTARTTLS {
-		tlsConfig := &tls.Config{
-			ServerName: c.config.Host,
-			MinVersion: tls.VersionTLS12,
+		startTLSConfig := c.tlsConfig
+		if startTLSConfig == nil {
+			startTLSConfig = &tls.Config{
+				ServerName: c.config.Host,
+				MinVersion: tls.VersionTLS12,
+			}
 		}
 
-		if err := client.StartTLS(tlsConfig); err != nil {
+		if err := client.StartTLS(startTLSConfig); err != nil {
 			return fmt.Errorf("%w: STARTTLS failed: %v", ErrSendFailed, err)
 		}
 	}

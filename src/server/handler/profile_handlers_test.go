@@ -804,3 +804,207 @@ func TestVerifyDomain_Valid(t *testing.T) {
 		t.Errorf("VerifyDomain valid returned %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
 	}
 }
+
+// ---------------------------------------------------------------------------
+// GetProfile – missing no-auth and no-ID paths
+// ---------------------------------------------------------------------------
+
+func TestGetProfile_NoAuth(t *testing.T) {
+	h, _ := newTestProfileHandlers(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles/someid", nil)
+	req.SetPathValue("id", "someid")
+	rr := httptest.NewRecorder()
+	h.GetProfile(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("GetProfile without auth returned %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestGetProfile_NoProfileID(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "getnoid", "getnoid@example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles/", nil)
+	// No SetPathValue → empty path value.
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.GetProfile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("GetProfile with empty profile ID returned %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CreateProfile – max_profiles default (when setting row missing)
+// ---------------------------------------------------------------------------
+
+func TestCreateProfile_MaxProfilesDefault(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "defmaxuser", "defmax@example.com")
+
+	// Remove max_profiles_per_user so the handler falls back to the default of 5.
+	db.Exec("DELETE FROM settings WHERE key = 'max_profiles_per_user'")
+
+	// Creating one profile should still succeed with the default limit of 5.
+	body := map[string]interface{}{"slug": "defmaxslug", "display_name": "Default"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.CreateProfile(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Errorf("CreateProfile with no max setting returned %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DuplicateProfile – max_profiles default (when setting row missing)
+// ---------------------------------------------------------------------------
+
+func TestDuplicateProfile_MaxProfilesDefault(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "dupdefmax", "dupdefmax@example.com")
+
+	// Remove the setting so the handler uses the coded default of 5.
+	db.Exec("DELETE FROM settings WHERE key = 'max_profiles_per_user'")
+
+	profileID := createTestProfile(t, h, userID, "dupdefmaxslug")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/duplicate", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	// Should succeed because current count (1) < default max (5).
+	if rr.Code != http.StatusCreated {
+		t.Errorf("DuplicateProfile with no max setting returned %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ListProfiles – DB error path
+// ---------------------------------------------------------------------------
+
+func TestListProfiles_DBError(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "listerr", "listerr@example.com")
+
+	// Close the DB to force a query error.
+	db.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles", nil)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.ListProfiles(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("ListProfiles with closed DB returned %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// UpdateProfile – DB exec error path (trigger forces UPDATE to fail)
+// ---------------------------------------------------------------------------
+
+func TestUpdateProfile_DBError(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "upddberr", "upddberr@example.com")
+	profileID := createTestProfile(t, h, userID, "upddberrslug")
+
+	// Install a BEFORE UPDATE trigger that always raises an error.
+	db.Exec(`CREATE TRIGGER block_profile_update BEFORE UPDATE ON profiles
+		BEGIN SELECT RAISE(ABORT,'update blocked by test trigger'); END`)
+
+	data, _ := json.Marshal(map[string]interface{}{"display_name": "New Name"})
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+profileID, bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.UpdateProfile(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("UpdateProfile with blocked exec returned %d, want %d; body: %s", rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DeleteProfile – DB exec error path (trigger forces DELETE to fail)
+// ---------------------------------------------------------------------------
+
+func TestDeleteProfile_DBError(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "deldberr", "deldberr@example.com")
+	profileID := createTestProfile(t, h, userID, "deldberrslug")
+
+	// Install a BEFORE DELETE trigger that always raises an error.
+	db.Exec(`CREATE TRIGGER block_profile_delete BEFORE DELETE ON profiles
+		BEGIN SELECT RAISE(ABORT,'delete blocked by test trigger'); END`)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/profiles/"+profileID, nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DeleteProfile(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("DeleteProfile with blocked exec returned %d, want %d; body: %s", rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DuplicateProfile – DB exec error path (trigger forces INSERT to fail)
+// ---------------------------------------------------------------------------
+
+func TestDuplicateProfile_DBError(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "dupdberr", "dupdberr@example.com")
+	profileID := createTestProfile(t, h, userID, "dupdberrslug")
+
+	// Install a BEFORE INSERT trigger that always raises an error.
+	// We first need to remove the trigger after the initial profile is created.
+	// The createTestProfile helper already ran its INSERT so we add it now.
+	db.Exec(`CREATE TRIGGER block_profile_insert BEFORE INSERT ON profiles
+		BEGIN SELECT RAISE(ABORT,'insert blocked by test trigger'); END`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/duplicate", nil)
+	req.SetPathValue("id", profileID)
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.DuplicateProfile(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("DuplicateProfile with blocked exec returned %d, want %d; body: %s", rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CreateProfile – DB exec error path (trigger forces INSERT to fail)
+// ---------------------------------------------------------------------------
+
+func TestCreateProfile_DBError(t *testing.T) {
+	h, db := newTestProfileHandlers(t)
+	userID := createTestUser(t, db, "createdbuser", "createdb@example.com")
+
+	// Install a BEFORE INSERT trigger that always raises an error.
+	db.Exec(`CREATE TRIGGER block_new_profile_insert BEFORE INSERT ON profiles
+		BEGIN SELECT RAISE(ABORT,'insert blocked by test trigger'); END`)
+
+	body := map[string]interface{}{"slug": "dbfailslug", "display_name": "DB Fail"}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUserID(req, userID)
+	rr := httptest.NewRecorder()
+	h.CreateProfile(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("CreateProfile with blocked exec returned %d, want %d; body: %s", rr.Code, http.StatusInternalServerError, rr.Body.String())
+	}
+}

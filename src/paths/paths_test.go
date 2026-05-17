@@ -501,3 +501,174 @@ func TestWindowsPaths_AllFieldsNonEmpty(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Override helpers — restore original values after each test
+// ---------------------------------------------------------------------------
+
+func withGOOS(t *testing.T, goos string) {
+	t.Helper()
+	orig := getGOOS
+	getGOOS = func() string { return goos }
+	t.Cleanup(func() { getGOOS = orig })
+}
+
+func withNonDockerStat(t *testing.T) {
+	t.Helper()
+	orig := statFn
+	// Make /.dockerenv appear to not exist
+	statFn = func(name string) (os.FileInfo, error) {
+		if name == "/.dockerenv" {
+			return nil, os.ErrNotExist
+		}
+		return os.Stat(name)
+	}
+	t.Cleanup(func() { statFn = orig })
+}
+
+func withNonRootEUID(t *testing.T) {
+	t.Helper()
+	orig := getEUID
+	getEUID = func() int { return 1000 }
+	t.Cleanup(func() { getEUID = orig })
+}
+
+func withRootEUID(t *testing.T) {
+	t.Helper()
+	orig := getEUID
+	getEUID = func() int { return 0 }
+	t.Cleanup(func() { getEUID = orig })
+}
+
+// ---------------------------------------------------------------------------
+// Resolve — exercise GOOS switch cases via overrides
+// ---------------------------------------------------------------------------
+
+func TestResolve_Linux_AsRoot(t *testing.T) {
+	withNonDockerStat(t)
+	withGOOS(t, "linux")
+	withRootEUID(t)
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+}
+
+func TestResolve_Linux_NonRoot(t *testing.T) {
+	withNonDockerStat(t)
+	withGOOS(t, "linux")
+	withNonRootEUID(t)
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+}
+
+func TestResolve_Darwin(t *testing.T) {
+	withNonDockerStat(t)
+	withGOOS(t, "darwin")
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+}
+
+func TestResolve_FreeBSD(t *testing.T) {
+	withNonDockerStat(t)
+	withGOOS(t, "freebsd")
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+}
+
+func TestResolve_Windows(t *testing.T) {
+	withNonDockerStat(t)
+	withGOOS(t, "windows")
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+}
+
+func TestResolve_DefaultGOOS(t *testing.T) {
+	withNonDockerStat(t)
+	withGOOS(t, "plan9") // unknown OS → default branch
+	p := Resolve()
+	if p == nil {
+		t.Fatal("Resolve() returned nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isPrivileged — Windows branch
+// ---------------------------------------------------------------------------
+
+func TestIsPrivileged_Windows_AlwaysFalse(t *testing.T) {
+	withGOOS(t, "windows")
+	got := isPrivileged()
+	if got {
+		t.Error("isPrivileged() on windows should always return false")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isRunningInDocker — container env and tini/ppid branches
+// ---------------------------------------------------------------------------
+
+func TestIsRunningInDocker_ContainerEnv(t *testing.T) {
+	withNonDockerStat(t) // make /.dockerenv check fail
+	t.Setenv("container", "docker")
+	got := isRunningInDocker()
+	if !got {
+		t.Error("isRunningInDocker() should return true when 'container' env var is set")
+	}
+}
+
+func TestIsRunningInDocker_ReturnsFalse_WhenNoIndicators(t *testing.T) {
+	withNonDockerStat(t)
+	t.Setenv("container", "")
+	// ppid is not 1 in test processes; function returns false via tini branch
+	got := isRunningInDocker()
+	// May be true if /usr/bin/tini exists and ppid==1; just check no panic
+	_ = got
+}
+
+func TestIsRunningInDocker_FalseWhenNoDockerEnv(t *testing.T) {
+	withNonDockerStat(t)
+	t.Setenv("container", "")
+	// As long as the process's ppid is not 1 (which it isn't in normal test runs),
+	// this returns false — verifying the return false path is reachable.
+	if os.Getppid() != 1 {
+		got := isRunningInDocker()
+		if got {
+			t.Error("isRunningInDocker() should return false when no docker indicators present")
+		}
+	}
+}
+
+func TestIsRunningInDocker_TiniPresent_Ppid1(t *testing.T) {
+	// Simulate ppid==1 and /usr/bin/tini present (container init scenario).
+	origStat := statFn
+	origPpid := getPpid
+	statFn = func(name string) (os.FileInfo, error) {
+		if name == "/.dockerenv" {
+			return nil, os.ErrNotExist
+		}
+		if name == "/usr/bin/tini" {
+			return nil, nil // pretend tini exists
+		}
+		return os.Stat(name)
+	}
+	getPpid = func() int { return 1 }
+	t.Cleanup(func() {
+		statFn = origStat
+		getPpid = origPpid
+	})
+	t.Setenv("container", "")
+
+	got := isRunningInDocker()
+	if !got {
+		t.Error("isRunningInDocker() should return true when ppid==1 and tini is present")
+	}
+}

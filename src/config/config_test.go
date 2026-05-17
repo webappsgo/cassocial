@@ -497,6 +497,83 @@ func TestDeterminePIDFile_Fallback(t *testing.T) {
 	}
 }
 
+// ---- non-root homeDir fallback paths ----
+
+// withNonRootEUID temporarily overrides getEUID to return 1000 (non-root) so
+// the homeDir branch in the determine* functions is reachable in tests.
+func withNonRootEUID(t *testing.T) {
+	t.Helper()
+	orig := getEUID
+	getEUID = func() int { return 1000 }
+	t.Cleanup(func() { getEUID = orig })
+}
+
+func TestDetermineConfigDir_NonRootFallback(t *testing.T) {
+	t.Setenv("CASSOCIAL_CONFIG", "")
+	withNonRootEUID(t)
+	got := determineConfigDir("")
+	if got == "" {
+		t.Error("determineConfigDir() non-root fallback returned empty string")
+	}
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".config", "casapps", "cassocial")
+	// portable path may be returned if ./config exists; only check homeDir path
+	// when portable mode is not active
+	if _, err := os.Stat("./config"); os.IsNotExist(err) {
+		if got != want {
+			t.Errorf("determineConfigDir() non-root = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestDetermineDataDir_NonRootFallback(t *testing.T) {
+	t.Setenv("CASSOCIAL_DATA", "")
+	withNonRootEUID(t)
+	got := determineDataDir("")
+	if got == "" {
+		t.Error("determineDataDir() non-root fallback returned empty string")
+	}
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".local", "share", "casapps", "cassocial")
+	if _, err := os.Stat("./data"); os.IsNotExist(err) {
+		if got != want {
+			t.Errorf("determineDataDir() non-root = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestDetermineLogDir_NonRootFallback(t *testing.T) {
+	t.Setenv("CASSOCIAL_LOG", "")
+	withNonRootEUID(t)
+	got := determineLogDir("")
+	if got == "" {
+		t.Error("determineLogDir() non-root fallback returned empty string")
+	}
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".local", "share", "casapps", "cassocial", "logs")
+	if _, err := os.Stat("./logs"); os.IsNotExist(err) {
+		if got != want {
+			t.Errorf("determineLogDir() non-root = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestDeterminePIDFile_NonRootFallback(t *testing.T) {
+	t.Setenv("CASSOCIAL_PID", "")
+	withNonRootEUID(t)
+	got := DeterminePIDFile("")
+	if got == "" {
+		t.Error("DeterminePIDFile() non-root fallback returned empty string")
+	}
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".local", "share", "casapps", "cassocial", "cassocial.pid")
+	if _, err := os.Stat("./data"); os.IsNotExist(err) {
+		if got != want {
+			t.Errorf("DeterminePIDFile() non-root = %q, want %q", got, want)
+		}
+	}
+}
+
 // ---- Load ----
 
 func TestLoad_LoadsExistingFile(t *testing.T) {
@@ -837,3 +914,53 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("expected config file %s to exist after Load: %v", configFile, err)
 	}
 }
+
+func TestSave_WriteFileFails(t *testing.T) {
+	// Override writeFileFn to simulate a WriteFile error.
+	orig := writeFileFn
+	writeFileFn = func(_ string, _ []byte, _ os.FileMode) error {
+		return os.ErrPermission
+	}
+	t.Cleanup(func() { writeFileFn = orig })
+
+	tmp := t.TempDir()
+	cfg := &Config{ConfigDir: tmp}
+	if err := cfg.setDefaults(); err != nil {
+		t.Fatalf("setDefaults() failed: %v", err)
+	}
+	err := cfg.Save()
+	if err == nil {
+		t.Error("Save() should return error when WriteFile fails")
+	}
+}
+
+func TestLoad_EnsureDirectoriesFails(t *testing.T) {
+	// Use a path inside /proc that cannot be created even as root
+	// (the kernel does not allow creating entries in /proc via MkdirAll).
+	_, err := Load("/proc/cassocial-test-ensure-fail", "", "")
+	if err == nil {
+		t.Error("Load() should return error when ensureDirectories fails")
+	}
+}
+
+func TestLoad_SaveDefaultsFails(t *testing.T) {
+	// Override writeFileFn so that Save() fails, causing Load() to return an error
+	// on the "save defaults" path (no existing config file).
+	orig := writeFileFn
+	writeFileFn = func(_ string, _ []byte, _ os.FileMode) error {
+		return os.ErrPermission
+	}
+	t.Cleanup(func() { writeFileFn = orig })
+
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "config")
+	dataDir := filepath.Join(tmp, "data")
+	logDir := filepath.Join(tmp, "logs")
+
+	// Do NOT create a server.yml — Load will try setDefaults then Save, which fails.
+	_, err := Load(configDir, dataDir, logDir)
+	if err == nil {
+		t.Error("Load() should return error when Save() of defaults fails")
+	}
+}
+

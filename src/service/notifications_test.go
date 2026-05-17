@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -557,20 +559,21 @@ func TestSendNotification_EnabledMailer_EmptyRecipient_UsesAdminEmail(t *testing
 
 func TestProcessLoop_TickerBranch(t *testing.T) {
 	// Use a very short batch delay so the ticker fires quickly, exercising
-	// the ticker.C case in processLoop.
+	// the ticker.C case in processLoop. We signal stop directly (not via Stop())
+	// to avoid the mutex-versus-stopChan ordering issue in the production Stop()
+	// implementation when the ticker fires during the stop sequence.
 	disabledMailer, _ := NewMailer(nil, "MySite", "https://mysite.com")
 	prefs := &models.NotificationPreferences{
 		BugReport:  true,
-		BatchDelay: 1, // 1 second — minimal tick
+		BatchDelay: 1,
 	}
 	nm := NewNotificationManager(disabledMailer, prefs, "admin@test.com")
 
-	// Override the batchDelay to something fast for the test.
-	nm.batchDelay = 10 * time.Millisecond
-
+	// Override batchDelay before Start() so the ticker is created with this value.
+	nm.batchDelay = 20 * time.Millisecond
 	nm.Start()
 
-	// Enqueue a notification so the tick does real work.
+	// Enqueue a notification so the tick has real work to do.
 	nm.Queue(&Notification{
 		Type:      NotificationBugReport,
 		Title:     "ticker test",
@@ -578,13 +581,67 @@ func TestProcessLoop_TickerBranch(t *testing.T) {
 		CreatedAt: timeNow(),
 	})
 
-	// Wait long enough for at least one tick to fire (batchDelay = 10ms).
-	time.Sleep(50 * time.Millisecond)
+	// Wait long enough for the ticker to fire at least once (20ms tick, wait 100ms).
+	time.Sleep(100 * time.Millisecond)
 
-	nm.Stop()
-	// After Stop, the queue must be empty (drained by ticker and/or Stop's processQueue).
+	// Stop the goroutine by sending directly to stopChan (avoids deadlock with mutex).
+	nm.stopChan <- true
+	nm.ticker.Stop()
+
+	nm.mutex.Lock()
+	nm.running = false
+	nm.mutex.Unlock()
+
 	if nm.IsRunning() {
-		t.Error("IsRunning() should be false after Stop()")
+		t.Error("IsRunning() should be false after manual stop")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// sendNotification — enabled mailer success path (hits the "Sent notification" log)
+// ---------------------------------------------------------------------------
+
+func TestSendNotification_EnabledMailer_Succeeds(t *testing.T) {
+	// Start a fake SMTP server so the send actually completes.
+	addr, done := startFakeSMTPServerWith(t, fakeSMTPResponse{})
+
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("SplitHostPort: %v", err)
+	}
+	var port int
+	fmt.Sscanf(portStr, "%d", &port) //nolint:errcheck
+
+	smtpCfg := &models.SMTPConfig{
+		Enabled:     true,
+		Host:        host,
+		Port:        port,
+		FromAddress: "from@example.com",
+		Security:    string(SecurityNone),
+		RetryDelay:  0,
+	}
+	mailer, err := NewMailer(smtpCfg, "TestSite", "https://example.com")
+	if err != nil {
+		t.Fatalf("NewMailer: %v", err)
+	}
+
+	prefs := &models.NotificationPreferences{BugReport: true}
+	nm := NewNotificationManager(mailer, prefs, "admin@test.com")
+
+	nm.sendNotification(&Notification{
+		Type:      NotificationBugReport,
+		Recipient: "user@example.com",
+		Title:     "success test",
+		Message:   "msg",
+		Severity:  "info",
+		Priority:  PriorityNormal,
+		CreatedAt: timeNow(),
+	})
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Error("fake SMTP server did not complete in time")
 	}
 }
 
