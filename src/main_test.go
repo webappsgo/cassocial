@@ -110,6 +110,12 @@ func TestApplyColorPreference_NoColorEnv(t *testing.T) {
 	}
 }
 
+func TestHandleStatus(t *testing.T) {
+	// handleStatus just prints a message — verify it doesn't panic.
+	// It ignores both arguments, so nil cfg and empty pidFile are fine.
+	handleStatus(nil, "")
+}
+
 // containsString is a simple helper used only in this test file.
 func containsString(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||

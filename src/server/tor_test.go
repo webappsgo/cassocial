@@ -230,3 +230,58 @@ func TestGetStatus_WithOnionAndEnabled(t *testing.T) {
 		t.Error("running should be false (cmd is nil)")
 	}
 }
+
+// TestTorService_Start_NotEnabled verifies that Start returns nil immediately when Tor is not enabled.
+func TestTorService_Start_NotEnabled(t *testing.T) {
+	ts := NewTorService(t.TempDir())
+	ts.enabled = false // force disabled regardless of whether tor binary is installed
+	if err := ts.Start(); err != nil {
+		t.Errorf("Start() with enabled=false should return nil, got: %v", err)
+	}
+}
+
+// TestTorService_GetStatus_WithPID verifies that GetStatus includes "pid" when cmd.Process is set.
+func TestTorService_GetStatus_WithPID(t *testing.T) {
+	ts := NewTorService(t.TempDir())
+
+	// Start a real subprocess so cmd.Process.Pid is valid.
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start sleep process: %v", err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	})
+
+	ts.cmd = cmd
+
+	status := ts.GetStatus()
+
+	if !status["running"].(bool) {
+		t.Error("running should be true when cmd.Process is set")
+	}
+	pid, ok := status["pid"]
+	if !ok {
+		t.Fatal("GetStatus() missing 'pid' key when process is running")
+	}
+	if pid.(int) <= 0 {
+		t.Errorf("pid = %v, want > 0", pid)
+	}
+}
+
+// TestTorService_Stop_RunningProcess verifies Stop gracefully terminates a real subprocess.
+func TestTorService_Stop_RunningProcess(t *testing.T) {
+	ts := NewTorService(t.TempDir())
+
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start sleep process: %v", err)
+	}
+
+	ts.cmd = cmd
+
+	if err := ts.Stop(); err != nil {
+		t.Errorf("Stop() with running process returned error: %v", err)
+	}
+}
