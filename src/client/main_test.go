@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -813,6 +814,256 @@ func TestCmdShortlink_Delete_ParseError(t *testing.T) {
 	err := c.cmdShortlink([]string{"delete", "--unknown-flag-xyz"})
 	if err == nil {
 		t.Fatal("cmdShortlink delete with unknown flag should return an error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCLI — tests for the top-level flag-parsing entry point
+// ---------------------------------------------------------------------------
+
+func TestRunCLI_NoArgs_PrintsHelp(t *testing.T) {
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{})
+		if code != 0 {
+			t.Errorf("runCLI() with no args returned code %d, want 0", code)
+		}
+	})
+	if !clientContains(out, "--help") {
+		t.Errorf("runCLI() with no args should print help, got: %q", out)
+	}
+}
+
+func TestRunCLI_HelpFlag(t *testing.T) {
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{"--help"})
+		if code != 0 {
+			t.Errorf("runCLI(--help) returned code %d, want 0", code)
+		}
+	})
+	if !clientContains(out, "--help") {
+		t.Errorf("runCLI(--help) output missing --help, got: %q", out)
+	}
+}
+
+func TestRunCLI_ShortHelpFlag(t *testing.T) {
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{"-h"})
+		if code != 0 {
+			t.Errorf("runCLI(-h) returned code %d, want 0", code)
+		}
+	})
+	if out == "" {
+		t.Error("runCLI(-h) produced no output")
+	}
+}
+
+func TestRunCLI_VersionFlag(t *testing.T) {
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{"--version"})
+		if code != 0 {
+			t.Errorf("runCLI(--version) returned code %d, want 0", code)
+		}
+	})
+	if !clientContains(out, Version) {
+		t.Errorf("runCLI(--version) output %q does not contain version %q", out, Version)
+	}
+}
+
+func TestRunCLI_ShortVersionFlag(t *testing.T) {
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{"-v"})
+		if code != 0 {
+			t.Errorf("runCLI(-v) returned code %d, want 0", code)
+		}
+	})
+	if out == "" {
+		t.Error("runCLI(-v) produced no output")
+	}
+}
+
+func TestRunCLI_NoServerURL_ReturnsOne(t *testing.T) {
+	// Clear server env and provide no --server flag
+	os.Unsetenv("CASSOCIAL_SERVER")
+	code := runCLI([]string{"profile", "alice"})
+	if code != 1 {
+		t.Errorf("runCLI without server URL returned code %d, want 1", code)
+	}
+}
+
+func TestRunCLI_ServerFromEnv_CommandFails_ReturnsOne(t *testing.T) {
+	// Provide server via env; command fails (unreachable host) → exit 1
+	t.Setenv("CASSOCIAL_SERVER", "http://127.0.0.1:1")
+	code := runCLI([]string{"profile", "alice"})
+	if code != 1 {
+		t.Errorf("runCLI with unreachable server returned code %d, want 1", code)
+	}
+}
+
+func TestRunCLI_ServerFromFlag_CommandSucceeds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slug":"alice"}`))
+	}))
+	defer srv.Close()
+
+	os.Unsetenv("CASSOCIAL_SERVER")
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{"--server", srv.URL, "profile", "alice"})
+		if code != 0 {
+			t.Errorf("runCLI with valid server returned code %d, want 0", code)
+		}
+	})
+	if !clientContains(out, "alice") {
+		t.Errorf("runCLI output %q does not contain 'alice'", out)
+	}
+}
+
+func TestRunCLI_ColorNever_SetsNO_COLOR(t *testing.T) {
+	os.Unsetenv("NO_COLOR")
+	os.Unsetenv("CASSOCIAL_SERVER")
+
+	runCLI([]string{"--color", "never"})
+
+	// NO_COLOR should be set after runCLI processes --color never
+	if os.Getenv("NO_COLOR") == "" {
+		t.Error("runCLI(--color never) should set NO_COLOR env var")
+	}
+	os.Unsetenv("NO_COLOR")
+}
+
+func TestRunCLI_LangAutoDetect(t *testing.T) {
+	t.Setenv("LANG", "es_MX.UTF-8")
+	os.Unsetenv("CASSOCIAL_SERVER")
+
+	// Just verify runCLI runs without panic when LANG is set
+	code := runCLI([]string{})
+	if code != 0 {
+		t.Errorf("runCLI() with LANG set returned code %d, want 0 (help)", code)
+	}
+}
+
+func TestRunCLI_TokenFromFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify Authorization header is set
+		if r.Header.Get("Authorization") != "Bearer mytoken" {
+			http.Error(w, "no auth", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slug":"alice"}`))
+	}))
+	defer srv.Close()
+
+	// Override osExit to prevent process exit on 401
+	orig := osExit
+	osExit = func(code int) {}
+	t.Cleanup(func() { osExit = orig })
+
+	os.Unsetenv("CASSOCIAL_SERVER")
+	captureClientStdout(t, func() {
+		runCLI([]string{"--server", srv.URL, "--token", "mytoken", "profile", "alice"})
+	})
+}
+
+func TestRunCLI_UserFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slug":"alice"}`))
+	}))
+	defer srv.Close()
+
+	os.Unsetenv("CASSOCIAL_SERVER")
+	out := captureClientStdout(t, func() {
+		code := runCLI([]string{"--server", srv.URL, "--user", "@alice", "profile"})
+		if code != 0 {
+			t.Errorf("runCLI with --user flag returned code %d, want 0", code)
+		}
+	})
+	if !clientContains(out, "alice") {
+		t.Errorf("runCLI --user output %q does not contain 'alice'", out)
+	}
+}
+
+func TestRunCLI_ParseError_ReturnsTwo(t *testing.T) {
+	code := runCLI([]string{"--unknown-flag-that-does-not-exist"})
+	if code != 2 {
+		t.Errorf("runCLI with unknown flag returned code %d, want 2", code)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// do — io.ReadAll error path (body read failure)
+// ---------------------------------------------------------------------------
+
+// errReader is a ReadCloser whose Read always returns an error.
+type errReader struct{}
+
+func (errReader) Read(_ []byte) (int, error) { return 0, errors.New("read error injected") }
+func (errReader) Close() error               { return nil }
+
+func TestClientDo_ReadBodyError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Send headers with 200 but the test will inject a bad body via a
+		// custom RoundTripper, so this server just needs to be reachable.
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`ok`))
+	}))
+	defer srv.Close()
+
+	// Use a custom RoundTripper that returns a response with a body that errors on read.
+	rt := &errorBodyTransport{delegate: http.DefaultTransport, serverURL: srv.URL}
+	c := &client{
+		server: srv.URL,
+		http:   &http.Client{Transport: rt},
+	}
+
+	_, err := c.get("/test")
+	if err == nil {
+		t.Fatal("do() with read-error body should return an error")
+	}
+}
+
+// errorBodyTransport wraps a RoundTripper and replaces the response body with
+// an errReader so that io.ReadAll in do() returns an error.
+type errorBodyTransport struct {
+	delegate  http.RoundTripper
+	serverURL string
+}
+
+func (t *errorBodyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.delegate.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	resp.Body.Close()
+	resp.Body = errReader{}
+	return resp, nil
+}
+
+// ---------------------------------------------------------------------------
+// do — 401 Unauthorized path (osExit override)
+// ---------------------------------------------------------------------------
+
+func TestClientDo_401_ExitsWithCode1(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"unauthorized"}`))
+	}))
+	defer srv.Close()
+
+	// Override osExit so the test can verify it was called without actually exiting.
+	var exitCode int
+	orig := osExit
+	osExit = func(code int) { exitCode = code }
+	t.Cleanup(func() { osExit = orig })
+
+	c := &client{server: srv.URL, http: &http.Client{}, token: "badtoken"}
+	// do() calls osExit(1) on 401 — the function will return normally after our
+	// fake exit, so we call get() and expect a nil error (exit was "taken").
+	_, _ = c.get("/test")
+
+	if exitCode != 1 {
+		t.Errorf("do() on 401 should call osExit(1), got osExit(%d)", exitCode)
 	}
 }
 

@@ -28,23 +28,33 @@ var osExit = os.Exit
 const projectName = "cassocial"
 
 func main() {
+	os.Exit(runCLI(os.Args[1:]))
+}
+
+// runCLI parses args and executes the appropriate action, returning an exit code.
+// Extracted from main() so it can be tested without exec side-effects.
+func runCLI(args []string) int {
+	fs := flag.NewFlagSet("cassocial-cli", flag.ContinueOnError)
+
 	var (
-		showHelp     = flag.Bool("help", false, "Show help information")
-		showHelpS    = flag.Bool("h", false, "Show help information")
-		showVersion  = flag.Bool("version", false, "Show version information")
-		showVersionS = flag.Bool("v", false, "Show version information")
+		showHelp     = fs.Bool("help", false, "Show help information")
+		showHelpS    = fs.Bool("h", false, "Show help information")
+		showVersion  = fs.Bool("version", false, "Show version information")
+		showVersionS = fs.Bool("v", false, "Show version information")
 
 		// Output control flags (PART 8 — NON-NEGOTIABLE)
-		colorMode = flag.String("color", "auto", "Color output mode (always|never|auto)")
-		lang      = flag.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
+		colorMode = fs.String("color", "auto", "Color output mode (always|never|auto)")
+		lang      = fs.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
 
-		server    = flag.String("server", OfficialSite, "Server URL")
-		token     = flag.String("token", "", "API token for authentication")
-		tokenFile = flag.String("token-file", "", "Read token from file")
-		user      = flag.String("user", "", "Target user or org context (@user or +org)")
+		server    = fs.String("server", OfficialSite, "Server URL")
+		token     = fs.String("token", "", "API token for authentication")
+		tokenFile = fs.String("token-file", "", "Read token from file")
+		user      = fs.String("user", "", "Target user or org context (@user or +org)")
 	)
 
-	flag.Parse()
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 
 	// Apply NO_COLOR / --color preference before any output
 	if os.Getenv("NO_COLOR") != "" || *colorMode == "never" {
@@ -61,12 +71,12 @@ func main() {
 
 	if *showVersion || *showVersionS {
 		printVersion()
-		os.Exit(0)
+		return 0
 	}
 
-	if *showHelp || *showHelpS || flag.NArg() == 0 {
+	if *showHelp || *showHelpS || fs.NArg() == 0 {
 		printHelp()
-		os.Exit(0)
+		return 0
 	}
 
 	// Resolve token from all sources
@@ -80,11 +90,11 @@ func main() {
 	if serverURL == "" {
 		fmt.Fprintf(os.Stderr, "error: no server URL specified. Use --server or set %s_SERVER environment variable.\n",
 			strings.ToUpper(projectName))
-		os.Exit(1)
+		return 1
 	}
 
-	cmd := flag.Arg(0)
-	args := flag.Args()[1:]
+	cmd := fs.Arg(0)
+	cmdArgs := fs.Args()[1:]
 
 	c := &client{
 		server: strings.TrimRight(serverURL, "/"),
@@ -95,10 +105,11 @@ func main() {
 		},
 	}
 
-	if err := c.run(cmd, args); err != nil {
+	if err := c.run(cmd, cmdArgs); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 type client struct {

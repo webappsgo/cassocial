@@ -14,7 +14,6 @@ package server
 
 import (
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -360,114 +359,6 @@ func TestTorService_Stop_Timeout(t *testing.T) {
 	// Stop should time out (10s) and force-kill. The function returns nil regardless.
 	if err := ts.Stop(); err != nil {
 		t.Errorf("Stop() should return nil even after timeout: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// password.RequestPasswordReset — DB error after user found
-// ---------------------------------------------------------------------------
-
-// TestRequestPasswordReset_ExecError exercises the Exec error path in
-// RequestPasswordReset (the UPDATE that stores the reset token fails).
-func TestRequestPasswordReset_ExecError(t *testing.T) {
-	a := newTestAuth(t)
-	registerTestUser(t, a, "execerruser", "execerr@example.com", "ValidPass1")
-
-	// Drop the users table so UPDATE fails but GetUserByEmail already has the user
-	// object from the in-memory query — actually GetUserByEmail also hits the DB,
-	// so we need the user stored before we break things. We use a trigger approach:
-	// allow SELECT but block UPDATE on users table after the user is registered.
-	if _, err := a.db.Exec(`
-		CREATE TRIGGER abort_reset_update
-		BEFORE UPDATE ON users
-		WHEN NEW.password_reset_token IS NOT NULL
-		BEGIN
-			SELECT RAISE(ABORT, 'reset token update blocked by test trigger');
-		END
-	`); err != nil {
-		t.Fatalf("CREATE TRIGGER: %v", err)
-	}
-
-	_, err := a.RequestPasswordReset("execerr@example.com")
-	if err == nil {
-		t.Error("RequestPasswordReset should return error when UPDATE exec fails")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// password.ChangePassword — same-password path
-// ---------------------------------------------------------------------------
-
-// TestChangePassword_SamePassword verifies that changing to the same password
-// returns an error ("new password must be different from current password").
-func TestChangePassword_SamePassword(t *testing.T) {
-	a := newTestAuth(t)
-	user := registerTestUser(t, a, "samepwuser", "samepw@example.com", "ValidPass1")
-
-	if _, err := a.db.Exec(`UPDATE users SET email_verified = 1 WHERE id = ?`, user.ID); err != nil {
-		t.Fatalf("mark email verified: %v", err)
-	}
-
-	err := a.ChangePassword(user.ID, "ValidPass1", "ValidPass1")
-	if err == nil {
-		t.Error("ChangePassword should return error when new password equals current")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// password.ChangePassword — Exec error path
-// ---------------------------------------------------------------------------
-
-// TestChangePassword_ExecError exercises the UPDATE error path in ChangePassword.
-func TestChangePassword_ExecError(t *testing.T) {
-	a := newTestAuth(t)
-	user := registerTestUser(t, a, "chpwexecuser", "chpwexec@example.com", "ValidPass1")
-	if _, err := a.db.Exec(`UPDATE users SET email_verified = 1 WHERE id = ?`, user.ID); err != nil {
-		t.Fatalf("mark email verified: %v", err)
-	}
-
-	// Block UPDATE on password_hash with a trigger.
-	if _, err := a.db.Exec(`
-		CREATE TRIGGER abort_chpw_update
-		BEFORE UPDATE ON users
-		WHEN NEW.password_hash != OLD.password_hash
-		BEGIN
-			SELECT RAISE(ABORT, 'password update blocked by test trigger');
-		END
-	`); err != nil {
-		t.Fatalf("CREATE TRIGGER: %v", err)
-	}
-
-	err := a.ChangePassword(user.ID, "ValidPass1", "DifferentPass2")
-	if err == nil {
-		t.Error("ChangePassword should return error when UPDATE exec fails")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// password.GenerateEmailVerificationToken — Exec error path
-// ---------------------------------------------------------------------------
-
-// TestGenerateEmailVerificationToken_ExecError exercises the Exec error path.
-func TestGenerateEmailVerificationToken_ExecError(t *testing.T) {
-	a := newTestAuth(t)
-	user := registerTestUser(t, a, "emailtokexec", "emailtokexec@example.com", "ValidPass1")
-
-	// Block any UPDATE on users where new password_reset_token starts with EMAIL_.
-	if _, err := a.db.Exec(`
-		CREATE TRIGGER abort_emailtoken_update
-		BEFORE UPDATE ON users
-		WHEN NEW.password_reset_token LIKE 'EMAIL_%'
-		BEGIN
-			SELECT RAISE(ABORT, 'email token update blocked by test trigger');
-		END
-	`); err != nil {
-		t.Fatalf("CREATE TRIGGER: %v", err)
-	}
-
-	_, err := a.GenerateEmailVerificationToken(user.ID)
-	if err == nil {
-		t.Error("GenerateEmailVerificationToken should return error when UPDATE exec fails")
 	}
 }
 

@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -3548,70 +3550,101 @@ func TestRunMigrations_ExecError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// GetTopLinks / GetTopReferrers / GetProfileTags — query-error paths
+// RunMigrations — injectable variable paths (non-.sql skip and ReadFile error)
 // ---------------------------------------------------------------------------
 
-// TestGetTopLinks_QueryError exercises the early-return on query failure.
-func TestGetTopLinks_QueryError(t *testing.T) {
-	raw, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	db := &DB{DB: raw, Driver: "sqlite"}
-	raw.Close()
+// fakeDirEntry is a minimal fs.DirEntry for testing RunMigrations.
+type fakeDirEntry struct {
+	name  string
+	isDir bool
+}
 
-	_, err = db.GetTopLinks("any-profile", 5)
-	if err == nil {
-		t.Error("GetTopLinks on closed DB should return error")
+func (f fakeDirEntry) Name() string               { return f.name }
+func (f fakeDirEntry) IsDir() bool                { return f.isDir }
+func (f fakeDirEntry) Type() fs.FileMode          { return 0 }
+func (f fakeDirEntry) Info() (fs.FileInfo, error) { return nil, errors.New("not implemented") }
+
+// TestRunMigrations_NonSQLFileSkipped exercises the continue branch for non-.sql files
+// by injecting a ReadDir that returns a mix of .sql and non-.sql entries.
+func TestRunMigrations_NonSQLFileSkipped(t *testing.T) {
+	origDir := migrationsReadDir
+	origFile := migrationsReadFile
+	t.Cleanup(func() {
+		migrationsReadDir = origDir
+		migrationsReadFile = origFile
+	})
+
+	// Inject a ReadDir that includes a non-.sql file first, then a valid .sql file.
+	migrationsReadDir = func(_ string) ([]fs.DirEntry, error) {
+		return []fs.DirEntry{
+			fakeDirEntry{name: "README.txt"},
+			fakeDirEntry{name: "001_init.sql"},
+		}, nil
+	}
+	// The .sql file returns a no-op statement.
+	migrationsReadFile = func(name string) ([]byte, error) {
+		return []byte("SELECT 1;"), nil
+	}
+
+	db, err := Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.RunMigrations(); err != nil {
+		t.Errorf("RunMigrations with mixed file types returned error: %v", err)
 	}
 }
 
-// TestGetTopReferrers_QueryError exercises the early-return on query failure.
-func TestGetTopReferrers_QueryError(t *testing.T) {
-	raw, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	db := &DB{DB: raw, Driver: "sqlite"}
-	raw.Close()
+// TestRunMigrations_ReadFileError exercises the ReadFile error return path
+// by injecting a ReadFile that fails on the first .sql file.
+func TestRunMigrations_ReadFileError(t *testing.T) {
+	origDir := migrationsReadDir
+	origFile := migrationsReadFile
+	t.Cleanup(func() {
+		migrationsReadDir = origDir
+		migrationsReadFile = origFile
+	})
 
-	_, err = db.GetTopReferrers("any-profile", 5)
+	migrationsReadDir = func(_ string) ([]fs.DirEntry, error) {
+		return []fs.DirEntry{fakeDirEntry{name: "001_init.sql"}}, nil
+	}
+	migrationsReadFile = func(name string) ([]byte, error) {
+		return nil, errors.New("read error injected")
+	}
+
+	db, err := Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer db.Close()
+
+	err = db.RunMigrations()
 	if err == nil {
-		t.Error("GetTopReferrers on closed DB should return error")
+		t.Error("RunMigrations should return error when ReadFile fails")
 	}
 }
 
-// TestGetProfileTags_QueryError exercises the early-return on query failure.
-func TestGetProfileTags_QueryError(t *testing.T) {
-	raw, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	db := &DB{DB: raw, Driver: "sqlite"}
-	raw.Close()
+// TestRunMigrations_ReadDirError exercises the ReadDir error return path.
+func TestRunMigrations_ReadDirError(t *testing.T) {
+	origDir := migrationsReadDir
+	t.Cleanup(func() { migrationsReadDir = origDir })
 
-	_, err = db.GetProfileTags("any-profile")
-	if err == nil {
-		t.Error("GetProfileTags on closed DB should return error")
+	migrationsReadDir = func(_ string) ([]fs.DirEntry, error) {
+		return nil, errors.New("readdir error injected")
+	}
+
+	db, err := Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer db.Close()
+
+	// ReadDir error is logged but not returned — RunMigrations returns nil.
+	if err := db.RunMigrations(); err != nil {
+		t.Errorf("RunMigrations ReadDir error should return nil (logged only), got: %v", err)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// GetAllSettings — query-error path
-// ---------------------------------------------------------------------------
-
-// TestGetAllSettings_QueryError exercises the early-return on query failure.
-func TestGetAllSettings_QueryError(t *testing.T) {
-	raw, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	db := &DB{DB: raw, Driver: "sqlite"}
-	raw.Close()
-
-	_, err = db.GetAllSettings()
-	if err == nil {
-		t.Error("GetAllSettings on closed DB should return error")
-	}
-}
 

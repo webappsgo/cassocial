@@ -4,18 +4,28 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	_ "modernc.org/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
+
+// migrationsReadDir and migrationsReadFile are used by RunMigrations to read
+// migration files from the embedded filesystem. Overridable in tests.
+var migrationsReadDir = func(name string) ([]fs.DirEntry, error) {
+	return migrations.ReadDir(name)
+}
+var migrationsReadFile = func(name string) ([]byte, error) {
+	return migrations.ReadFile(name)
+}
 
 type DB struct {
 	*sql.DB
@@ -61,7 +71,7 @@ func Connect(driver, dbPath string) (*DB, error) {
 
 // RunMigrations executes all SQL migration files
 func (db *DB) RunMigrations() error {
-	files, err := migrations.ReadDir("migrations")
+	files, err := migrationsReadDir("migrations")
 	if err != nil {
 		log.Printf("Could not read migrations directory: %v", err)
 		return nil
@@ -72,7 +82,7 @@ func (db *DB) RunMigrations() error {
 			continue
 		}
 
-		content, err := migrations.ReadFile("migrations/" + file.Name())
+		content, err := migrationsReadFile("migrations/" + file.Name())
 		if err != nil {
 			return fmt.Errorf("failed to read migration %s: %w", file.Name(), err)
 		}

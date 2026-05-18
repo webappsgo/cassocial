@@ -516,8 +516,10 @@ func TestSendWithRetry_ZeroRetries_ReturnsError(t *testing.T) {
 
 // fakeSMTPResponse describes how a fake server handles a given SMTP verb.
 type fakeSMTPResponse struct {
-	rejectMAIL bool
-	rejectRCPT bool
+	rejectMAIL          bool
+	rejectRCPT          bool
+	rejectDATA          bool
+	closeAfterDATAAccept bool // send 354 then close connection immediately
 }
 
 // startFakeSMTPServerWith starts a minimal TCP SMTP listener on a random port.
@@ -587,8 +589,17 @@ func startFakeSMTPServerWith(t *testing.T, cfg fakeSMTPResponse) (addr string, d
 					writeLine("250 OK")
 				}
 			case strings.ToUpper(line) == "DATA":
-				writeLine("354 Start input, end with <CRLF>.<CRLF>")
-				inData = true
+				if cfg.rejectDATA {
+					writeLine("554 Transaction failed")
+				} else if cfg.closeAfterDATAAccept {
+					// Accept DATA then immediately close the connection so
+					// w.Write() in sendMessage encounters a broken pipe.
+					writeLine("354 Start input, end with <CRLF>.<CRLF>")
+					return
+				} else {
+					writeLine("354 Start input, end with <CRLF>.<CRLF>")
+					inData = true
+				}
 			case strings.HasPrefix(strings.ToUpper(line), "QUIT"):
 				writeLine("221 Bye")
 				return
@@ -2290,5 +2301,88 @@ func TestSendWithTLS_FakeTLSServer_AuthRejected(t *testing.T) {
 	}
 	if !smtpErrWraps(err, ErrAuthFailed) {
 		t.Errorf("sendWithTLS auth rejection should wrap ErrAuthFailed, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// sendMessage — DATA command rejection path
+// ---------------------------------------------------------------------------
+
+// TestSendMessage_WriteError triggers the w.Write() error branch inside sendMessage by
+// having the fake server close the connection immediately after accepting DATA, so
+// the subsequent write to the data writer encounters a broken-pipe error.
+func TestSendMessage_WriteError(t *testing.T) {
+	addr, done := startFakeSMTPServerWith(t, fakeSMTPResponse{closeAfterDATAAccept: true})
+
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial fake server: %v", err)
+	}
+
+	smtpClient, err := smtpNewClient(conn, "127.0.0.1")
+	if err != nil {
+		conn.Close()
+		t.Fatalf("smtp.NewClient: %v", err)
+	}
+
+	c := clientForFakeServer(t, addr)
+	// Build a large message so the buffered write is more likely to flush to
+	// the (now-closed) connection before the smtp layer notices.
+	bigBody := strings.Repeat("x", 65536)
+	msg := buildMessage("", "from@example.com", []string{"to@example.com"}, "Sub", bigBody, false)
+	sendErr := c.sendMessage(smtpClient, []string{"to@example.com"}, msg)
+
+	smtpClient.Quit() //nolint:errcheck
+	conn.Close()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Error("fake SMTP server did not complete in time")
+	}
+
+	// The write or close should fail with ErrSendFailed.
+	if sendErr == nil {
+		t.Error("sendMessage should return error when server closes connection during DATA write")
+	}
+	if !smtpErrWraps(sendErr, ErrSendFailed) {
+		t.Errorf("sendMessage write error should wrap ErrSendFailed, got: %v", sendErr)
+	}
+}
+
+// TestSendMessage_DataCommandError triggers the client.Data() error branch inside
+// sendMessage by having the fake server reject the DATA command with a 554 response.
+func TestSendMessage_DataCommandError(t *testing.T) {
+	addr, done := startFakeSMTPServerWith(t, fakeSMTPResponse{rejectDATA: true})
+
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial fake server: %v", err)
+	}
+
+	smtpClient, err := smtpNewClient(conn, "127.0.0.1")
+	if err != nil {
+		conn.Close()
+		t.Fatalf("smtp.NewClient: %v", err)
+	}
+
+	c := clientForFakeServer(t, addr)
+	msg := buildMessage("", "from@example.com", []string{"to@example.com"}, "Sub", "body", false)
+	sendErr := c.sendMessage(smtpClient, []string{"to@example.com"}, msg)
+
+	smtpClient.Quit() //nolint:errcheck
+	conn.Close()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Error("fake SMTP server did not complete in time")
+	}
+
+	if sendErr == nil {
+		t.Error("sendMessage should return error when DATA command is rejected")
+	}
+	if !smtpErrWraps(sendErr, ErrSendFailed) {
+		t.Errorf("sendMessage DATA error should wrap ErrSendFailed, got: %v", sendErr)
 	}
 }
