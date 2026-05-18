@@ -225,6 +225,108 @@ func TestRun_Status(t *testing.T) {
 	}
 }
 
+// TestRun_ConfigOverrides verifies that --address, --port, --mode, --debug override config
+// and that --status causes an early exit 0 after applying them.
+func TestRun_ConfigOverrides(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	code := run([]string{
+		"--config", tmp + "/cfg",
+		"--data", tmp + "/data",
+		"--log", tmp + "/log",
+		"--address", "127.0.0.1",
+		"--port", "65001",
+		"--mode", "development",
+		"--debug",
+		"--status",
+	})
+	if code != 0 {
+		t.Errorf("run with overrides + --status = %d, want 0", code)
+	}
+}
+
+// TestRun_PIDWriteFails verifies run() returns 1 when WritePIDFile fails.
+func TestRun_PIDWriteFails(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	// /proc is not writable even as root — WritePIDFile must fail.
+	code := run([]string{
+		"--config", tmp + "/cfg",
+		"--data", tmp + "/data",
+		"--log", tmp + "/log",
+		"--pid", "/proc/cassocial-test-pid-run-fail",
+	})
+	if code != 1 {
+		t.Errorf("run with bad pid path = %d, want 1", code)
+	}
+}
+
+// TestRun_DBConnectFails verifies run() returns 1 when the database cannot be reached.
+func TestRun_DBConnectFails(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	// MySQL driver with no server → Ping fails → store.Connect returns error.
+	t.Setenv("CASSOCIAL_DB_DRIVER", "mysql")
+	code := run([]string{
+		"--config", tmp + "/cfg",
+		"--data", tmp + "/data",
+		"--log", tmp + "/log",
+		"--pid", tmp + "/test.pid",
+	})
+	if code != 1 {
+		t.Errorf("run with mysql (no server) = %d, want 1", code)
+	}
+}
+
+// TestRun_ServerStartFails verifies run() returns 1 when server.Start fails (invalid listen address).
+func TestRun_ServerStartFails(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	// 256.x.x.x is an invalid IP; ListenAndServe fails immediately → errChan fires.
+	code := run([]string{
+		"--config", tmp + "/cfg",
+		"--data", tmp + "/data",
+		"--log", tmp + "/log",
+		"--pid", tmp + "/test.pid",
+		"--address", "256.256.256.256",
+		"--port", "65432",
+	})
+	if code != 1 {
+		t.Errorf("run with invalid listen address = %d, want 1", code)
+	}
+}
+
+// TestRun_LangAutoDetect verifies run() reads LANG env when --lang is not set.
+func TestRun_LangAutoDetect(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("LANG", "es_ES.UTF-8")
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	// --status exits early; we just verify no panic.
+	code := run([]string{
+		"--config", tmp + "/cfg",
+		"--data", tmp + "/data",
+		"--log", tmp + "/log",
+		"--status",
+	})
+	if code != 0 {
+		t.Errorf("run with LANG env = %d, want 0", code)
+	}
+}
+
 // containsString is a simple helper used only in this test file.
 func containsString(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||

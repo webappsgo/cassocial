@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,10 @@ import (
 	"github.com/casapps/cassocial/src/server/model"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// randReaderAuth is the source of random bytes for generateRandomString.
+// Replaced in tests to inject failures.
+var randReaderAuth io.Reader = rand.Reader
 
 var (
 	ErrInvalidCredentials     = errors.New("invalid credentials")
@@ -519,11 +524,11 @@ func (a *Auth) updateLastLogin(userID string) error {
 
 // generateRandomString generates a random hex string of specified length
 func generateRandomString(length int) string {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
+	b := make([]byte, length)
+	if _, err := io.ReadFull(randReaderAuth, b); err != nil {
 		panic(err)
 	}
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(b)
 }
 
 // generateUUID generates a simple UUID

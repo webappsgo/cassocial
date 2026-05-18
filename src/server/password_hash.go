@@ -6,10 +6,15 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
 )
+
+// randReaderHash is the source of random bytes for HashPassword and GenerateRandomToken.
+// Replaced in tests to inject failures.
+var randReaderHash io.Reader = rand.Reader
 
 // Argon2id parameters (OWASP 2023 recommendations - NON-NEGOTIABLE per TEMPLATE.md)
 const (
@@ -25,7 +30,7 @@ const (
 func HashPassword(password string) (string, error) {
 	// Generate random salt
 	salt := make([]byte, ArgonSaltLen)
-	if _, err := rand.Read(salt); err != nil {
+	if _, err := io.ReadFull(randReaderHash, salt); err != nil {
 		return "", fmt.Errorf("failed to generate salt: %w", err)
 	}
 
@@ -103,9 +108,9 @@ func HashToken(token string) string {
 
 // GenerateRandomToken generates a cryptographically secure random token
 func GenerateRandomToken(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
+	b := make([]byte, length)
+	if _, err := io.ReadFull(randReaderHash, b); err != nil {
 		return "", fmt.Errorf("failed to generate random token: %w", err)
 	}
-	return fmt.Sprintf("%x", bytes), nil
+	return fmt.Sprintf("%x", b), nil
 }

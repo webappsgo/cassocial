@@ -21,6 +21,9 @@ var (
 	OfficialSite = "" // Empty = users must use --server flag
 )
 
+// osExit is the function called to terminate the process. Overridable in tests.
+var osExit = os.Exit
+
 // projectName is the hardcoded internal project name (never changes even if binary is renamed)
 const projectName = "cassocial"
 
@@ -281,7 +284,7 @@ func (c *client) do(req *http.Request) ([]byte, error) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		fmt.Fprintf(os.Stderr, "error: your API token has been revoked or is invalid. Run '%s-cli login' to re-authenticate.\n",
 			projectName)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	if resp.StatusCode >= 400 {

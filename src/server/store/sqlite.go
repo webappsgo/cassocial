@@ -121,6 +121,9 @@ func (db *DB) adaptSQL(sql string) string {
 	return sql
 }
 
+// getEUID returns the effective user ID. Overridable in tests.
+var getEUID = os.Geteuid
+
 // getDataDirectory returns the appropriate data directory
 func getDataDirectory() string {
 	// Check for portable mode
@@ -129,7 +132,7 @@ func getDataDirectory() string {
 	}
 
 	// Check if running as root/system
-	if os.Geteuid() == 0 {
+	if getEUID() == 0 {
 		dir := "/var/lib/cassocial"
 		os.MkdirAll(dir, 0755)
 		return dir

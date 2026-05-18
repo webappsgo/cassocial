@@ -3477,3 +3477,141 @@ func TestGetLinkAnalytics_QueryError(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// getDataDirectory — non-root user path
+// ---------------------------------------------------------------------------
+
+// TestGetDataDirectory_NonRoot exercises the user-home branch of getDataDirectory
+// by temporarily overriding getEUID to return a non-zero UID.
+func TestGetDataDirectory_NonRoot(t *testing.T) {
+	orig := getEUID
+	t.Cleanup(func() { getEUID = orig })
+	getEUID = func() int { return 1000 }
+
+	// Ensure HOME is set to a temp dir so os.UserHomeDir() succeeds and the
+	// MkdirAll inside getDataDirectory writes to a disposable location.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	dir := getDataDirectory()
+	if dir == "" {
+		t.Error("getDataDirectory() returned empty string for non-root user")
+	}
+	// The result must be under the temp home dir, not the system path.
+	if !strings.Contains(dir, tmpHome) {
+		t.Errorf("getDataDirectory() non-root = %q, expected path under tmpHome %q", dir, tmpHome)
+	}
+}
+
+// TestGetDataDirectory_Root verifies the root branch still returns the system path.
+func TestGetDataDirectory_Root(t *testing.T) {
+	orig := getEUID
+	t.Cleanup(func() { getEUID = orig })
+	getEUID = func() int { return 0 }
+
+	// Make sure there is no local ./data directory (which would take priority).
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	tmpWD := t.TempDir()
+	if err := os.Chdir(tmpWD); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(origWD) }) //nolint:errcheck
+
+	dir := getDataDirectory()
+	if dir != "/var/lib/cassocial" {
+		t.Errorf("getDataDirectory() root = %q, want /var/lib/cassocial", dir)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// RunMigrations — closed-DB exec error path
+// ---------------------------------------------------------------------------
+
+// TestRunMigrations_ExecError confirms RunMigrations logs (does not return) when
+// Exec fails, because the implementation treats SQL errors as "already applied".
+func TestRunMigrations_ExecError(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	db := &DB{DB: raw, Driver: "sqlite"}
+	raw.Close()
+
+	// With the connection closed every Exec will fail; RunMigrations logs the
+	// error and continues — it must not return an error itself.
+	if err := db.RunMigrations(); err != nil {
+		t.Errorf("RunMigrations on closed DB should not return error (errors are logged), got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetTopLinks / GetTopReferrers / GetProfileTags — query-error paths
+// ---------------------------------------------------------------------------
+
+// TestGetTopLinks_QueryError exercises the early-return on query failure.
+func TestGetTopLinks_QueryError(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	db := &DB{DB: raw, Driver: "sqlite"}
+	raw.Close()
+
+	_, err = db.GetTopLinks("any-profile", 5)
+	if err == nil {
+		t.Error("GetTopLinks on closed DB should return error")
+	}
+}
+
+// TestGetTopReferrers_QueryError exercises the early-return on query failure.
+func TestGetTopReferrers_QueryError(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	db := &DB{DB: raw, Driver: "sqlite"}
+	raw.Close()
+
+	_, err = db.GetTopReferrers("any-profile", 5)
+	if err == nil {
+		t.Error("GetTopReferrers on closed DB should return error")
+	}
+}
+
+// TestGetProfileTags_QueryError exercises the early-return on query failure.
+func TestGetProfileTags_QueryError(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	db := &DB{DB: raw, Driver: "sqlite"}
+	raw.Close()
+
+	_, err = db.GetProfileTags("any-profile")
+	if err == nil {
+		t.Error("GetProfileTags on closed DB should return error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GetAllSettings — query-error path
+// ---------------------------------------------------------------------------
+
+// TestGetAllSettings_QueryError exercises the early-return on query failure.
+func TestGetAllSettings_QueryError(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	db := &DB{DB: raw, Driver: "sqlite"}
+	raw.Close()
+
+	_, err = db.GetAllSettings()
+	if err == nil {
+		t.Error("GetAllSettings on closed DB should return error")
+	}
+}
+

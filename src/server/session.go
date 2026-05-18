@@ -4,9 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 )
+
+// randReaderSession is the source of random bytes for generateSessionID.
+// Replaced in tests to inject failures.
+var randReaderSession io.Reader = rand.Reader
 
 // Session represents a user session
 type Session struct {
@@ -244,11 +249,11 @@ func (sm *SessionManager) GetSessionTimeout() time.Duration {
 
 // generateSessionID generates a cryptographically secure session ID
 func generateSessionID() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
+	b := make([]byte, 32)
+	if _, err := io.ReadFull(randReaderSession, b); err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
+	return base64.URLEncoding.EncodeToString(b), nil
 }
 
 // SessionInfo returns public session information (without sensitive data)
