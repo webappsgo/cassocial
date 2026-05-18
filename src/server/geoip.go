@@ -47,6 +47,10 @@ func (g *GeoIP) IsEnabled() bool {
 	return g.enabled
 }
 
+// httpGetFn is the HTTP GET function used by DownloadDatabase.
+// It is a package-level variable so tests can inject a mock.
+var httpGetFn = http.Get
+
 // DownloadDatabase downloads the latest GeoIP database
 func (g *GeoIP) DownloadDatabase() error {
 	log.Println("Downloading GeoIP database...")
@@ -61,7 +65,7 @@ func (g *GeoIP) DownloadDatabase() error {
 	// https://github.com/sapics/ip-location-db
 	url := "https://github.com/sapics/ip-location-db/raw/main/geolite2-country/geolite2-country-ipv4.csv.gz"
 
-	resp, err := http.Get(url)
+	resp, err := httpGetFn(url)
 	if err != nil {
 		return fmt.Errorf("failed to download GeoIP database: %w", err)
 	}

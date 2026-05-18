@@ -285,3 +285,46 @@ func TestTorService_Stop_RunningProcess(t *testing.T) {
 		t.Errorf("Stop() with running process returned error: %v", err)
 	}
 }
+
+// TestTorService_Start_MkdirAllFails verifies that Start returns an error when the
+// tor data directory cannot be created (parent path is a file).
+func TestTorService_Start_MkdirAllFails(t *testing.T) {
+	base := t.TempDir()
+	// Create a file named "tor" so MkdirAll(torDataDir) fails.
+	blocker := filepath.Join(base, "tor")
+	if err := os.WriteFile(blocker, []byte("block"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	ts := NewTorService(base)
+	ts.enabled = true // force enabled so Start doesn't return early
+
+	err := ts.Start()
+	if err == nil {
+		t.Error("Start should return error when torDataDir cannot be created")
+	}
+}
+
+// TestTorService_Start_CreateTorrcFails verifies that Start returns an error when
+// createTorrc fails (torrcPath parent is unwritable).
+func TestTorService_Start_CreateTorrcFails(t *testing.T) {
+	base := t.TempDir()
+	ts := NewTorService(base)
+	ts.enabled = true
+
+	// Create the tor directory (so MkdirAll succeeds) but make it read-only
+	// so WriteFile inside createTorrc fails.
+	torDir := filepath.Join(base, "tor")
+	if err := os.MkdirAll(torDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.Chmod(torDir, 0500); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(torDir, 0755) })
+
+	err := ts.Start()
+	if err == nil {
+		t.Error("Start should return error when createTorrc fails")
+	}
+}

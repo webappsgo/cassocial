@@ -272,6 +272,39 @@ func TestGetHealthStatus_UnhealthyDisk(t *testing.T) {
 	}
 }
 
+// TestStart_InvalidAddress verifies that Start returns an error immediately when the
+// listen address is invalid (port out of range), exercising the errChan path.
+func TestStart_InvalidAddress(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	defer db.Close()
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	cfg := &config.Config{
+		DataDir: t.TempDir(),
+		Server: config.ServerConfig{
+			Address: "127.0.0.1",
+			Port:    99999, // invalid port
+			Mode:    "production",
+		},
+	}
+
+	s, err := New(cfg, db, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Start should return an error because port 99999 is out of valid range.
+	err = s.Start()
+	if err == nil {
+		t.Error("Start with invalid address should return an error")
+	}
+}
+
 func TestGetHealthStatus_DBError(t *testing.T) {
 	db, err := store.Connect("sqlite", ":memory:")
 	if err != nil {

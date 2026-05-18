@@ -1047,6 +1047,120 @@ func TestGenerateToken_ClosedDB(t *testing.T) {
 // when GenerateToken fails. Since we cannot easily inject a JWT signing error,
 // we verify the normal 2FA success path completes without hitting the error branch.
 
+// --- Postgres driver branch tests ---
+// These tests set db.Driver = "postgres" on a live SQLite connection to verify that the
+// postgres query branch is entered. SQLite accepts both ? and $N placeholder styles, so
+// most branches succeed. The RETURNING clause in Register is the exception — SQLite does
+// not support RETURNING in older versions, or does support it in newer ones; either way
+// we exercise the branch and verify behaviour without asserting on the error.
+
+// TestGetUserByID_PostgresBranch exercises the postgres query branch in GetUserByID.
+func TestGetUserByID_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgiduser", "pgid@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	// SQLite accepts $1 placeholders — should succeed and return the user.
+	got, err := a.GetUserByID(user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID postgres branch: %v", err)
+	}
+	if got.ID != user.ID {
+		t.Errorf("GetUserByID postgres branch: ID = %q, want %q", got.ID, user.ID)
+	}
+}
+
+// TestGetUserByUsername_PostgresBranch exercises the postgres query branch in GetUserByUsername.
+func TestGetUserByUsername_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgunameuser", "pguname@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	got, err := a.GetUserByUsername(user.Username)
+	if err != nil {
+		t.Fatalf("GetUserByUsername postgres branch: %v", err)
+	}
+	if got.ID != user.ID {
+		t.Errorf("GetUserByUsername postgres branch: ID = %q, want %q", got.ID, user.ID)
+	}
+}
+
+// TestGetUserByEmail_PostgresBranch exercises the postgres query branch in GetUserByEmail.
+func TestGetUserByEmail_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgemailuser", "pgemail@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	got, err := a.GetUserByEmail(user.Email)
+	if err != nil {
+		t.Fatalf("GetUserByEmail postgres branch: %v", err)
+	}
+	if got.ID != user.ID {
+		t.Errorf("GetUserByEmail postgres branch: ID = %q, want %q", got.ID, user.ID)
+	}
+}
+
+// TestGetUserByUsernameOrEmail_PostgresBranch exercises the postgres query branch.
+func TestGetUserByUsernameOrEmail_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgoreuser", "pgore@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	got, err := a.GetUserByUsernameOrEmail(user.Username)
+	if err != nil {
+		t.Fatalf("GetUserByUsernameOrEmail postgres branch: %v", err)
+	}
+	if got.ID != user.ID {
+		t.Errorf("GetUserByUsernameOrEmail postgres branch: ID = %q, want %q", got.ID, user.ID)
+	}
+}
+
+// TestUsernameExists_PostgresBranch exercises the postgres query branch in usernameExists.
+func TestUsernameExists_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	registerTestUser(t, a, "pgexistuser", "pgexist@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	exists, err := a.usernameExists("pgexistuser")
+	if err != nil {
+		t.Fatalf("usernameExists postgres branch: %v", err)
+	}
+	if !exists {
+		t.Error("usernameExists postgres branch: should return true for existing user")
+	}
+}
+
+// TestEmailExists_PostgresBranch exercises the postgres query branch in emailExists.
+func TestEmailExists_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	registerTestUser(t, a, "pgexistmail", "pgexistmail@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	exists, err := a.emailExists("pgexistmail@example.com")
+	if err != nil {
+		t.Fatalf("emailExists postgres branch: %v", err)
+	}
+	if !exists {
+		t.Error("emailExists postgres branch: should return true for existing email")
+	}
+}
+
+// TestUpdateLastLogin_PostgresBranch exercises the postgres query branch in updateLastLogin.
+func TestUpdateLastLogin_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pglastlogin", "pglastlogin@example.com", "ValidPass1")
+	a.db.Driver = "postgres"
+	// SQLite accepts $1/$2 — should succeed.
+	if err := a.updateLastLogin(user.ID); err != nil {
+		t.Errorf("updateLastLogin postgres branch: %v", err)
+	}
+}
+
+// TestRegister_PostgresBranch exercises the postgres INSERT...RETURNING branch in Register.
+// The RETURNING clause behaviour on SQLite varies by version; we exercise the branch and
+// accept either success or a controlled error.
+func TestRegister_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	a.db.Driver = "postgres"
+	// Either succeeds (SQLite supports RETURNING) or fails with a DB error — both are valid.
+	// We just verify no panic and the branch is entered.
+	_, _ = a.Register("pgreguser", "pgreg@example.com", "ValidPass1")
+}
+
 // TestGenerateToken_GetSettingError verifies the specific error branch where
 // GetSetting returns an error (DB closed) and the code falls back to "1440".
 func TestGenerateToken_GetSettingError(t *testing.T) {

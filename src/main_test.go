@@ -116,6 +116,115 @@ func TestHandleStatus(t *testing.T) {
 	handleStatus(nil, "")
 }
 
+// ---------------------------------------------------------------------------
+// run() — testable entry point extracted from main()
+// ---------------------------------------------------------------------------
+
+// TestRun_Version verifies that --version exits 0.
+func TestRun_Version(t *testing.T) {
+	if code := run([]string{"--version"}); code != 0 {
+		t.Errorf("run(--version) = %d, want 0", code)
+	}
+}
+
+// TestRun_VersionShort verifies that -v exits 0.
+func TestRun_VersionShort(t *testing.T) {
+	if code := run([]string{"-v"}); code != 0 {
+		t.Errorf("run(-v) = %d, want 0", code)
+	}
+}
+
+// TestRun_Help verifies that --help exits 0.
+func TestRun_Help(t *testing.T) {
+	if code := run([]string{"--help"}); code != 0 {
+		t.Errorf("run(--help) = %d, want 0", code)
+	}
+}
+
+// TestRun_HelpShort verifies that -h exits 0.
+func TestRun_HelpShort(t *testing.T) {
+	if code := run([]string{"-h"}); code != 0 {
+		t.Errorf("run(-h) = %d, want 0", code)
+	}
+}
+
+// TestRun_UnknownFlag verifies that an unknown flag exits 1.
+func TestRun_UnknownFlag(t *testing.T) {
+	if code := run([]string{"--unknown-flag-xyz"}); code != 1 {
+		t.Errorf("run(--unknown-flag-xyz) = %d, want 1", code)
+	}
+}
+
+// TestRun_Daemon verifies that --daemon exits 1 (not yet implemented).
+func TestRun_Daemon(t *testing.T) {
+	// run() will try to load config before reaching --daemon; supply a
+	// temp config dir so Load succeeds, then expect 1 from the daemon stub.
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--daemon"}); code != 1 {
+		t.Errorf("run(--daemon) = %d, want 1", code)
+	}
+}
+
+// TestRun_Service verifies that --service exits 1 (not yet implemented).
+func TestRun_Service(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--service", "start"}); code != 1 {
+		t.Errorf("run(--service start) = %d, want 1", code)
+	}
+}
+
+// TestRun_Maintenance verifies that --maintenance exits 1 (not yet implemented).
+func TestRun_Maintenance(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--maintenance", "backup"}); code != 1 {
+		t.Errorf("run(--maintenance backup) = %d, want 1", code)
+	}
+}
+
+// TestRun_Update verifies that --update exits 1 (not yet implemented).
+func TestRun_Update(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--update", "check"}); code != 1 {
+		t.Errorf("run(--update check) = %d, want 1", code)
+	}
+}
+
+// TestRun_ConfigLoadFails verifies that a bad config path exits 1.
+func TestRun_ConfigLoadFails(t *testing.T) {
+	// /proc/cassocial-test cannot be created → ensureDirectories fails → Load returns error.
+	if code := run([]string{"--config", "/proc/cassocial-test-run-fail"}); code != 1 {
+		t.Errorf("run(bad --config) = %d, want 1", code)
+	}
+}
+
+// TestRun_Status verifies that --status exits 0 after loading config.
+func TestRun_Status(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CASSOCIAL_PORT", "")
+	t.Setenv("CASSOCIAL_MODE", "")
+	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--status"}); code != 0 {
+		t.Errorf("run(--status) = %d, want 0", code)
+	}
+}
+
 // containsString is a simple helper used only in this test file.
 func containsString(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||

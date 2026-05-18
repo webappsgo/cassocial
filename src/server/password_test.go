@@ -592,6 +592,98 @@ func TestCheckPasswordStrength_Score2(t *testing.T) {
 	}
 }
 
+// --- Postgres branch tests for password.go ---
+// SQLite accepts both ? and $N placeholder syntax, so these branches succeed on SQLite.
+// We set db.Driver = "postgres" to exercise the alternate query paths.
+
+// TestRequestPasswordReset_PostgresBranch exercises the postgres UPDATE branch.
+func TestRequestPasswordReset_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	registerTestUser(t, a, "pgpwreset", "pgpwreset@example.com", "ValidPass1!")
+	a.db.Driver = "postgres"
+	token, err := a.RequestPasswordReset("pgpwreset@example.com")
+	if err != nil {
+		t.Fatalf("RequestPasswordReset postgres branch: %v", err)
+	}
+	if token == "" {
+		t.Error("RequestPasswordReset postgres branch: expected non-empty token")
+	}
+}
+
+// TestValidatePasswordResetToken_PostgresBranch exercises the postgres SELECT branch.
+func TestValidatePasswordResetToken_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	registerTestUser(t, a, "pgvaltok", "pgvaltok@example.com", "ValidPass1!")
+	// Get a token with SQLite driver, then validate with postgres driver.
+	token, _ := a.RequestPasswordReset("pgvaltok@example.com")
+	a.db.Driver = "postgres"
+	// SQLite accepts $1 — should succeed.
+	_, err := a.ValidatePasswordResetToken(token)
+	if err != nil {
+		t.Fatalf("ValidatePasswordResetToken postgres branch: %v", err)
+	}
+}
+
+// TestResetPassword_PostgresBranch exercises the postgres UPDATE branch in ResetPassword.
+func TestResetPassword_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	registerTestUser(t, a, "pgreset", "pgreset@example.com", "ValidPass1!")
+	token, err := a.RequestPasswordReset("pgreset@example.com")
+	if err != nil || token == "" {
+		t.Fatalf("RequestPasswordReset: %v / %q", err, token)
+	}
+	a.db.Driver = "postgres"
+	// SQLite accepts $1/$2/$3 — should succeed.
+	if err := a.ResetPassword(token, "NewPass1!"); err != nil {
+		t.Fatalf("ResetPassword postgres branch: %v", err)
+	}
+}
+
+// TestChangePassword_PostgresBranch exercises the postgres UPDATE branch in ChangePassword.
+func TestChangePassword_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgchange", "pgchange@example.com", "OldPass1!")
+	a.db.Driver = "postgres"
+	if err := a.ChangePassword(user.ID, "OldPass1!", "NewPass1!"); err != nil {
+		t.Fatalf("ChangePassword postgres branch: %v", err)
+	}
+}
+
+// TestInvalidateAllPasswordResetTokens_PostgresBranch exercises the postgres UPDATE branch.
+func TestInvalidateAllPasswordResetTokens_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pginvalidate", "pginvalidate@example.com", "ValidPass1!")
+	a.db.Driver = "postgres"
+	if err := a.InvalidateAllPasswordResetTokens(user.ID); err != nil {
+		t.Fatalf("InvalidateAllPasswordResetTokens postgres branch: %v", err)
+	}
+}
+
+// TestVerifyEmail_PostgresBranch exercises the postgres SELECT branch in VerifyEmail.
+func TestVerifyEmail_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgverify", "pgverify@example.com", "ValidPass1!")
+	tok, err := a.GenerateEmailVerificationToken(user.ID)
+	if err != nil || tok == "" {
+		t.Fatalf("GenerateEmailVerificationToken: %v / %q", err, tok)
+	}
+	a.db.Driver = "postgres"
+	if err := a.VerifyEmail(tok); err != nil {
+		t.Fatalf("VerifyEmail postgres branch: %v", err)
+	}
+}
+
+// TestGenerateEmailVerificationToken_PostgresBranch exercises the postgres UPDATE branch.
+func TestGenerateEmailVerificationToken_PostgresBranch(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "pgevt", "pgevt@example.com", "ValidPass1!")
+	a.db.Driver = "postgres"
+	_, err := a.GenerateEmailVerificationToken(user.ID)
+	if err != nil {
+		t.Fatalf("GenerateEmailVerificationToken postgres branch: %v", err)
+	}
+}
+
 // TestCheckPasswordStrength_NoLower exercises the "no lowercase" feedback branch.
 func TestCheckPasswordStrength_NoLower(t *testing.T) {
 	a := newTestAuth(t)

@@ -23,42 +23,53 @@ var (
 )
 
 func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+// run parses args and executes the appropriate action, returning an exit code.
+// Extracted from main() so it can be tested without exec side-effects.
+func run(args []string) int {
+	fs := flag.NewFlagSet("cassocial", flag.ContinueOnError)
+
 	// CLI flags (following TEMPLATE.md NON-NEGOTIABLE specification)
 	var (
-		showHelp     = flag.Bool("help", false, "Show help information")
-		showHelpS    = flag.Bool("h", false, "Show help information")
-		showVersion  = flag.Bool("version", false, "Show version information")
-		showVersionS = flag.Bool("v", false, "Show version information")
+		showHelp     = fs.Bool("help", false, "Show help information")
+		showHelpS    = fs.Bool("h", false, "Show help information")
+		showVersion  = fs.Bool("version", false, "Show version information")
+		showVersionS = fs.Bool("v", false, "Show version information")
 
 		// Output control flags (PART 8 — NON-NEGOTIABLE)
-		colorMode = flag.String("color", "auto", "Color output mode (always|never|auto)")
-		lang      = flag.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
+		colorMode = fs.String("color", "auto", "Color output mode (always|never|auto)")
+		lang      = fs.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
 
 		// Directory flags
-		configDir = flag.String("config", "", "Configuration directory")
-		dataDir   = flag.String("data", "", "Data directory")
-		logDir    = flag.String("log", "", "Log directory")
-		pidFile   = flag.String("pid", "", "PID file path")
+		configDir = fs.String("config", "", "Configuration directory")
+		dataDir   = fs.String("data", "", "Data directory")
+		logDir    = fs.String("log", "", "Log directory")
+		pidFile   = fs.String("pid", "", "PID file path")
 
 		// Server flags
-		address = flag.String("address", "", "Listen address")
-		port    = flag.Int("port", 0, "Listen port")
-		mode    = flag.String("mode", "", "Application mode (production|development)")
+		address = fs.String("address", "", "Listen address")
+		port    = fs.Int("port", 0, "Listen port")
+		mode    = fs.String("mode", "", "Application mode (production|development)")
 
 		// Operation flags
-		debug      = flag.Bool("debug", false, "Enable debug mode")
-		showStatus = flag.Bool("status", false, "Show status and health")
-		daemon     = flag.Bool("daemon", false, "Run as daemon")
+		debug      = fs.Bool("debug", false, "Enable debug mode")
+		showStatus = fs.Bool("status", false, "Show status and health")
+		daemon     = fs.Bool("daemon", false, "Run as daemon")
 
 		// Service management
-		service = flag.String("service", "", "Service command (start|stop|restart|reload|--install|--uninstall)")
+		service = fs.String("service", "", "Service command (start|stop|restart|reload|--install|--uninstall)")
 
 		// Maintenance
-		maintenance = flag.String("maintenance", "", "Maintenance command (backup|restore|update|mode|setup)")
-		update      = flag.String("update", "", "Update command (check|yes|branch)")
+		maintenance = fs.String("maintenance", "", "Maintenance command (backup|restore|update|mode|setup)")
+		update      = fs.String("update", "", "Update command (check|yes|branch)")
 	)
 
-	flag.Parse()
+	if err := fs.Parse(args); err != nil {
+		// flag.ContinueOnError writes usage to os.Stderr automatically on error
+		return 1
+	}
 
 	// Apply NO_COLOR / --color preference before any output
 	applyColorPreference(*colorMode)
@@ -66,13 +77,13 @@ func main() {
 	// Handle version
 	if *showVersion || *showVersionS {
 		printVersion()
-		os.Exit(0)
+		return 0
 	}
 
 	// Handle help
 	if *showHelp || *showHelpS {
 		printHelp()
-		os.Exit(0)
+		return 0
 	}
 
 	// Apply language preference (auto-detect from LANG env if not set)
@@ -86,7 +97,8 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load(*configDir, *dataDir, *logDir)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Printf("Failed to load configuration: %v", err)
+		return 1
 	}
 
 	// Override config with CLI flags
@@ -109,32 +121,33 @@ func main() {
 	// Handle status
 	if *showStatus {
 		handleStatus(cfg, pidFilePath)
-		os.Exit(0)
+		return 0
 	}
 
 	if *daemon {
 		fmt.Fprintln(os.Stderr, "error: --daemon not yet implemented")
-		os.Exit(1)
+		return 1
 	}
 
 	if *service != "" {
 		fmt.Fprintln(os.Stderr, "error: --service not yet implemented")
-		os.Exit(1)
+		return 1
 	}
 
 	if *maintenance != "" {
 		fmt.Fprintln(os.Stderr, "error: --maintenance not yet implemented")
-		os.Exit(1)
+		return 1
 	}
 
 	if *update != "" {
 		fmt.Fprintln(os.Stderr, "error: --update not yet implemented")
-		os.Exit(1)
+		return 1
 	}
 
 	// Write PID file
 	if err := server.WritePIDFile(pidFilePath); err != nil {
-		log.Fatalf("Failed to write PID file: %v", err)
+		log.Printf("Failed to write PID file: %v", err)
+		return 1
 	}
 	// Ensure PID file is removed on exit
 	defer server.RemovePIDFile(pidFilePath)
@@ -143,7 +156,8 @@ func main() {
 	log.Printf("Connecting to database (driver: %s)...", cfg.Database.Driver)
 	db, err := store.Connect(cfg.Database.Driver, cfg.Database.Name)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Printf("Failed to connect to database: %v", err)
+		return 1
 	}
 	defer db.Close()
 
@@ -164,13 +178,17 @@ func main() {
 
 	srv, err := server.New(cfg, db, h)
 	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
+		log.Printf("Failed to create server: %v", err)
+		return 1
 	}
 
 	// Start server (blocks until shutdown)
 	if err := srv.Start(); err != nil {
-		log.Fatalf("Server error: %v", err)
+		log.Printf("Server error: %v", err)
+		return 1
 	}
+
+	return 0
 }
 
 func printVersion() {

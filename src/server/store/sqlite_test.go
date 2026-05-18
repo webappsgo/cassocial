@@ -3476,3 +3476,4 @@ func TestGetLinkAnalytics_QueryError(t *testing.T) {
 		t.Error("GetLinkAnalytics on closed DB returned nil error, want error")
 	}
 }
+
