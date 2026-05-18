@@ -635,3 +635,31 @@ func TestGetIPAddress_RemoteAddr(t *testing.T) {
 		t.Errorf("getIPAddress RemoteAddr = %q, want %q", ip, "192.0.2.1")
 	}
 }
+
+// TestRequireActiveUser_InactiveUser verifies that an inactive (suspended) user gets 403.
+func TestRequireActiveUser_InactiveUser(t *testing.T) {
+	a := newTestAuth(t)
+	m := NewMiddleware(a)
+	user := registerTestUser(t, a, "inactive-user", "inactive@example.com", "ValidPass1")
+
+	// Suspend the user directly via DB so IsActive() returns false.
+	_, err := a.db.Exec(`UPDATE users SET status = 'suspended' WHERE id = ?`, user.ID)
+	if err != nil {
+		t.Fatalf("suspending user: %v", err)
+	}
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("next should not be called for inactive user")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx := context.WithValue(req.Context(), ContextKeyUserID, user.ID)
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	m.RequireActiveUser(next).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("RequireActiveUser inactive: status %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}

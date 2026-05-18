@@ -271,3 +271,37 @@ func TestGetHealthStatus_UnhealthyDisk(t *testing.T) {
 		t.Errorf("disk check = %q, want error", health.Checks["disk"])
 	}
 }
+
+func TestGetHealthStatus_DBError(t *testing.T) {
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect: %v", err)
+	}
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	cfg := &config.Config{
+		DataDir: t.TempDir(),
+		Server: config.ServerConfig{
+			Mode: "production",
+		},
+	}
+
+	s := &Server{
+		config:    cfg,
+		db:        db,
+		startTime: time.Now(),
+	}
+
+	// Close the DB so Ping fails.
+	db.Close()
+
+	health := s.getHealthStatus()
+	if health.Status == "healthy" {
+		t.Error("status should not be healthy when DB Ping fails")
+	}
+	if health.Checks["database"] != "error" {
+		t.Errorf("database check = %q, want error", health.Checks["database"])
+	}
+}

@@ -233,3 +233,68 @@ func TestResponseWriter_WriteHeader(t *testing.T) {
 		t.Errorf("recorder code = %d, want %d", rr.Code, http.StatusTeapot)
 	}
 }
+
+// TestNewLogger_AccessLogBlocked exercises the branch where access.log cannot be opened.
+func TestNewLogger_AccessLogBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create access.log as a directory so os.OpenFile fails.
+	if err := os.MkdirAll(base+"/access.log", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	_, err := NewLogger(base, "text")
+	if err == nil {
+		t.Error("NewLogger should fail when access.log cannot be opened")
+	}
+}
+
+// TestNewLogger_ServerLogBlocked exercises the branch where server.log cannot be opened.
+func TestNewLogger_ServerLogBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create server.log as a directory so os.OpenFile fails.
+	if err := os.MkdirAll(base+"/server.log", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	_, err := NewLogger(base, "text")
+	if err == nil {
+		t.Error("NewLogger should fail when server.log cannot be opened")
+	}
+}
+
+// TestNewLogger_ErrorLogBlocked exercises the branch where error.log cannot be opened.
+func TestNewLogger_ErrorLogBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create error.log as a directory so os.OpenFile fails.
+	if err := os.MkdirAll(base+"/error.log", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	_, err := NewLogger(base, "text")
+	if err == nil {
+		t.Error("NewLogger should fail when error.log cannot be opened")
+	}
+}
+
+// TestNewLogger_AuditLogBlocked exercises the branch where audit.log cannot be opened.
+func TestNewLogger_AuditLogBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create audit.log as a directory so os.OpenFile fails.
+	if err := os.MkdirAll(base+"/audit.log", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	_, err := NewLogger(base, "text")
+	if err == nil {
+		t.Error("NewLogger should fail when audit.log cannot be opened")
+	}
+}
+
+// TestNewLogger_SecurityLogBlocked exercises the branch where security.log cannot be opened.
+func TestNewLogger_SecurityLogBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create security.log as a directory so os.OpenFile fails.
+	if err := os.MkdirAll(base+"/security.log", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	_, err := NewLogger(base, "text")
+	if err == nil {
+		t.Error("NewLogger should fail when security.log cannot be opened")
+	}
+}

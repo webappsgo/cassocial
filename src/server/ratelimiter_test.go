@@ -182,6 +182,27 @@ func TestRateLimiter_CleanupLoop_Fires(t *testing.T) {
 	t.Error("cleanupLoop did not remove stale entry within 200ms")
 }
 
+func TestRateLimiter_GetRemaining_NegativeCount(t *testing.T) {
+	rl := &RateLimiter{
+		requests:        make(map[string]*rateLimitEntry),
+		limit:           2,
+		window:          time.Minute,
+		cleanupInterval: time.Minute,
+	}
+
+	// Directly inject an entry where count exceeds limit to exercise the remaining < 0 branch.
+	rl.requests["overflow-client"] = &rateLimitEntry{
+		count:      10, // exceeds limit of 2
+		resetTime:  time.Now().Add(time.Minute),
+		lastAccess: time.Now(),
+	}
+
+	remaining := rl.GetRemaining("overflow-client")
+	if remaining != 0 {
+		t.Errorf("GetRemaining when count > limit = %d, want 0", remaining)
+	}
+}
+
 func TestRateLimiter_Cleanup(t *testing.T) {
 	rl := &RateLimiter{
 		requests:        make(map[string]*rateLimitEntry),

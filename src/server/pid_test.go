@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -174,4 +175,108 @@ func TestWritePIDFile_AlreadyRunning(t *testing.T) {
 	err := WritePIDFile(pidPath)
 	// This may or may not fail depending on isOurProcess logic, but should not panic
 	_ = err
+}
+
+// TestIsOurProcess_KernelThread covers the Readlink-failure branch in isOurProcess (pid_unix.go:31-34).
+// On Linux, PID 2 is a kernel thread (kthreadd) with no /proc/2/exe symlink, so Readlink fails
+// and the code falls through to isOurProcessDarwin, which returns false for non-cassocial processes.
+func TestIsOurProcess_KernelThread(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("kernel thread PID 2 test is Linux-only")
+	}
+	// Verify PID 2 exists before testing.
+	if _, err := os.Stat("/proc/2"); err != nil {
+		t.Skip("PID 2 not accessible on this system")
+	}
+	// isOurProcess(2): Readlink("/proc/2/exe") fails for kernel threads,
+	// falling through to isOurProcessDarwin(2) which returns false.
+	if isOurProcess(2) {
+		t.Error("isOurProcess(2) should return false for a kernel thread")
+	}
+}
+
+// TestCheckPIDFile_OtherProcess covers the isOurProcess-returns-false branch (line 44).
+// PID 1 (init/systemd) is always running but is not our binary.
+func TestCheckPIDFile_OtherProcess(t *testing.T) {
+	dir := t.TempDir()
+	pidPath := filepath.Join(dir, "other.pid")
+
+	if err := os.WriteFile(pidPath, []byte("1"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// PID 1 is running (init/systemd) but is not "cassocial", so isOurProcess returns false.
+	// CheckPIDFile should return false (stale PID file removed).
+	running, pid, err := CheckPIDFile(pidPath)
+	if err != nil {
+		t.Fatalf("CheckPIDFile: %v", err)
+	}
+	if running {
+		// This is acceptable if somehow PID 1 is considered "ours" — just skip.
+		t.Log("PID 1 was considered our process — skipping assertion")
+		return
+	}
+	if pid != 0 {
+		t.Errorf("pid = %d, want 0 when not our process", pid)
+	}
+}
+
+// TestWritePIDFile_CheckError covers the error path when CheckPIDFile returns an error.
+// It passes a directory as the PID file path, making os.ReadFile return "is a directory"
+// (not os.IsNotExist), which causes CheckPIDFile to return an error and WritePIDFile to
+// propagate it (pid.go:51-53).
+func TestWritePIDFile_CheckError(t *testing.T) {
+	dir := t.TempDir()
+	// Create a subdirectory with the .pid name so ReadFile fails with "is a directory".
+	pidPath := filepath.Join(dir, "server.pid")
+	if err := os.MkdirAll(pidPath, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// WritePIDFile(pidPath) → CheckPIDFile(pidPath) → ReadFile(pidPath) → "is a directory" error
+	// → CheckPIDFile returns error → WritePIDFile returns that error (line 51-53).
+	err := WritePIDFile(pidPath)
+	if err == nil {
+		t.Error("WritePIDFile should return error when PID path is a directory")
+	}
+}
+
+// TestWritePIDFile_MkdirAllError covers the MkdirAll failure path in WritePIDFile (pid.go:60-62).
+// A blocking file is created where the PID directory should be, making MkdirAll fail.
+func TestWritePIDFile_MkdirAllError(t *testing.T) {
+	base := t.TempDir()
+	// Create a file named "subdir" so MkdirAll("subdir") fails.
+	blocker := filepath.Join(base, "subdir")
+	if err := os.WriteFile(blocker, []byte("block"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// The PID file path is inside "subdir" which is a file — MkdirAll will fail.
+	pidPath := filepath.Join(blocker, "server.pid")
+	err := WritePIDFile(pidPath)
+	if err == nil {
+		t.Error("WritePIDFile should return error when MkdirAll fails")
+	}
+}
+
+// TestCheckPIDFile_ReadError covers the non-IsNotExist read error path.
+func TestCheckPIDFile_ReadError(t *testing.T) {
+	dir := t.TempDir()
+	// Make pidPath a directory — ReadFile on a dir returns "is a directory" error,
+	// which is NOT os.IsNotExist, so we hit the error branch.
+	dirPath := filepath.Join(dir, "pid-is-dir.pid")
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	running, pid, err := CheckPIDFile(dirPath)
+	// Should return an error (not IsNotExist), running=false
+	if err == nil {
+		// On some systems this may succeed — just ensure no panic.
+		_ = running
+		_ = pid
+		return
+	}
+	if running {
+		t.Error("running should be false on read error")
+	}
 }

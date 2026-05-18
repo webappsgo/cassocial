@@ -267,6 +267,42 @@ func TestDetectLanguage_CookieUnknownLang(t *testing.T) {
 	}
 }
 
+func TestLoadTranslations_ReadDirError(t *testing.T) {
+	base := t.TempDir()
+	// Create i18nDir as a FILE (not a directory) so os.ReadDir fails.
+	i18nFile := filepath.Join(base, "i18n")
+	if err := os.WriteFile(i18nFile, []byte("not a dir"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// NewI18N should not panic; loadTranslations returns the error, which NewI18N logs and ignores.
+	i := NewI18N(base, "en")
+	if i == nil {
+		t.Fatal("NewI18N returned nil")
+	}
+	// Should not be enabled (ReadDir failed, no translations loaded).
+	if i.enabled {
+		t.Error("i18n should not be enabled when ReadDir fails")
+	}
+}
+
+func TestLoadTranslations_BrokenSymlink(t *testing.T) {
+	base := t.TempDir()
+	i18nDir := filepath.Join(base, "i18n")
+	if err := os.MkdirAll(i18nDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Create a broken symlink named en.json — ReadDir sees it, ReadFile fails.
+	linkPath := filepath.Join(i18nDir, "en.json")
+	if err := os.Symlink("/nonexistent/target/that/cannot/exist", linkPath); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	// Should not panic — ReadFile fails gracefully.
+	i := NewI18N(base, "en")
+	if i == nil {
+		t.Fatal("NewI18N returned nil")
+	}
+}
+
 func TestLoadTranslations_Directory(t *testing.T) {
 	base := t.TempDir()
 	i18nDir := filepath.Join(base, "i18n")
