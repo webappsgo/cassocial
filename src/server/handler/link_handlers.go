@@ -178,7 +178,7 @@ func (h *LinkHandlers) CreateLink(w http.ResponseWriter, r *http.Request) {
 				 RETURNING id`
 		err := h.db.QueryRow(query, link.ProfileID, link.ServiceID, link.Title, link.Username,
 			link.URL, link.IconURL, link.BackgroundColor, link.TextColor, link.Position,
-			link.IsActive, 0, link.CreatedAt, link.UpdatedAt).Scan(&link.ID)
+			link.IsActive, 0, h.db.BindTime(link.CreatedAt), h.db.BindTime(link.UpdatedAt)).Scan(&link.ID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to create link")
 			return
@@ -187,7 +187,7 @@ func (h *LinkHandlers) CreateLink(w http.ResponseWriter, r *http.Request) {
 		link.ID = generateUUID()
 		_, err := h.db.Exec(query, link.ID, link.ProfileID, link.ServiceID, link.Title,
 			link.Username, link.URL, link.IconURL, link.BackgroundColor, link.TextColor,
-			link.Position, link.IsActive, 0, link.CreatedAt, link.UpdatedAt)
+			link.Position, link.IsActive, 0, h.db.BindTime(link.CreatedAt), h.db.BindTime(link.UpdatedAt))
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to create link")
 			return
@@ -272,7 +272,7 @@ func (h *LinkHandlers) UpdateLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.db.Exec(query, link.Title, link.Username, link.URL, link.IconURL,
-		link.BackgroundColor, link.TextColor, link.IsActive, link.UpdatedAt, linkID)
+		link.BackgroundColor, link.TextColor, link.IsActive, h.db.BindTime(link.UpdatedAt), linkID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update link")
 		return
@@ -419,7 +419,7 @@ func (h *LinkHandlers) ToggleLink(w http.ResponseWriter, r *http.Request) {
 		query = "UPDATE links SET is_active = $1, updated_at = $2 WHERE id = $3"
 	}
 
-	_, err = h.db.Exec(query, link.IsActive, link.UpdatedAt, linkID)
+	_, err = h.db.Exec(query, link.IsActive, h.db.BindTime(link.UpdatedAt), linkID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to toggle link")
 		return

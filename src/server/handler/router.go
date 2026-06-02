@@ -538,7 +538,7 @@ func (rt *Router) trackProfileView(r *http.Request, profileID string) {
 		query = `INSERT INTO analytics (id, profile_id, event_type, ip_hash, user_agent, referrer, device_type, created_at)
 				 VALUES ($1, $2, 'view', $3, $4, $5, $6, $7)`
 	}
-	rt.db.Exec(query, generateUUID(), profileID, ipHash, r.UserAgent(), r.Referer(), deviceType, getCurrentTimestamp())
+	rt.db.Exec(query, generateUUID(), profileID, ipHash, r.UserAgent(), r.Referer(), deviceType, rt.db.BindTime(getCurrentTimestamp()))
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

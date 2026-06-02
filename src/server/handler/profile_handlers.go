@@ -202,7 +202,7 @@ func (h *ProfileHandlers) CreateProfile(w http.ResponseWriter, r *http.Request) 
 			profile.Bio, profile.AvatarURL, profile.HeaderImageURL, profile.ThemeID,
 			profile.ShowUsernames, profile.IsPublic, profile.AnalyticsEnabled,
 			profile.QRCodeEnabled, profile.MetaTitle, profile.MetaDescription,
-			profile.CreatedAt, profile.UpdatedAt).Scan(&profile.ID)
+			h.db.BindTime(profile.CreatedAt), h.db.BindTime(profile.UpdatedAt)).Scan(&profile.ID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to create profile")
 			return
@@ -213,7 +213,7 @@ func (h *ProfileHandlers) CreateProfile(w http.ResponseWriter, r *http.Request) 
 			profile.DisplayName, profile.Bio, profile.AvatarURL, profile.HeaderImageURL,
 			profile.ThemeID, profile.ShowUsernames, profile.IsPublic, profile.AnalyticsEnabled,
 			profile.QRCodeEnabled, profile.MetaTitle, profile.MetaDescription,
-			profile.CreatedAt, profile.UpdatedAt)
+			h.db.BindTime(profile.CreatedAt), h.db.BindTime(profile.UpdatedAt))
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to create profile")
 			return
@@ -324,7 +324,7 @@ func (h *ProfileHandlers) UpdateProfile(w http.ResponseWriter, r *http.Request) 
 		profile.HeaderImageURL, profile.ShowUsernames, profile.IsPublic,
 		profile.PasswordProtected, profile.ProtectionPassword, profile.AnalyticsEnabled,
 		profile.QRCodeEnabled, profile.MetaTitle, profile.MetaDescription, profile.OgImageURL,
-		profile.CustomCSS, profile.UpdatedAt, profileID)
+		profile.CustomCSS, h.db.BindTime(profile.UpdatedAt), profileID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update profile")
 		return
@@ -452,16 +452,16 @@ func (h *ProfileHandlers) DuplicateProfile(w http.ResponseWriter, r *http.Reques
 			duplicate.Bio, duplicate.AvatarURL, duplicate.HeaderImageURL, duplicate.ThemeID,
 			duplicate.CustomCSS, duplicate.ShowUsernames, duplicate.IsPublic,
 			duplicate.AnalyticsEnabled, duplicate.QRCodeEnabled, duplicate.MetaTitle,
-			duplicate.MetaDescription, duplicate.OgImageURL, duplicate.CreatedAt,
-			duplicate.UpdatedAt).Scan(&duplicate.ID)
+			duplicate.MetaDescription, duplicate.OgImageURL, h.db.BindTime(duplicate.CreatedAt),
+			h.db.BindTime(duplicate.UpdatedAt)).Scan(&duplicate.ID)
 	} else {
 		duplicate.ID = generateUUID()
 		_, err = h.db.Exec(query, duplicate.ID, duplicate.UserID, duplicate.Slug,
 			duplicate.DisplayName, duplicate.Bio, duplicate.AvatarURL, duplicate.HeaderImageURL,
 			duplicate.ThemeID, duplicate.CustomCSS, duplicate.ShowUsernames, duplicate.IsPublic,
 			duplicate.AnalyticsEnabled, duplicate.QRCodeEnabled, duplicate.MetaTitle,
-			duplicate.MetaDescription, duplicate.OgImageURL, duplicate.CreatedAt,
-			duplicate.UpdatedAt)
+			duplicate.MetaDescription, duplicate.OgImageURL, h.db.BindTime(duplicate.CreatedAt),
+			h.db.BindTime(duplicate.UpdatedAt))
 	}
 
 	if err != nil {

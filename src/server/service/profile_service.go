@@ -99,14 +99,14 @@ func (s *ProfileService) Create(userID string, profile *model.Profile) error {
 	`
 
 	profile.ID = s.generateID()
-	_, err = s.db.Exec(query,
+	_, err = s.db.ExecR(query,
 		profile.ID, profile.UserID, profile.Slug, profile.DisplayName, profile.Bio,
 		profile.AvatarURL, profile.HeaderImageURL, profile.ThemeID, profile.CustomCSS,
 		profile.ShowUsernames, profile.IsPublic, profile.PasswordProtected,
 		profile.ProtectionPassword, profile.CustomDomain, profile.DomainVerified,
 		profile.AnalyticsEnabled, profile.MetaTitle, profile.MetaDescription,
 		profile.OgImageURL, profile.ViewCount, profile.QRCodeEnabled,
-		profile.CreatedAt, profile.UpdatedAt,
+		s.db.BindTime(profile.CreatedAt), s.db.BindTime(profile.UpdatedAt),
 	)
 
 	if err != nil {
@@ -121,7 +121,7 @@ func (s *ProfileService) GetByID(id string) (*model.Profile, error) {
 	query := `SELECT * FROM profiles WHERE id = ?`
 
 	var profile model.Profile
-	err := s.db.QueryRow(query, id).Scan(
+	err := s.db.QueryRowR(query, id).Scan(
 		&profile.ID, &profile.UserID, &profile.Slug, &profile.DisplayName,
 		&profile.Bio, &profile.AvatarURL, &profile.HeaderImageURL, &profile.ThemeID,
 		&profile.CustomCSS, &profile.ShowUsernames, &profile.IsPublic,
@@ -146,7 +146,7 @@ func (s *ProfileService) GetBySlug(slug string) (*model.Profile, error) {
 	query := `SELECT * FROM profiles WHERE slug = ?`
 
 	var profile model.Profile
-	err := s.db.QueryRow(query, slug).Scan(
+	err := s.db.QueryRowR(query, slug).Scan(
 		&profile.ID, &profile.UserID, &profile.Slug, &profile.DisplayName,
 		&profile.Bio, &profile.AvatarURL, &profile.HeaderImageURL, &profile.ThemeID,
 		&profile.CustomCSS, &profile.ShowUsernames, &profile.IsPublic,
@@ -170,7 +170,7 @@ func (s *ProfileService) GetBySlug(slug string) (*model.Profile, error) {
 func (s *ProfileService) GetByUserID(userID string) ([]*model.Profile, error) {
 	query := `SELECT * FROM profiles WHERE user_id = ? ORDER BY created_at DESC`
 
-	rows, err := s.db.Query(query, userID)
+	rows, err := s.db.QueryR(query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query profiles: %w", err)
 	}
@@ -232,13 +232,13 @@ func (s *ProfileService) Update(profile *model.Profile) error {
 		WHERE id = ?
 	`
 
-	_, err = s.db.Exec(query,
+	_, err = s.db.ExecR(query,
 		profile.Slug, profile.DisplayName, profile.Bio, profile.AvatarURL,
 		profile.HeaderImageURL, profile.ThemeID, profile.CustomCSS,
 		profile.ShowUsernames, profile.IsPublic, profile.PasswordProtected,
 		profile.ProtectionPassword, profile.CustomDomain, profile.DomainVerified,
 		profile.AnalyticsEnabled, profile.MetaTitle, profile.MetaDescription,
-		profile.OgImageURL, profile.QRCodeEnabled, profile.UpdatedAt, profile.ID,
+		profile.OgImageURL, profile.QRCodeEnabled, s.db.BindTime(profile.UpdatedAt), profile.ID,
 	)
 
 	if err != nil {
@@ -252,7 +252,7 @@ func (s *ProfileService) Update(profile *model.Profile) error {
 func (s *ProfileService) Delete(id string) error {
 	query := `DELETE FROM profiles WHERE id = ?`
 
-	result, err := s.db.Exec(query, id)
+	result, err := s.db.ExecR(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete profile: %w", err)
 	}
@@ -302,7 +302,7 @@ func (s *ProfileService) Duplicate(profileID, userID string) (*model.Profile, er
 func (s *ProfileService) IncrementViewCount(id string) error {
 	query := `UPDATE profiles SET view_count = view_count + 1 WHERE id = ?`
 
-	_, err := s.db.Exec(query, id)
+	_, err := s.db.ExecR(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to increment view count: %w", err)
 	}
@@ -315,7 +315,7 @@ func (s *ProfileService) SlugExists(slug string) (bool, error) {
 	query := `SELECT COUNT(*) FROM profiles WHERE slug = ?`
 
 	var count int
-	err := s.db.QueryRow(query, slug).Scan(&count)
+	err := s.db.QueryRowR(query, slug).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check slug existence: %w", err)
 	}
@@ -328,7 +328,7 @@ func (s *ProfileService) CountByUserID(userID string) (int, error) {
 	query := `SELECT COUNT(*) FROM profiles WHERE user_id = ?`
 
 	var count int
-	err := s.db.QueryRow(query, userID).Scan(&count)
+	err := s.db.QueryRowR(query, userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count profiles: %w", err)
 	}
@@ -340,7 +340,7 @@ func (s *ProfileService) CountByUserID(userID string) (int, error) {
 func (s *ProfileService) VerifyDomain(profileID, domain string) error {
 	query := `UPDATE profiles SET domain_verified = 1 WHERE id = ? AND custom_domain = ?`
 
-	result, err := s.db.Exec(query, profileID, domain)
+	result, err := s.db.ExecR(query, profileID, domain)
 	if err != nil {
 		return fmt.Errorf("failed to verify domain: %w", err)
 	}
@@ -362,7 +362,7 @@ func (s *ProfileService) GetQRCodeSettings(profileID string) (*model.QRCodeSetti
 	query := `SELECT * FROM qr_code_settings WHERE profile_id = ?`
 
 	var settings model.QRCodeSettings
-	err := s.db.QueryRow(query, profileID).Scan(
+	err := s.db.QueryRowR(query, profileID).Scan(
 		&settings.ProfileID, &settings.Size, &settings.ErrorCorrection,
 		&settings.Style, &settings.DarkColor, &settings.LightColor,
 		&settings.LogoEnabled, &settings.LogoSize, &settings.Format,
@@ -417,11 +417,11 @@ func (s *ProfileService) UpdateQRCodeSettings(settings *model.QRCodeSettings) er
 			updated_at = EXCLUDED.updated_at
 	`
 
-	_, err := s.db.Exec(query,
+	_, err := s.db.ExecR(query,
 		settings.ProfileID, settings.Size, settings.ErrorCorrection,
 		settings.Style, settings.DarkColor, settings.LightColor,
 		settings.LogoEnabled, settings.LogoSize, settings.Format,
-		settings.UpdatedAt,
+		s.db.BindTime(settings.UpdatedAt),
 	)
 
 	if err != nil {

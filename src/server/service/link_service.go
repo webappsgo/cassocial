@@ -75,11 +75,11 @@ func (s *LinkService) Create(link *model.Link) error {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err = s.db.Exec(query,
+	_, err = s.db.ExecR(query,
 		link.ID, link.ProfileID, link.ServiceID, link.Title, link.Username,
 		link.URL, link.IconURL, link.BackgroundColor, link.TextColor,
 		link.Position, link.IsActive, link.ClickCount,
-		link.CreatedAt, link.UpdatedAt,
+		s.db.BindTime(link.CreatedAt), s.db.BindTime(link.UpdatedAt),
 	)
 
 	if err != nil {
@@ -94,7 +94,7 @@ func (s *LinkService) GetByID(id string) (*model.Link, error) {
 	query := `SELECT * FROM links WHERE id = ?`
 
 	var link model.Link
-	err := s.db.QueryRow(query, id).Scan(
+	err := s.db.QueryRowR(query, id).Scan(
 		&link.ID, &link.ProfileID, &link.ServiceID, &link.Title,
 		&link.Username, &link.URL, &link.IconURL, &link.BackgroundColor,
 		&link.TextColor, &link.Position, &link.IsActive, &link.ClickCount,
@@ -115,7 +115,7 @@ func (s *LinkService) GetByID(id string) (*model.Link, error) {
 func (s *LinkService) GetByProfileID(profileID string) ([]*model.Link, error) {
 	query := `SELECT * FROM links WHERE profile_id = ? ORDER BY position ASC`
 
-	rows, err := s.db.Query(query, profileID)
+	rows, err := s.db.QueryR(query, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query links: %w", err)
 	}
@@ -143,7 +143,7 @@ func (s *LinkService) GetByProfileID(profileID string) ([]*model.Link, error) {
 func (s *LinkService) GetActiveByProfileID(profileID string) ([]*model.Link, error) {
 	query := `SELECT * FROM links WHERE profile_id = ? AND is_active = 1 ORDER BY position ASC`
 
-	rows, err := s.db.Query(query, profileID)
+	rows, err := s.db.QueryR(query, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query links: %w", err)
 	}
@@ -184,10 +184,10 @@ func (s *LinkService) Update(link *model.Link) error {
 		WHERE id = ?
 	`
 
-	result, err := s.db.Exec(query,
+	result, err := s.db.ExecR(query,
 		link.ServiceID, link.Title, link.Username, link.URL, link.IconURL,
 		link.BackgroundColor, link.TextColor, link.Position, link.IsActive,
-		link.UpdatedAt, link.ID,
+		s.db.BindTime(link.UpdatedAt), link.ID,
 	)
 
 	if err != nil {
@@ -217,7 +217,7 @@ func (s *LinkService) Delete(id string) error {
 	// Delete the link
 	query := `DELETE FROM links WHERE id = ?`
 
-	result, err := s.db.Exec(query, id)
+	result, err := s.db.ExecR(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete link: %w", err)
 	}
@@ -243,7 +243,7 @@ func (s *LinkService) Delete(id string) error {
 func (s *LinkService) Toggle(id string) error {
 	query := `UPDATE links SET is_active = NOT is_active, updated_at = ? WHERE id = ?`
 
-	result, err := s.db.Exec(query, time.Now(), id)
+	result, err := s.db.ExecR(query, s.db.BindTime(time.Now()), id)
 	if err != nil {
 		return fmt.Errorf("failed to toggle link: %w", err)
 	}
@@ -271,9 +271,10 @@ func (s *LinkService) Reorder(profileID string, linkIDs []string) error {
 
 	// Update positions
 	query := `UPDATE links SET position = ?, updated_at = ? WHERE id = ? AND profile_id = ?`
+	now := s.db.BindTime(time.Now())
 
 	for i, linkID := range linkIDs {
-		_, err := tx.Exec(query, i+1, time.Now(), linkID, profileID)
+		_, err := tx.Exec(query, i+1, now, linkID, profileID)
 		if err != nil {
 			return fmt.Errorf("failed to update link position: %w", err)
 		}
@@ -291,7 +292,7 @@ func (s *LinkService) Reorder(profileID string, linkIDs []string) error {
 func (s *LinkService) IncrementClickCount(id string) error {
 	query := `UPDATE links SET click_count = click_count + 1 WHERE id = ?`
 
-	_, err := s.db.Exec(query, id)
+	_, err := s.db.ExecR(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to increment click count: %w", err)
 	}
@@ -304,7 +305,7 @@ func (s *LinkService) CountByProfileID(profileID string) (int, error) {
 	query := `SELECT COUNT(*) FROM links WHERE profile_id = ?`
 
 	var count int
-	err := s.db.QueryRow(query, profileID).Scan(&count)
+	err := s.db.QueryRowR(query, profileID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count links: %w", err)
 	}
@@ -321,7 +322,7 @@ func (s *LinkService) GetTopClickedLinks(profileID string, limit int) ([]*model.
 		LIMIT ?
 	`
 
-	rows, err := s.db.Query(query, profileID, limit)
+	rows, err := s.db.QueryR(query, profileID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query links: %w", err)
 	}
@@ -351,7 +352,7 @@ func (s *LinkService) getNextPosition(profileID string) (int, error) {
 	query := `SELECT COALESCE(MAX(position), 0) + 1 FROM links WHERE profile_id = ?`
 
 	var position int
-	err := s.db.QueryRow(query, profileID).Scan(&position)
+	err := s.db.QueryRowR(query, profileID).Scan(&position)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get next position: %w", err)
 	}
@@ -366,7 +367,7 @@ func (s *LinkService) reorderAfterDelete(profileID string, deletedPosition int) 
 		WHERE profile_id = ? AND position > ?
 	`
 
-	_, err := s.db.Exec(query, time.Now(), profileID, deletedPosition)
+	_, err := s.db.ExecR(query, s.db.BindTime(time.Now()), profileID, deletedPosition)
 	return err
 }
 

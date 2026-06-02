@@ -140,12 +140,12 @@ func (a *Auth) Register(username, email, password string) (*model.User, error) {
 			RETURNING id
 		`
 		err = a.db.QueryRow(query, user.Username, user.Email, user.PasswordHash, user.Role, user.Status,
-			user.CreatedAt, user.UpdatedAt, user.EmailVerified, user.TwoFactorEnabled).Scan(&user.ID)
+			a.db.BindTime(user.CreatedAt), a.db.BindTime(user.UpdatedAt), user.EmailVerified, user.TwoFactorEnabled).Scan(&user.ID)
 	} else {
 		userID := generateUUID()
 		user.ID = userID
 		_, err = a.db.Exec(query, userID, user.Username, user.Email, user.PasswordHash, user.Role, user.Status,
-			user.CreatedAt, user.UpdatedAt, user.EmailVerified, user.TwoFactorEnabled)
+			a.db.BindTime(user.CreatedAt), a.db.BindTime(user.UpdatedAt), user.EmailVerified, user.TwoFactorEnabled)
 	}
 
 	if err != nil {
@@ -518,7 +518,7 @@ func (a *Auth) updateLastLogin(userID string) error {
 		query = "UPDATE users SET last_login = $1 WHERE id = $2"
 	}
 
-	_, err := a.db.Exec(query, time.Now(), userID)
+	_, err := a.db.Exec(query, a.db.BindTime(time.Now()), userID)
 	return err
 }
 

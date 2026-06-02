@@ -104,7 +104,7 @@ func (s *ImportService) GetImportJob(jobID string) (map[string]interface{}, erro
 		CompletedAt *time.Time
 	}
 
-	err := s.db.QueryRow(query, jobID).Scan(
+	err := s.db.QueryRowR(query, jobID).Scan(
 		&job.ID, &job.UserID, &job.Source, &job.Status,
 		&job.Result, &job.CreatedAt, &job.CompletedAt,
 	)
@@ -478,7 +478,7 @@ func (s *ImportService) createImportJob(userID, source string) (string, error) {
 		VALUES (?, ?, ?, ?, ?)
 	`
 
-	_, err := s.db.Exec(query, jobID, userID, source, "pending", time.Now())
+	_, err := s.db.ExecR(query, jobID, userID, source, "pending", s.db.BindTime(time.Now()))
 	if err != nil {
 		return "", fmt.Errorf("failed to create import job: %w", err)
 	}
@@ -502,12 +502,12 @@ func (s *ImportService) updateJobStatus(jobID, status string, result map[string]
 		WHERE id = ?
 	`
 
-	completedAt := time.Now()
-	if status == "processing" {
-		completedAt = time.Time{} // NULL
+	var completedAt interface{}
+	if status != "processing" {
+		completedAt = s.db.BindTime(time.Now())
 	}
 
-	_, err := s.db.Exec(query, status, resultJSON, completedAt, jobID)
+	_, err := s.db.ExecR(query, status, resultJSON, completedAt, jobID)
 	if err != nil {
 		return fmt.Errorf("failed to update job status: %w", err)
 	}

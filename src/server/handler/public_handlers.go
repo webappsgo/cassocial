@@ -246,10 +246,10 @@ func (h *PublicHandlers) trackView(r *http.Request, profileID string) {
 				 referrer, device_type, created_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)`
 		h.db.Exec(query, profileID, "view", ipHash, r.UserAgent(),
-			r.Referer(), deviceType, getCurrentTimestamp())
+			r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	} else {
 		h.db.Exec(query, generateUUID(), profileID, "view", ipHash, r.UserAgent(),
-			r.Referer(), deviceType, getCurrentTimestamp())
+			r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	}
 }
 
@@ -271,9 +271,9 @@ func (h *PublicHandlers) trackClick(r *http.Request, profileID, linkID string) {
 				 user_agent, referrer, device_type, created_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 		h.db.Exec(query, profileID, linkID, "click", ipHash, r.UserAgent(),
-			r.Referer(), deviceType, getCurrentTimestamp())
+			r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	} else {
 		h.db.Exec(query, generateUUID(), profileID, linkID, "click", ipHash,
-			r.UserAgent(), r.Referer(), deviceType, getCurrentTimestamp())
+			r.UserAgent(), r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	}
 }

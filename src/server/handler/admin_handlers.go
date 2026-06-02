@@ -119,7 +119,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		query = "UPDATE users SET role = $1, status = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	_, err = h.db.Exec(query, user.Role, user.Status, user.UpdatedAt, userID)
+	_, err = h.db.Exec(query, user.Role, user.Status, h.db.BindTime(user.UpdatedAt), userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update user")
 		return

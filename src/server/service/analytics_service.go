@@ -67,10 +67,10 @@ func (s *AnalyticsService) TrackView(profileID, ipAddress, userAgent, referrer s
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err = s.db.Exec(query,
+	_, err = s.db.ExecR(query,
 		event.ID, event.ProfileID, nil, event.EventType, event.IPHash,
 		event.UserAgent, event.Referrer, event.Country, event.DeviceType,
-		event.CreatedAt,
+		s.db.BindTime(event.CreatedAt),
 	)
 
 	if err != nil {
@@ -124,10 +124,10 @@ func (s *AnalyticsService) TrackClick(profileID, linkID, ipAddress, userAgent, r
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err = s.db.Exec(query,
+	_, err = s.db.ExecR(query,
 		event.ID, event.ProfileID, event.LinkID, event.EventType, event.IPHash,
 		event.UserAgent, event.Referrer, event.Country, event.DeviceType,
-		event.CreatedAt,
+		s.db.BindTime(event.CreatedAt),
 	)
 
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *AnalyticsService) TrackSession(session *model.AnalyticsSession) error {
 			WHERE session_id = ?
 		`
 
-		_, err = s.db.Exec(query,
+		_, err = s.db.ExecR(query,
 			session.DurationSeconds, session.LinkClicks, session.SessionID,
 		)
 
@@ -189,13 +189,13 @@ func (s *AnalyticsService) TrackSession(session *model.AnalyticsSession) error {
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`
 
-		_, err = s.db.Exec(query,
+		_, err = s.db.ExecR(query,
 			session.ID, session.ProfileID, session.SessionID, session.IPHash,
 			session.Country, session.Region, session.City, session.DeviceType,
 			session.Browser, session.OS, session.ReferrerDomain, session.ReferrerPath,
 			session.UTMSource, session.UTMMedium, session.UTMCampaign,
 			session.LandingPage, session.DurationSeconds, session.LinkClicks,
-			session.CreatedAt,
+			s.db.BindTime(session.CreatedAt),
 		)
 
 		if err != nil {
@@ -243,12 +243,12 @@ func (s *AnalyticsService) AggregateHourly(profileID string, hour time.Time) err
 
 	hourEnd := hour.Add(time.Hour)
 
-	_, err := s.db.Exec(query,
-		profileID, hour,
-		profileID, hour, hourEnd,
-		profileID, hour, hourEnd,
-		hour, hourEnd,
-		profileID, hour, hourEnd,
+	_, err := s.db.ExecR(query,
+		profileID, s.db.BindTime(hour),
+		profileID, s.db.BindTime(hour), s.db.BindTime(hourEnd),
+		profileID, s.db.BindTime(hour), s.db.BindTime(hourEnd),
+		s.db.BindTime(hour), s.db.BindTime(hourEnd),
+		profileID, s.db.BindTime(hour), s.db.BindTime(hourEnd),
 	)
 
 	if err != nil {
@@ -274,7 +274,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		WHERE profile_id = ? AND created_at >= ? AND created_at < ?
 	`
 
-	err := s.db.QueryRow(query, profileID, startDate, endDate).Scan(
+	err := s.db.QueryRowR(query, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate)).Scan(
 		&summary.TotalViews, &summary.UniqueVisitors, &summary.TotalClicks,
 	)
 	if err != nil {
@@ -288,7 +288,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		WHERE profile_id = ? AND created_at >= ? AND created_at < ?
 	`
 
-	err = s.db.QueryRow(durationQuery, profileID, startDate, endDate).Scan(&summary.AvgDuration)
+	err = s.db.QueryRowR(durationQuery, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate)).Scan(&summary.AvgDuration)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get average duration: %w", err)
 	}
@@ -303,7 +303,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		LIMIT 10
 	`
 
-	rows, err := s.db.Query(referrerQuery, profileID, startDate, endDate)
+	rows, err := s.db.QueryR(referrerQuery, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get referrers: %w", err)
 	}
@@ -327,7 +327,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		LIMIT 10
 	`
 
-	rows, err = s.db.Query(countryQuery, profileID, startDate, endDate)
+	rows, err = s.db.QueryR(countryQuery, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get countries: %w", err)
 	}
@@ -349,7 +349,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		GROUP BY device_type
 	`
 
-	rows, err = s.db.Query(deviceQuery, profileID, startDate, endDate)
+	rows, err = s.db.QueryR(deviceQuery, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device breakdown: %w", err)
 	}
@@ -376,7 +376,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		LIMIT 20
 	`
 
-	rows, err = s.db.Query(linkQuery, profileID, startDate, endDate)
+	rows, err = s.db.QueryR(linkQuery, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get link stats: %w", err)
 	}
@@ -398,7 +398,7 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 		ORDER BY hour ASC
 	`
 
-	rows, err = s.db.Query(hourlyQuery, profileID, startDate, endDate)
+	rows, err = s.db.QueryR(hourlyQuery, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hourly stats: %w", err)
 	}
@@ -406,13 +406,16 @@ func (s *AnalyticsService) GetSummary(profileID string, startDate, endDate time.
 
 	for rows.Next() {
 		var stat model.AnalyticsHourly
+		var topReferrer, topCountry sql.NullString
 		if err := rows.Scan(
 			&stat.ProfileID, &stat.Hour, &stat.Views, &stat.UniqueVisitors,
-			&stat.TotalClicks, &stat.AvgDurationSecs, &stat.TopReferrer,
-			&stat.TopCountry,
+			&stat.TotalClicks, &stat.AvgDurationSecs, &topReferrer,
+			&topCountry,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan hourly stat: %w", err)
 		}
+		stat.TopReferrer = topReferrer.String
+		stat.TopCountry = topCountry.String
 		summary.HourlyStats = append(summary.HourlyStats, stat)
 	}
 
@@ -431,14 +434,14 @@ func (s *AnalyticsService) CleanupOldData() error {
 
 	// Delete old analytics events
 	query := `DELETE FROM analytics WHERE created_at < ?`
-	_, err = s.db.Exec(query, cutoffDate)
+	_, err = s.db.ExecR(query, s.db.BindTime(cutoffDate))
 	if err != nil {
 		return fmt.Errorf("failed to delete old analytics: %w", err)
 	}
 
 	// Delete old sessions
 	query = `DELETE FROM analytics_sessions WHERE created_at < ?`
-	_, err = s.db.Exec(query, cutoffDate)
+	_, err = s.db.ExecR(query, s.db.BindTime(cutoffDate))
 	if err != nil {
 		return fmt.Errorf("failed to delete old sessions: %w", err)
 	}
@@ -492,7 +495,7 @@ func (s *AnalyticsService) isAnalyticsEnabled(profileID string) (bool, error) {
 	query := `SELECT analytics_enabled FROM profiles WHERE id = ?`
 
 	var enabled bool
-	err := s.db.QueryRow(query, profileID).Scan(&enabled)
+	err := s.db.QueryRowR(query, profileID).Scan(&enabled)
 	if err != nil {
 		return false, fmt.Errorf("failed to check analytics status: %w", err)
 	}
@@ -504,7 +507,7 @@ func (s *AnalyticsService) sessionExists(sessionID string) (bool, error) {
 	query := `SELECT COUNT(*) FROM analytics_sessions WHERE session_id = ?`
 
 	var count int
-	err := s.db.QueryRow(query, sessionID).Scan(&count)
+	err := s.db.QueryRowR(query, sessionID).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check session existence: %w", err)
 	}

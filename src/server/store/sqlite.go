@@ -43,6 +43,40 @@ func (db *DB) BindNullableTime(t *time.Time) interface{} {
 	return db.BindTime(*t)
 }
 
+// Rebind replaces all `?` placeholders with `$N` positional parameters when
+// the driver requires it (postgres/pgx). For SQLite and MySQL `?` is kept as-is.
+func (db *DB) Rebind(query string) string {
+	if db.Driver != "postgres" && db.Driver != "pgx" {
+		return query
+	}
+	var out []byte
+	n := 1
+	for i := 0; i < len(query); i++ {
+		if query[i] == '?' {
+			out = append(out, fmt.Sprintf("$%d", n)...)
+			n++
+		} else {
+			out = append(out, query[i])
+		}
+	}
+	return string(out)
+}
+
+// ExecR runs Exec after rebinding `?` placeholders for the current driver.
+func (db *DB) ExecR(query string, args ...interface{}) (sql.Result, error) {
+	return db.Exec(db.Rebind(query), args...)
+}
+
+// QueryR runs Query after rebinding `?` placeholders for the current driver.
+func (db *DB) QueryR(query string, args ...interface{}) (*sql.Rows, error) {
+	return db.Query(db.Rebind(query), args...)
+}
+
+// QueryRowR runs QueryRow after rebinding `?` placeholders for the current driver.
+func (db *DB) QueryRowR(query string, args ...interface{}) *sql.Row {
+	return db.QueryRow(db.Rebind(query), args...)
+}
+
 //go:embed migrations/*.sql
 var migrations embed.FS
 

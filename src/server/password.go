@@ -60,7 +60,7 @@ func (a *Auth) RequestPasswordReset(email string) (string, error) {
 				 WHERE id = $4`
 	}
 
-	_, err = a.db.Exec(query, token, expiry, time.Now(), user.ID)
+	_, err = a.db.Exec(query, token, a.db.BindTime(expiry), a.db.BindTime(time.Now()), user.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to store reset token: %w", err)
 	}
@@ -127,7 +127,7 @@ func (a *Auth) ResetPassword(token, newPassword string) error {
 				 WHERE id = $3`
 	}
 
-	_, err = a.db.Exec(query, passwordHash, time.Now(), userID)
+	_, err = a.db.Exec(query, passwordHash, a.db.BindTime(time.Now()), userID)
 	if err != nil {
 		return fmt.Errorf("failed to reset password: %w", err)
 	}
@@ -171,7 +171,7 @@ func (a *Auth) ChangePassword(userID, currentPassword, newPassword string) error
 		query = `UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3`
 	}
 
-	_, err = a.db.Exec(query, passwordHash, time.Now(), userID)
+	_, err = a.db.Exec(query, passwordHash, a.db.BindTime(time.Now()), userID)
 	if err != nil {
 		return fmt.Errorf("failed to change password: %w", err)
 	}
@@ -206,7 +206,7 @@ func (a *Auth) GenerateEmailVerificationToken(userID string) (string, error) {
 				 WHERE id = $4`
 	}
 
-	_, err = a.db.Exec(query, "EMAIL_"+token, expiry, time.Now(), userID)
+	_, err = a.db.Exec(query, "EMAIL_"+token, a.db.BindTime(expiry), a.db.BindTime(time.Now()), userID)
 	if err != nil {
 		return "", fmt.Errorf("failed to store verification token: %w", err)
 	}
@@ -254,7 +254,7 @@ func (a *Auth) VerifyEmail(token string) error {
 					   WHERE id = $3`
 	}
 
-	_, err = a.db.Exec(updateQuery, true, time.Now(), userID)
+	_, err = a.db.Exec(updateQuery, true, a.db.BindTime(time.Now()), userID)
 	if err != nil {
 		return fmt.Errorf("failed to verify email: %w", err)
 	}
@@ -295,7 +295,7 @@ func (a *Auth) InvalidateAllPasswordResetTokens(userID string) error {
 				 WHERE id = $2`
 	}
 
-	_, err := a.db.Exec(query, time.Now(), userID)
+	_, err := a.db.Exec(query, a.db.BindTime(time.Now()), userID)
 	if err != nil {
 		return fmt.Errorf("failed to invalidate tokens: %w", err)
 	}

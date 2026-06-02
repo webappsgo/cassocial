@@ -87,7 +87,7 @@ func (a *Auth) Enable2FA(userID, secret, code string) error {
 		query = "UPDATE users SET two_factor_enabled = $1, two_factor_secret = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	_, err = a.db.Exec(query, true, secret, time.Now(), userID)
+	_, err = a.db.Exec(query, true, secret, a.db.BindTime(time.Now()), userID)
 	if err != nil {
 		return fmt.Errorf("failed to enable 2FA: %w", err)
 	}
@@ -104,7 +104,7 @@ func (a *Auth) Disable2FA(userID string) error {
 		query = "UPDATE users SET two_factor_enabled = $1, two_factor_secret = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	if _, err := a.db.Exec(query, false, "", time.Now(), userID); err != nil {
+	if _, err := a.db.Exec(query, false, "", a.db.BindTime(time.Now()), userID); err != nil {
 		return fmt.Errorf("failed to disable 2FA: %w", err)
 	}
 

@@ -324,7 +324,7 @@ func (s *ExportService) ExportAnalytics(profileID, userID string, startDate, end
 		ORDER BY date DESC
 	`
 
-	rows, err := s.db.Query(query, profileID, startDate, endDate)
+	rows, err := s.db.QueryR(query, profileID, s.db.BindTime(startDate), s.db.BindTime(endDate))
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query analytics: %w", err)
 	}
