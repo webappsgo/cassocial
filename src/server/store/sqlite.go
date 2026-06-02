@@ -9,11 +9,39 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
+
+// sqliteTimeFmt is SQLite's native datetime format for string comparison
+// with datetime('now') and CURRENT_TIMESTAMP.
+const sqliteTimeFmt = "2006-01-02 15:04:05"
+
+// BindTime returns a value suitable for binding a time.Time in a prepared
+// statement. For SQLite the driver stores time.Time as RFC3339 (with 'T'
+// separator and 'Z' suffix), which SQLite's datetime() function cannot parse
+// in all versions. Pre-formatting to SQLite's native space-separated format
+// ensures that plain string comparison with datetime('now') works correctly.
+// For other drivers (postgres, mysql), time.Time is returned as-is.
+func (db *DB) BindTime(t time.Time) interface{} {
+	if db.Driver == "sqlite" {
+		return t.UTC().Format(sqliteTimeFmt)
+	}
+	return t
+}
+
+// BindNullableTime returns a value suitable for binding a *time.Time that
+// may be nil (NULL in the database). Nil is passed through as nil. Non-nil
+// values are formatted via BindTime.
+func (db *DB) BindNullableTime(t *time.Time) interface{} {
+	if t == nil {
+		return nil
+	}
+	return db.BindTime(*t)
+}
 
 //go:embed migrations/*.sql
 var migrations embed.FS
@@ -502,7 +530,7 @@ func (db *DB) CreateSession(session *Session) error {
 _, err := db.Exec(`
 INSERT INTO sessions (id, user_id, user_type, username, role, expires_at, created_at)
 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-`, session.ID, session.UserID, session.UserType, session.Username, session.Role, session.ExpiresAt)
+`, session.ID, session.UserID, session.UserType, session.Username, session.Role, db.BindTime(session.ExpiresAt))
 return err
 }
 
@@ -536,7 +564,7 @@ return err
 
 // CleanupExpiredSessions removes expired sessions
 func (db *DB) CleanupExpiredSessions() error {
-_, err := db.Exec("DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP")
+_, err := db.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
 return err
 }
 
@@ -548,7 +576,7 @@ func (db *DB) CreateEmailVerificationToken(token *EmailVerificationToken) error 
 _, err := db.Exec(`
 INSERT INTO email_verification_tokens (token, user_id, expires_at, created_at)
 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-`, token.Token, token.UserID, token.ExpiresAt)
+`, token.Token, token.UserID, db.BindTime(token.ExpiresAt))
 return err
 }
 
@@ -573,7 +601,7 @@ return err
 
 // DeleteExpiredEmailVerificationTokens removes expired tokens
 func (db *DB) DeleteExpiredEmailVerificationTokens() error {
-_, err := db.Exec("DELETE FROM email_verification_tokens WHERE expires_at < CURRENT_TIMESTAMP")
+_, err := db.Exec("DELETE FROM email_verification_tokens WHERE expires_at < datetime('now')")
 return err
 }
 
@@ -585,7 +613,7 @@ func (db *DB) CreatePasswordResetToken(token *PasswordResetToken) error {
 _, err := db.Exec(`
 INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at)
 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-`, token.Token, token.UserID, token.ExpiresAt)
+`, token.Token, token.UserID, db.BindTime(token.ExpiresAt))
 return err
 }
 
@@ -610,6 +638,6 @@ return err
 
 // DeleteExpiredPasswordResetTokens removes expired tokens
 func (db *DB) DeleteExpiredPasswordResetTokens() error {
-_, err := db.Exec("DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP")
+_, err := db.Exec("DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')")
 return err
 }

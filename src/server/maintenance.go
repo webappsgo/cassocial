@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/casapps/cassocial/src/server/store"
 )
@@ -60,11 +61,29 @@ func (m *MaintenanceMode) GetMessage() string {
 	return message
 }
 
-// IsIPBypassed checks if an IP is in the bypass list
+// IsIPBypassed checks if an IP is in the bypass list.
+// Always allows localhost. Also checks the maintenance_bypass_ips setting (JSON array of strings).
 func (m *MaintenanceMode) IsIPBypassed(ip string) bool {
-	// Localhost always bypasses
 	if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
 		return true
+	}
+
+	raw, err := m.db.GetSetting("maintenance_bypass_ips")
+	if err != nil || raw == "" {
+		return false
+	}
+
+	// The setting is a JSON array: ["1.2.3.4", "10.0.0.1"]
+	// Strip leading/trailing brackets and spaces, then split on commas.
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "[")
+	raw = strings.TrimSuffix(raw, "]")
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		entry = strings.Trim(entry, `"`)
+		if entry != "" && entry == ip {
+			return true
+		}
 	}
 
 	return false

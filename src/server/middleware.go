@@ -213,6 +213,12 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// ExtractToken extracts the JWT token from the Authorization header or cookie.
+// Exported so that the handler sub-package can use it for optional auth checks.
+func (m *Middleware) ExtractToken(r *http.Request) string {
+	return m.extractToken(r)
+}
+
 // extractToken extracts the JWT token from the Authorization header
 func (m *Middleware) extractToken(r *http.Request) string {
 	// Get Authorization header

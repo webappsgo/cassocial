@@ -173,7 +173,7 @@ func run(args []string) int {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	authSvc := server.NewAuth(db, jwtSecret)
-	router := handler.NewRouter(db, authSvc)
+	router := handler.NewRouter(db, authSvc, cfg)
 	h := router.SetupRoutes()
 
 	srv, err := server.New(cfg, db, h)

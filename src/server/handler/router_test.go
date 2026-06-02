@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/casapps/cassocial/src/config"
 	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
@@ -25,7 +26,7 @@ func newTestRouter(t *testing.T) *Router {
 	}
 
 	authSvc := server.NewAuth(db, "test-jwt-secret-router")
-	return NewRouter(db, authSvc)
+	return NewRouter(db, authSvc, &config.Config{})
 }
 
 func TestNewRouter_NotNil(t *testing.T) {
@@ -56,7 +57,7 @@ func TestRouter_HealthCheck(t *testing.T) {
 	rt := newTestRouter(t)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
-	rt.healthCheck(rr, req)
+	rt.healthzJSON(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("healthCheck returned %d, want %d", rr.Code, http.StatusOK)
@@ -67,8 +68,8 @@ func TestRouter_HealthCheck(t *testing.T) {
 		t.Fatalf("failed to decode healthCheck response: %v", err)
 	}
 
-	if body["status"] != "ok" {
-		t.Errorf("healthCheck status = %v, want \"ok\"", body["status"])
+	if body["status"] != "healthy" {
+		t.Errorf("healthzJSON status = %v, want \"healthy\"", body["status"])
 	}
 }
 
@@ -123,7 +124,7 @@ func TestRouter_HealthEndpoints_ViaHandler(t *testing.T) {
 		path       string
 		wantStatus string
 	}{
-		{"/health", "ok"},
+		{"/health", "healthy"},
 		{"/health/ready", "ready"},
 		{"/health/live", "alive"},
 	}
@@ -166,7 +167,7 @@ func TestRouter_HealthCheck_ContentType(t *testing.T) {
 	rt := newTestRouter(t)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
-	rt.healthCheck(rr, req)
+	rt.healthzJSON(rr, req)
 
 	ct := rr.Header().Get("Content-Type")
 	if ct == "" {

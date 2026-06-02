@@ -311,9 +311,24 @@ func (h *SetupHandler) HandleSetupComplete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Create admin user
-	admin := &store.User{
-		ID:            generateUUID(),
+	// Create server admin record in the server_admins table (PART 23 — separate from users)
+	adminID := generateUUID()
+	serverAdmin := &store.ServerAdmin{
+		ID:           adminID,
+		Username:     req.AdminUsername,
+		Email:        req.AdminEmail,
+		PasswordHash: passwordHash,
+		IsPrimary:    true,
+	}
+
+	if err := h.db.CreateServerAdmin(serverAdmin); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to create server admin")
+		return
+	}
+
+	// Also create a corresponding user record so JWT auth (which queries users table) works
+	adminUser := &store.User{
+		ID:            adminID,
 		Username:      req.AdminUsername,
 		Email:         req.AdminEmail,
 		PasswordHash:  passwordHash,
@@ -322,8 +337,8 @@ func (h *SetupHandler) HandleSetupComplete(w http.ResponseWriter, r *http.Reques
 		EmailVerified: true,
 	}
 
-	if err := h.db.CreateUser(admin); err != nil {
-		h.renderError(w, http.StatusInternalServerError, "Failed to create admin user")
+	if err := h.db.CreateUser(adminUser); err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to create admin user record")
 		return
 	}
 

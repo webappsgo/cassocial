@@ -390,6 +390,65 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Server Admins (separate from users per spec — different DB table)
+CREATE TABLE IF NOT EXISTS server_admins (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT 0,
+    two_factor_enabled BOOLEAN DEFAULT 0,
+    two_factor_secret TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP
+);
+
+-- Sessions (server-side session storage, HttpOnly cookie auth)
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    user_type TEXT NOT NULL,
+    username TEXT NOT NULL,
+    role TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Profile Views (raw event log for analytics)
+CREATE TABLE IF NOT EXISTS profile_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id TEXT NOT NULL,
+    viewer_ip TEXT,
+    referrer TEXT,
+    user_agent TEXT,
+    country TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Link Clicks (raw event log for link analytics)
+CREATE TABLE IF NOT EXISTS link_clicks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id TEXT NOT NULL,
+    clicker_ip TEXT,
+    referrer TEXT,
+    user_agent TEXT,
+    country TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Cluster Nodes (optional HA clustering support)
+CREATE TABLE IF NOT EXISTS cluster_nodes (
+    id TEXT PRIMARY KEY,
+    hostname TEXT NOT NULL,
+    address TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT 0,
+    last_heartbeat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);

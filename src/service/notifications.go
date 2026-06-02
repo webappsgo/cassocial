@@ -2,6 +2,7 @@ package service
 
 import (
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -364,7 +365,7 @@ func (nm *NotificationManager) NotifyHighTraffic(currentLoad, threshold int) {
 
 func formatCertificateMessage(domain string, daysUntilExpiry int) string {
 	return `<p>The SSL certificate for <strong>` + domain + `</strong> will expire in <strong>` +
-		string(rune(daysUntilExpiry)) + ` days</strong>.</p>
+		strconv.Itoa(daysUntilExpiry) + ` days</strong>.</p>
 		<p>Automatic renewal will be attempted. If it fails, manual intervention may be required.</p>`
 }
 
@@ -403,8 +404,8 @@ func formatBackupStatusMessage(status, details string) string {
 func formatHighTrafficMessage(currentLoad, threshold int) string {
 	return `<p>Your instance is experiencing high traffic.</p>
 		<ul>
-			<li><strong>Current Load:</strong> ` + string(rune(currentLoad)) + ` requests/minute</li>
-			<li><strong>Threshold:</strong> ` + string(rune(threshold)) + ` requests/minute</li>
+			<li><strong>Current Load:</strong> ` + strconv.Itoa(currentLoad) + ` requests/minute</li>
+			<li><strong>Threshold:</strong> ` + strconv.Itoa(threshold) + ` requests/minute</li>
 		</ul>
 		<p>System performance may be affected. Consider scaling resources if this persists.</p>`
 }

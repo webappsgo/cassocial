@@ -706,7 +706,7 @@ func (db *DB) CreateShortlink(shortlink *Shortlink) error {
 		INSERT INTO shortlinks (id, short_code, target_url, profile_id, title, click_count, expires_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, shortlink.ID, shortlink.ShortCode, shortlink.TargetURL, shortlink.ProfileID,
-		shortlink.Title, shortlink.ClickCount, shortlink.ExpiresAt)
+		shortlink.Title, shortlink.ClickCount, db.BindNullableTime(shortlink.ExpiresAt))
 	return err
 }
 
@@ -716,7 +716,7 @@ func (db *DB) UpdateShortlink(shortlink *Shortlink) error {
 		UPDATE shortlinks SET
 			target_url = ?, title = ?, expires_at = ?
 		WHERE id = ?
-	`, shortlink.TargetURL, shortlink.Title, shortlink.ExpiresAt, shortlink.ID)
+	`, shortlink.TargetURL, shortlink.Title, db.BindNullableTime(shortlink.ExpiresAt), shortlink.ID)
 	return err
 }
 
@@ -734,7 +734,7 @@ func (db *DB) IncrementShortlinkClickCount(id string) error {
 
 // DeleteExpiredShortlinks removes expired shortlinks
 func (db *DB) DeleteExpiredShortlinks() error {
-	_, err := db.Exec("DELETE FROM shortlinks WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP")
+	_, err := db.Exec("DELETE FROM shortlinks WHERE expires_at IS NOT NULL AND expires_at < datetime('now')")
 	return err
 }
 
