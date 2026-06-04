@@ -420,12 +420,13 @@ func TestAdminHandlers_TriggerBackup(t *testing.T) {
 func TestAdminHandlers_ImportServices(t *testing.T) {
 	h := newTestAdminHandlers(t)
 
+	// Nil body → JSON decode fails → 400 Bad Request
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/services/import", nil)
 	rr := httptest.NewRecorder()
 	h.ImportServices(rr, req)
 
-	if rr.Code != http.StatusNotImplemented {
-		t.Errorf("ImportServices returned status %d, want %d", rr.Code, http.StatusNotImplemented)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("ImportServices returned status %d, want %d", rr.Code, http.StatusBadRequest)
 	}
 }
 
@@ -504,10 +505,10 @@ func TestAdminHandlers_TestSMTPConnection(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.TestSMTPConnection(rr, req)
 
-	// The handler is not yet implemented and must return 501.
-	if rr.Code != http.StatusNotImplemented {
+	// With no SMTP config in DB, handler returns 400 with success=false.
+	if rr.Code != http.StatusBadRequest {
 		t.Errorf("TestSMTPConnection returned status %d, want %d; body: %s",
-			rr.Code, http.StatusNotImplemented, rr.Body.String())
+			rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
 
 	var resp map[string]interface{}

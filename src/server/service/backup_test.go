@@ -390,6 +390,11 @@ func TestRotateBackups_RemovesExcessFiles(t *testing.T) {
 	svc := newTestBackupService(t)
 	backupDir := filepath.Join(svc.config.DataDir, "backup")
 
+	// Set retention to 4 days so maxBackups = 4.
+	if err := svc.db.SetSetting("backup_retention_days", "4"); err != nil {
+		t.Fatalf("SetSetting backup_retention_days: %v", err)
+	}
+
 	// Create 7 stub backup files (max is 4).
 	for i := 0; i < 7; i++ {
 		name := filepath.Join(backupDir, fmt.Sprintf("cassocial-backup-manual-2026010%d-120000.tar.gz", i))

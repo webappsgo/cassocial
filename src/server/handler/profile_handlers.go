@@ -2,13 +2,16 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/casapps/cassocial/src/server"
-	"github.com/casapps/cassocial/src/server/store"
 	"github.com/casapps/cassocial/src/server/model"
+	"github.com/casapps/cassocial/src/server/store"
 )
 
 // ProfileHandlers handles profile-related HTTP requests
@@ -73,7 +76,7 @@ func (h *ProfileHandlers) ListProfiles(w http.ResponseWriter, r *http.Request) {
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	rows, err := h.db.Query(query, userID)
+	rows, err := h.db.QueryR(query, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch profiles")
 		return
@@ -198,7 +201,7 @@ func (h *ProfileHandlers) CreateProfile(w http.ResponseWriter, r *http.Request) 
 				 qr_code_enabled, meta_title, meta_description, created_at, updated_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 				 RETURNING id`
-		err := h.db.QueryRow(query, profile.UserID, profile.Slug, profile.DisplayName,
+		err := h.db.QueryRowR(query, profile.UserID, profile.Slug, profile.DisplayName,
 			profile.Bio, profile.AvatarURL, profile.HeaderImageURL, profile.ThemeID,
 			profile.ShowUsernames, profile.IsPublic, profile.AnalyticsEnabled,
 			profile.QRCodeEnabled, profile.MetaTitle, profile.MetaDescription,
@@ -209,7 +212,7 @@ func (h *ProfileHandlers) CreateProfile(w http.ResponseWriter, r *http.Request) 
 		}
 	} else {
 		profile.ID = generateUUID()
-		_, err := h.db.Exec(query, profile.ID, profile.UserID, profile.Slug,
+		_, err := h.db.ExecR(query, profile.ID, profile.UserID, profile.Slug,
 			profile.DisplayName, profile.Bio, profile.AvatarURL, profile.HeaderImageURL,
 			profile.ThemeID, profile.ShowUsernames, profile.IsPublic, profile.AnalyticsEnabled,
 			profile.QRCodeEnabled, profile.MetaTitle, profile.MetaDescription,
@@ -320,7 +323,7 @@ func (h *ProfileHandlers) UpdateProfile(w http.ResponseWriter, r *http.Request) 
 		query = replaceQuestionMarks(query, 16)
 	}
 
-	_, err = h.db.Exec(query, profile.DisplayName, profile.Bio, profile.AvatarURL,
+	_, err = h.db.ExecR(query, profile.DisplayName, profile.Bio, profile.AvatarURL,
 		profile.HeaderImageURL, profile.ShowUsernames, profile.IsPublic,
 		profile.PasswordProtected, profile.ProtectionPassword, profile.AnalyticsEnabled,
 		profile.QRCodeEnabled, profile.MetaTitle, profile.MetaDescription, profile.OgImageURL,
@@ -367,7 +370,7 @@ func (h *ProfileHandlers) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 		query = "DELETE FROM profiles WHERE id = $1"
 	}
 
-	_, err = h.db.Exec(query, profileID)
+	_, err = h.db.ExecR(query, profileID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to delete profile")
 		return
@@ -448,7 +451,7 @@ func (h *ProfileHandlers) DuplicateProfile(w http.ResponseWriter, r *http.Reques
 				 created_at, updated_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 				 RETURNING id`
-		err = h.db.QueryRow(query, duplicate.UserID, duplicate.Slug, duplicate.DisplayName,
+		err = h.db.QueryRowR(query, duplicate.UserID, duplicate.Slug, duplicate.DisplayName,
 			duplicate.Bio, duplicate.AvatarURL, duplicate.HeaderImageURL, duplicate.ThemeID,
 			duplicate.CustomCSS, duplicate.ShowUsernames, duplicate.IsPublic,
 			duplicate.AnalyticsEnabled, duplicate.QRCodeEnabled, duplicate.MetaTitle,
@@ -456,7 +459,7 @@ func (h *ProfileHandlers) DuplicateProfile(w http.ResponseWriter, r *http.Reques
 			h.db.BindTime(duplicate.UpdatedAt)).Scan(&duplicate.ID)
 	} else {
 		duplicate.ID = generateUUID()
-		_, err = h.db.Exec(query, duplicate.ID, duplicate.UserID, duplicate.Slug,
+		_, err = h.db.ExecR(query, duplicate.ID, duplicate.UserID, duplicate.Slug,
 			duplicate.DisplayName, duplicate.Bio, duplicate.AvatarURL, duplicate.HeaderImageURL,
 			duplicate.ThemeID, duplicate.CustomCSS, duplicate.ShowUsernames, duplicate.IsPublic,
 			duplicate.AnalyticsEnabled, duplicate.QRCodeEnabled, duplicate.MetaTitle,
@@ -537,9 +540,96 @@ func (h *ProfileHandlers) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if profile.CustomDomain == "" {
+		respondError(w, http.StatusBadRequest, "no custom domain set for this profile")
+		return
+	}
+
+	domain := profile.CustomDomain
+
+	// SSRF mitigation: resolve all IP addresses for the domain and reject private/loopback ranges
+	addrs, err := net.LookupHost(domain)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "domain DNS resolution failed: "+err.Error())
+		return
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		if isPrivateIP(ip) {
+			respondError(w, http.StatusBadRequest, "domain resolves to a private or reserved IP address")
+			return
+		}
+	}
+
+	// Expected TXT record: cassocial-verify={profileID}
+	expectedRecord := fmt.Sprintf("cassocial-verify=%s", profileID)
+
+	txtRecords, err := net.LookupTXT(domain)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "TXT record lookup failed: "+err.Error())
+		return
+	}
+
+	verified := false
+	for _, record := range txtRecords {
+		if strings.TrimSpace(record) == expectedRecord {
+			verified = true
+			break
+		}
+	}
+
+	if !verified {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"verified":        false,
+			"required_record": expectedRecord,
+			"message":         fmt.Sprintf("TXT record not found. Add TXT record \"%s\" to your DNS for domain %s", expectedRecord, domain),
+		})
+		return
+	}
+
+	// Mark domain as verified in DB
+	_, err = h.db.ExecR(
+		"UPDATE profiles SET domain_verified = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		true, profileID,
+	)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to update domain verification status")
+		return
+	}
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "domain verification not yet implemented",
+		"verified": true,
+		"domain":   domain,
+		"message":  "Domain verified successfully",
 	})
+}
+
+// isPrivateIP returns true if the IP is in a private, loopback, or link-local range
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+		"169.254.0.0/16",
+		"100.64.0.0/10",
+	}
+	for _, cidr := range privateRanges {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // Helper functions
@@ -558,7 +648,7 @@ func (h *ProfileHandlers) getProfileByID(id string) (*model.Profile, error) {
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	err := h.db.QueryRow(query, id).Scan(&profile.ID, &profile.UserID, &profile.Slug,
+	err := h.db.QueryRowR(query, id).Scan(&profile.ID, &profile.UserID, &profile.Slug,
 		&profile.DisplayName, &profile.Bio, &profile.AvatarURL, &profile.HeaderImageURL,
 		&profile.ThemeID, &profile.CustomCSS, &profile.ShowUsernames, &profile.IsPublic,
 		&profile.PasswordProtected, &profile.ProtectionPassword, &profile.CustomDomain,
@@ -575,7 +665,7 @@ func (h *ProfileHandlers) getProfileCount(userID string) (int, error) {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM profiles WHERE user_id = $1"
 	}
-	err := h.db.QueryRow(query, userID).Scan(&count)
+	err := h.db.QueryRowR(query, userID).Scan(&count)
 	return count, err
 }
 
@@ -585,6 +675,6 @@ func (h *ProfileHandlers) slugExists(slug string) bool {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM profiles WHERE slug = $1"
 	}
-	h.db.QueryRow(query, slug).Scan(&count)
+	h.db.QueryRowR(query, slug).Scan(&count)
 	return count > 0
 }

@@ -232,33 +232,93 @@ END:VCARD`
 	io.WriteString(w, vcard)
 }
 
-// generateGraphiQLHTML generates GraphiQL playground HTML
+// generateGraphiQLHTML generates a self-contained GraphQL playground without CDN dependencies
 func generateGraphiQLHTML(theme string) string {
+	dark := theme == "dark"
+	bg, fg, inputBg, border, resultBg := "#282a36", "#f8f8f2", "#44475a", "#6272a4", "#1e1f29"
+	if !dark {
+		bg, fg, inputBg, border, resultBg = "#ffffff", "#212529", "#f8f9fa", "#dee2e6", "#f1f3f5"
+	}
 	return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="` + theme + `">
 <head>
     <meta charset="UTF-8">
-    <title>Cassocial GraphQL - GraphiQL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- GraphiQL-compatible GraphQL explorer -->
+    <title>Cassocial GraphiQL Explorer</title>
     <style>
-        body { margin: 0; height: 100vh; overflow: hidden; }
-        #graphiql { height: 100vh; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ` + bg + `; color: ` + fg + `; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        header { padding: 12px 16px; border-bottom: 1px solid ` + border + `; display: flex; align-items: center; gap: 12px; }
+        header h1 { font-size: 1rem; font-weight: 600; }
+        .workspace { display: flex; flex: 1; overflow: hidden; gap: 1px; background: ` + border + `; }
+        .pane { background: ` + bg + `; display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+        .pane-header { padding: 8px 12px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid ` + border + `; opacity: 0.7; }
+        textarea { flex: 1; background: ` + inputBg + `; color: ` + fg + `; border: none; resize: none; padding: 12px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 13px; line-height: 1.6; outline: none; width: 100%; }
+        #result { flex: 1; background: ` + resultBg + `; color: ` + fg + `; padding: 12px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 13px; line-height: 1.6; overflow: auto; white-space: pre; word-break: break-all; overflow-wrap: break-word; }
+        footer { padding: 8px 16px; border-top: 1px solid ` + border + `; display: flex; gap: 8px; align-items: center; }
+        button { padding: 6px 16px; border-radius: 6px; border: 1px solid ` + border + `; background: ` + inputBg + `; color: ` + fg + `; font-size: 0.875rem; cursor: pointer; }
+        button:hover { opacity: 0.85; }
+        button.primary { background: #bd93f9; border-color: #bd93f9; color: #282a36; font-weight: 600; }
+        label { font-size: 0.8rem; opacity: 0.7; }
+        input[type=text] { flex: 1; background: ` + inputBg + `; color: ` + fg + `; border: 1px solid ` + border + `; border-radius: 4px; padding: 4px 8px; font-size: 0.8rem; outline: none; }
     </style>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/graphiql@3/graphiql.min.css">
 </head>
 <body>
-    <div id="graphiql"></div>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/graphiql@3/graphiql.min.js"></script>
+    <header>
+        <h1>Cassocial GraphiQL Explorer</h1>
+    </header>
+    <div class="workspace">
+        <div class="pane">
+            <div class="pane-header">Query / Mutation</div>
+            <textarea id="query" spellcheck="false" placeholder="# Enter your GraphQL query here&#10;{&#10;  __typename&#10;}"></textarea>
+        </div>
+        <div class="pane">
+            <div class="pane-header">Variables (JSON)</div>
+            <textarea id="vars" spellcheck="false" placeholder="{}"></textarea>
+        </div>
+        <div class="pane">
+            <div class="pane-header">Result</div>
+            <div id="result">Press Run to execute the query.</div>
+        </div>
+    </div>
+    <footer>
+        <label>Token</label>
+        <input type="text" id="token" placeholder="Bearer …">
+        <button class="primary" id="runBtn">▶ Run</button>
+        <button id="formatBtn">Format JSON</button>
+    </footer>
     <script>
-        const fetcher = GraphiQL.createFetcher({ url: '/graphql' });
-        const root = ReactDOM.createRoot(document.getElementById('graphiql'));
-        root.render(
-            React.createElement(GraphiQL, {
-                fetcher: fetcher,
-                theme: '` + theme + `'
+        document.getElementById('runBtn').addEventListener('click', runQuery);
+        document.getElementById('query').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runQuery();
+        });
+        document.getElementById('formatBtn').addEventListener('click', function() {
+            const r = document.getElementById('result');
+            try { r.textContent = JSON.stringify(JSON.parse(r.textContent), null, 2); } catch (_) {}
+        });
+        function runQuery() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) return;
+            let variables = {};
+            try { variables = JSON.parse(document.getElementById('vars').value || '{}'); } catch(_) {}
+            const token = document.getElementById('token').value.trim();
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : 'Bearer ' + token;
+            const result = document.getElementById('result');
+            result.textContent = 'Running…';
+            fetch('/graphql', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ query: query, variables: variables })
             })
-        );
+            .then(function(r) { return r.text(); })
+            .then(function(t) {
+                try { result.textContent = JSON.stringify(JSON.parse(t), null, 2); }
+                catch(_) { result.textContent = t; }
+            })
+            .catch(function(e) { result.textContent = 'Error: ' + e.message; });
+        }
     </script>
 </body>
 </html>`

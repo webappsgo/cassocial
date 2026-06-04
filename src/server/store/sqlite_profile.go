@@ -11,7 +11,7 @@ import (
 // GetProfileByID retrieves a profile by ID
 func (db *DB) GetProfileByID(id string) (*Profile, error) {
 	profile := &Profile{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
 		       theme_id, custom_css, show_usernames, is_public, password_protected,
 		       protection_password, custom_domain, domain_verified, analytics_enabled,
@@ -36,7 +36,7 @@ func (db *DB) GetProfileByID(id string) (*Profile, error) {
 // GetProfileBySlug retrieves a profile by slug
 func (db *DB) GetProfileBySlug(slug string) (*Profile, error) {
 	profile := &Profile{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
 		       theme_id, custom_css, show_usernames, is_public, password_protected,
 		       protection_password, custom_domain, domain_verified, analytics_enabled,
@@ -61,7 +61,7 @@ func (db *DB) GetProfileBySlug(slug string) (*Profile, error) {
 // GetProfileByCustomDomain retrieves a profile by custom domain
 func (db *DB) GetProfileByCustomDomain(domain string) (*Profile, error) {
 	profile := &Profile{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
 		       theme_id, custom_css, show_usernames, is_public, password_protected,
 		       protection_password, custom_domain, domain_verified, analytics_enabled,
@@ -85,7 +85,7 @@ func (db *DB) GetProfileByCustomDomain(domain string) (*Profile, error) {
 
 // GetProfilesByUserID retrieves all profiles for a user
 func (db *DB) GetProfilesByUserID(userID string) ([]*Profile, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT id, user_id, slug, display_name, bio, avatar_url, header_image_url,
 		       theme_id, custom_css, show_usernames, is_public, password_protected,
 		       protection_password, custom_domain, domain_verified, analytics_enabled,
@@ -121,7 +121,7 @@ func (db *DB) GetProfilesByUserID(userID string) ([]*Profile, error) {
 
 // CreateProfile creates a new profile
 func (db *DB) CreateProfile(profile *Profile) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO profiles (
 			id, user_id, slug, display_name, bio, avatar_url, header_image_url,
 			theme_id, custom_css, show_usernames, is_public, password_protected,
@@ -140,7 +140,7 @@ func (db *DB) CreateProfile(profile *Profile) error {
 
 // UpdateProfile updates an existing profile
 func (db *DB) UpdateProfile(profile *Profile) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		UPDATE profiles SET
 			slug = ?, display_name = ?, bio = ?, avatar_url = ?, header_image_url = ?,
 			theme_id = ?, custom_css = ?, show_usernames = ?, is_public = ?,
@@ -160,20 +160,20 @@ func (db *DB) UpdateProfile(profile *Profile) error {
 
 // DeleteProfile deletes a profile
 func (db *DB) DeleteProfile(id string) error {
-	_, err := db.Exec("DELETE FROM profiles WHERE id = ?", id)
+	_, err := db.ExecR("DELETE FROM profiles WHERE id = ?", id)
 	return err
 }
 
 // CountProfilesByUserID counts profiles for a user
 func (db *DB) CountProfilesByUserID(userID string) (int, error) {
 	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM profiles WHERE user_id = ?", userID).Scan(&count)
+	err := db.QueryRowR("SELECT COUNT(*) FROM profiles WHERE user_id = ?", userID).Scan(&count)
 	return count, err
 }
 
 // IncrementProfileViewCount increments the view counter
 func (db *DB) IncrementProfileViewCount(profileID string) error {
-	_, err := db.Exec("UPDATE profiles SET view_count = view_count + 1 WHERE id = ?", profileID)
+	_, err := db.ExecR("UPDATE profiles SET view_count = view_count + 1 WHERE id = ?", profileID)
 	return err
 }
 
@@ -182,7 +182,7 @@ func (db *DB) IncrementProfileViewCount(profileID string) error {
 // GetProfileTheme retrieves theme settings for a profile
 func (db *DB) GetProfileTheme(profileID string) (*ProfileTheme, error) {
 	theme := &ProfileTheme{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT profile_id, background_type, background_value, button_style,
 		       button_animation, button_shadow, font_override, custom_css,
 		       link_thumbnail_position, updated_at
@@ -201,7 +201,7 @@ func (db *DB) GetProfileTheme(profileID string) (*ProfileTheme, error) {
 
 // UpdateProfileTheme updates or creates theme settings
 func (db *DB) UpdateProfileTheme(theme *ProfileTheme) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO profile_themes (
 			profile_id, background_type, background_value, button_style,
 			button_animation, button_shadow, font_override, custom_css,
@@ -225,7 +225,7 @@ func (db *DB) UpdateProfileTheme(theme *ProfileTheme) error {
 
 // DeleteProfileTheme deletes theme settings
 func (db *DB) DeleteProfileTheme(profileID string) error {
-	_, err := db.Exec("DELETE FROM profile_themes WHERE profile_id = ?", profileID)
+	_, err := db.ExecR("DELETE FROM profile_themes WHERE profile_id = ?", profileID)
 	return err
 }
 
@@ -234,7 +234,7 @@ func (db *DB) DeleteProfileTheme(profileID string) error {
 // GetQRCodeSettings retrieves QR code settings
 func (db *DB) GetQRCodeSettings(profileID string) (*QRCodeSettings, error) {
 	settings := &QRCodeSettings{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT profile_id, size, error_correction, style, dark_color, light_color,
 		       logo_enabled, logo_size, format, updated_at
 		FROM qr_code_settings WHERE profile_id = ?
@@ -252,7 +252,7 @@ func (db *DB) GetQRCodeSettings(profileID string) (*QRCodeSettings, error) {
 
 // UpdateQRCodeSettings updates or creates QR code settings
 func (db *DB) UpdateQRCodeSettings(settings *QRCodeSettings) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO qr_code_settings (
 			profile_id, size, error_correction, style, dark_color, light_color,
 			logo_enabled, logo_size, format, updated_at
@@ -275,7 +275,7 @@ func (db *DB) UpdateQRCodeSettings(settings *QRCodeSettings) error {
 
 // DeleteQRCodeSettings deletes QR code settings
 func (db *DB) DeleteQRCodeSettings(profileID string) error {
-	_, err := db.Exec("DELETE FROM qr_code_settings WHERE profile_id = ?", profileID)
+	_, err := db.ExecR("DELETE FROM qr_code_settings WHERE profile_id = ?", profileID)
 	return err
 }
 
@@ -285,7 +285,7 @@ func (db *DB) DeleteQRCodeSettings(profileID string) error {
 // GetServiceByID retrieves a service by ID
 func (db *DB) GetServiceByID(id string) (*Service, error) {
 	service := &Service{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, name, category, icon_url, icon_svg, url_pattern,
 		       background_color, text_color, popularity, is_active,
 		       requires_username, placeholder_text, validation_pattern,
@@ -307,7 +307,7 @@ func (db *DB) GetServiceByID(id string) (*Service, error) {
 // GetServiceByName retrieves a service by name
 func (db *DB) GetServiceByName(name string) (*Service, error) {
 	service := &Service{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, name, category, icon_url, icon_svg, url_pattern,
 		       background_color, text_color, popularity, is_active,
 		       requires_username, placeholder_text, validation_pattern,
@@ -332,7 +332,7 @@ func (db *DB) ListServices(category string, limit, offset int) ([]*Service, erro
 	var err error
 
 	if category != "" {
-		rows, err = db.Query(`
+		rows, err = db.QueryR(`
 			SELECT id, name, category, icon_url, icon_svg, url_pattern,
 			       background_color, text_color, popularity, is_active,
 			       requires_username, placeholder_text, validation_pattern,
@@ -343,7 +343,7 @@ func (db *DB) ListServices(category string, limit, offset int) ([]*Service, erro
 			LIMIT ? OFFSET ?
 		`, category, limit, offset)
 	} else {
-		rows, err = db.Query(`
+		rows, err = db.QueryR(`
 			SELECT id, name, category, icon_url, icon_svg, url_pattern,
 			       background_color, text_color, popularity, is_active,
 			       requires_username, placeholder_text, validation_pattern,
@@ -380,7 +380,7 @@ func (db *DB) ListServices(category string, limit, offset int) ([]*Service, erro
 
 // SearchServices searches services by name
 func (db *DB) SearchServices(query string, limit int) ([]*Service, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT id, name, category, icon_url, icon_svg, url_pattern,
 		       background_color, text_color, popularity, is_active,
 		       requires_username, placeholder_text, validation_pattern,
@@ -415,7 +415,7 @@ func (db *DB) SearchServices(query string, limit int) ([]*Service, error) {
 
 // CreateService creates a new service
 func (db *DB) CreateService(service *Service) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO services (
 			id, name, category, icon_url, icon_svg, url_pattern,
 			background_color, text_color, popularity, is_active,
@@ -432,7 +432,7 @@ func (db *DB) CreateService(service *Service) error {
 
 // UpdateService updates an existing service
 func (db *DB) UpdateService(service *Service) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		UPDATE services SET
 			name = ?, category = ?, icon_url = ?, icon_svg = ?, url_pattern = ?,
 			background_color = ?, text_color = ?, popularity = ?, is_active = ?,
@@ -448,14 +448,14 @@ func (db *DB) UpdateService(service *Service) error {
 
 // DeleteService deletes a service
 func (db *DB) DeleteService(id string) error {
-	_, err := db.Exec("DELETE FROM services WHERE id = ?", id)
+	_, err := db.ExecR("DELETE FROM services WHERE id = ?", id)
 	return err
 }
 
 // CountServices returns the total number of services
 func (db *DB) CountServices() (int, error) {
 	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM services WHERE is_active = 1").Scan(&count)
+	err := db.QueryRowR("SELECT COUNT(*) FROM services WHERE is_active = 1").Scan(&count)
 	return count, err
 }
 
@@ -465,7 +465,7 @@ func (db *DB) CountServices() (int, error) {
 // GetLinkByID retrieves a link by ID
 func (db *DB) GetLinkByID(id string) (*Link, error) {
 	link := &Link{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, profile_id, service_id, title, username, url, icon_url,
 		       background_color, text_color, position, is_active, click_count,
 		       created_at, updated_at
@@ -484,7 +484,7 @@ func (db *DB) GetLinkByID(id string) (*Link, error) {
 
 // GetLinksByProfileID retrieves all links for a profile
 func (db *DB) GetLinksByProfileID(profileID string) ([]*Link, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT id, profile_id, service_id, title, username, url, icon_url,
 		       background_color, text_color, position, is_active, click_count,
 		       created_at, updated_at
@@ -516,7 +516,7 @@ func (db *DB) GetLinksByProfileID(profileID string) ([]*Link, error) {
 
 // CreateLink creates a new link
 func (db *DB) CreateLink(link *Link) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO links (
 			id, profile_id, service_id, title, username, url, icon_url,
 			background_color, text_color, position, is_active, click_count,
@@ -530,7 +530,7 @@ func (db *DB) CreateLink(link *Link) error {
 
 // UpdateLink updates an existing link
 func (db *DB) UpdateLink(link *Link) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		UPDATE links SET
 			service_id = ?, title = ?, username = ?, url = ?, icon_url = ?,
 			background_color = ?, text_color = ?, position = ?, is_active = ?,
@@ -543,7 +543,7 @@ func (db *DB) UpdateLink(link *Link) error {
 
 // DeleteLink deletes a link
 func (db *DB) DeleteLink(id string) error {
-	_, err := db.Exec("DELETE FROM links WHERE id = ?", id)
+	_, err := db.ExecR("DELETE FROM links WHERE id = ?", id)
 	return err
 }
 
@@ -569,13 +569,13 @@ func (db *DB) ReorderLinks(profileID string, linkIDs []string) error {
 // CountLinksByProfileID counts links for a profile
 func (db *DB) CountLinksByProfileID(profileID string) (int, error) {
 	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM links WHERE profile_id = ?", profileID).Scan(&count)
+	err := db.QueryRowR("SELECT COUNT(*) FROM links WHERE profile_id = ?", profileID).Scan(&count)
 	return count, err
 }
 
 // IncrementLinkClickCount increments the click counter
 func (db *DB) IncrementLinkClickCount(linkID string) error {
-	_, err := db.Exec("UPDATE links SET click_count = click_count + 1 WHERE id = ?", linkID)
+	_, err := db.ExecR("UPDATE links SET click_count = click_count + 1 WHERE id = ?", linkID)
 	return err
 }
 
@@ -583,7 +583,7 @@ func (db *DB) IncrementLinkClickCount(linkID string) error {
 
 // GetFooterItemsByProfileID retrieves footer items for a profile
 func (db *DB) GetFooterItemsByProfileID(profileID string) ([]*FooterItem, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT id, profile_id, item_type, content, position, is_active, created_at
 		FROM footer_items
 		WHERE profile_id = ?
@@ -611,7 +611,7 @@ func (db *DB) GetFooterItemsByProfileID(profileID string) ([]*FooterItem, error)
 
 // CreateFooterItem creates a new footer item
 func (db *DB) CreateFooterItem(item *FooterItem) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO footer_items (id, profile_id, item_type, content, position, is_active, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, item.ID, item.ProfileID, item.ItemType, item.Content, item.Position, item.IsActive)
@@ -620,7 +620,7 @@ func (db *DB) CreateFooterItem(item *FooterItem) error {
 
 // UpdateFooterItem updates an existing footer item
 func (db *DB) UpdateFooterItem(item *FooterItem) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		UPDATE footer_items SET
 			item_type = ?, content = ?, position = ?, is_active = ?
 		WHERE id = ?
@@ -630,7 +630,7 @@ func (db *DB) UpdateFooterItem(item *FooterItem) error {
 
 // DeleteFooterItem deletes a footer item
 func (db *DB) DeleteFooterItem(id string) error {
-	_, err := db.Exec("DELETE FROM footer_items WHERE id = ?", id)
+	_, err := db.ExecR("DELETE FROM footer_items WHERE id = ?", id)
 	return err
 }
 
@@ -640,7 +640,7 @@ func (db *DB) DeleteFooterItem(id string) error {
 // GetShortlinkByID retrieves a shortlink by ID
 func (db *DB) GetShortlinkByID(id string) (*Shortlink, error) {
 	shortlink := &Shortlink{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, short_code, target_url, profile_id, title, click_count, expires_at, created_at
 		FROM shortlinks WHERE id = ?
 	`, id).Scan(
@@ -657,7 +657,7 @@ func (db *DB) GetShortlinkByID(id string) (*Shortlink, error) {
 // GetShortlinkByCode retrieves a shortlink by short code
 func (db *DB) GetShortlinkByCode(code string) (*Shortlink, error) {
 	shortlink := &Shortlink{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, short_code, target_url, profile_id, title, click_count, expires_at, created_at
 		FROM shortlinks WHERE short_code = ?
 	`, code).Scan(
@@ -673,7 +673,7 @@ func (db *DB) GetShortlinkByCode(code string) (*Shortlink, error) {
 
 // GetShortlinksByProfileID retrieves all shortlinks for a profile
 func (db *DB) GetShortlinksByProfileID(profileID string) ([]*Shortlink, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT id, short_code, target_url, profile_id, title, click_count, expires_at, created_at
 		FROM shortlinks
 		WHERE profile_id = ?
@@ -702,7 +702,7 @@ func (db *DB) GetShortlinksByProfileID(profileID string) ([]*Shortlink, error) {
 
 // CreateShortlink creates a new shortlink
 func (db *DB) CreateShortlink(shortlink *Shortlink) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO shortlinks (id, short_code, target_url, profile_id, title, click_count, expires_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, shortlink.ID, shortlink.ShortCode, shortlink.TargetURL, shortlink.ProfileID,
@@ -712,7 +712,7 @@ func (db *DB) CreateShortlink(shortlink *Shortlink) error {
 
 // UpdateShortlink updates an existing shortlink
 func (db *DB) UpdateShortlink(shortlink *Shortlink) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		UPDATE shortlinks SET
 			target_url = ?, title = ?, expires_at = ?
 		WHERE id = ?
@@ -722,19 +722,19 @@ func (db *DB) UpdateShortlink(shortlink *Shortlink) error {
 
 // DeleteShortlink deletes a shortlink
 func (db *DB) DeleteShortlink(id string) error {
-	_, err := db.Exec("DELETE FROM shortlinks WHERE id = ?", id)
+	_, err := db.ExecR("DELETE FROM shortlinks WHERE id = ?", id)
 	return err
 }
 
 // IncrementShortlinkClickCount increments the click counter
 func (db *DB) IncrementShortlinkClickCount(id string) error {
-	_, err := db.Exec("UPDATE shortlinks SET click_count = click_count + 1 WHERE id = ?", id)
+	_, err := db.ExecR("UPDATE shortlinks SET click_count = click_count + 1 WHERE id = ?", id)
 	return err
 }
 
 // DeleteExpiredShortlinks removes expired shortlinks
 func (db *DB) DeleteExpiredShortlinks() error {
-	_, err := db.Exec("DELETE FROM shortlinks WHERE expires_at IS NOT NULL AND expires_at < datetime('now')")
+	_, err := db.ExecR("DELETE FROM shortlinks WHERE expires_at IS NOT NULL AND expires_at < datetime('now')")
 	return err
 }
 
@@ -743,7 +743,7 @@ func (db *DB) DeleteExpiredShortlinks() error {
 
 // RecordProfileView records a profile view
 func (db *DB) RecordProfileView(view *ProfileView) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO profile_views (profile_id, viewer_ip, referrer, user_agent, country, timestamp)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, view.ProfileID, view.ViewerIP, view.Referrer, view.UserAgent, view.Country)
@@ -752,7 +752,7 @@ func (db *DB) RecordProfileView(view *ProfileView) error {
 
 // RecordLinkClick records a link click
 func (db *DB) RecordLinkClick(click *LinkClick) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO link_clicks (link_id, clicker_ip, referrer, user_agent, country, timestamp)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, click.LinkID, click.ClickerIP, click.Referrer, click.UserAgent, click.Country)
@@ -765,7 +765,7 @@ func (db *DB) GetProfileAnalytics(profileID string, days int) (*ProfileAnalytics
 
 	cutoffDate := time.Now().AddDate(0, 0, -days)
 
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT COUNT(*), COUNT(DISTINCT viewer_ip)
 		FROM profile_views
 		WHERE profile_id = ? AND timestamp >= ?
@@ -774,7 +774,7 @@ func (db *DB) GetProfileAnalytics(profileID string, days int) (*ProfileAnalytics
 		return nil, err
 	}
 
-	err = db.QueryRow(`
+	err = db.QueryRowR(`
 		SELECT COUNT(*)
 		FROM link_clicks
 		WHERE link_id IN (SELECT id FROM links WHERE profile_id = ?)
@@ -803,7 +803,7 @@ func (db *DB) GetLinkAnalytics(linkID string, days int) (*LinkAnalytics, error) 
 
 	cutoffDate := time.Now().AddDate(0, 0, -days)
 
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT COUNT(*), COUNT(DISTINCT clicker_ip)
 		FROM link_clicks
 		WHERE link_id = ? AND timestamp >= ?
@@ -812,7 +812,7 @@ func (db *DB) GetLinkAnalytics(linkID string, days int) (*LinkAnalytics, error) 
 		return nil, err
 	}
 
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT referrer, COUNT(*) as count
 		FROM link_clicks
 		WHERE link_id = ? AND timestamp >= ? AND referrer != ''
@@ -835,7 +835,7 @@ func (db *DB) GetLinkAnalytics(linkID string, days int) (*LinkAnalytics, error) 
 
 // GetTopLinks retrieves top links by clicks
 func (db *DB) GetTopLinks(profileID string, limit int) ([]*LinkStat, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT l.id, l.title, COUNT(lc.id) as clicks
 		FROM links l
 		LEFT JOIN link_clicks lc ON l.id = lc.link_id
@@ -863,7 +863,7 @@ func (db *DB) GetTopLinks(profileID string, limit int) ([]*LinkStat, error) {
 
 // GetTopReferrers retrieves top referrers
 func (db *DB) GetTopReferrers(profileID string, limit int) ([]*ReferrerStat, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT pv.referrer, COUNT(*) as count
 		FROM profile_views pv
 		WHERE pv.profile_id = ? AND pv.referrer != ''
@@ -893,7 +893,7 @@ func (db *DB) GetTopReferrers(profileID string, limit int) ([]*ReferrerStat, err
 
 // CreateClusterNode creates a new cluster node
 func (db *DB) CreateClusterNode(node *ClusterNode) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		INSERT INTO cluster_nodes (id, hostname, address, port, status, is_primary, last_heartbeat, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`, node.ID, node.Hostname, node.Address, node.Port, node.Status, node.IsPrimary)
@@ -902,7 +902,7 @@ func (db *DB) CreateClusterNode(node *ClusterNode) error {
 
 // UpdateClusterNode updates a cluster node
 func (db *DB) UpdateClusterNode(node *ClusterNode) error {
-	_, err := db.Exec(`
+	_, err := db.ExecR(`
 		UPDATE cluster_nodes SET
 			hostname = ?, address = ?, port = ?, status = ?, is_primary = ?, last_heartbeat = ?
 		WHERE id = ?
@@ -913,7 +913,7 @@ func (db *DB) UpdateClusterNode(node *ClusterNode) error {
 // GetClusterNode retrieves a cluster node by ID
 func (db *DB) GetClusterNode(id string) (*ClusterNode, error) {
 	node := &ClusterNode{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, hostname, address, port, status, is_primary, last_heartbeat, created_at
 		FROM cluster_nodes WHERE id = ?
 	`, id).Scan(
@@ -928,7 +928,7 @@ func (db *DB) GetClusterNode(id string) (*ClusterNode, error) {
 
 // ListClusterNodes retrieves all cluster nodes
 func (db *DB) ListClusterNodes() ([]*ClusterNode, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT id, hostname, address, port, status, is_primary, last_heartbeat, created_at
 		FROM cluster_nodes
 		ORDER BY is_primary DESC, created_at ASC
@@ -955,20 +955,20 @@ func (db *DB) ListClusterNodes() ([]*ClusterNode, error) {
 
 // UpdateNodeHeartbeat updates a node's heartbeat timestamp
 func (db *DB) UpdateNodeHeartbeat(id string) error {
-	_, err := db.Exec("UPDATE cluster_nodes SET last_heartbeat = CURRENT_TIMESTAMP, status = 'healthy' WHERE id = ?", id)
+	_, err := db.ExecR("UPDATE cluster_nodes SET last_heartbeat = CURRENT_TIMESTAMP, status = 'healthy' WHERE id = ?", id)
 	return err
 }
 
 // DeleteClusterNode deletes a cluster node
 func (db *DB) DeleteClusterNode(id string) error {
-	_, err := db.Exec("DELETE FROM cluster_nodes WHERE id = ?", id)
+	_, err := db.ExecR("DELETE FROM cluster_nodes WHERE id = ?", id)
 	return err
 }
 
 // GetPrimaryNode retrieves the primary cluster node
 func (db *DB) GetPrimaryNode() (*ClusterNode, error) {
 	node := &ClusterNode{}
-	err := db.QueryRow(`
+	err := db.QueryRowR(`
 		SELECT id, hostname, address, port, status, is_primary, last_heartbeat, created_at
 		FROM cluster_nodes WHERE is_primary = 1
 	`).Scan(
@@ -983,7 +983,7 @@ func (db *DB) GetPrimaryNode() (*ClusterNode, error) {
 
 // MarkNodeOffline marks a node as offline
 func (db *DB) MarkNodeOffline(id string) error {
-	_, err := db.Exec("UPDATE cluster_nodes SET status = 'offline' WHERE id = ?", id)
+	_, err := db.ExecR("UPDATE cluster_nodes SET status = 'offline' WHERE id = ?", id)
 	return err
 }
 
@@ -991,19 +991,19 @@ func (db *DB) MarkNodeOffline(id string) error {
 
 // AddProfileTag adds a tag to a profile
 func (db *DB) AddProfileTag(profileID, tag string) error {
-	_, err := db.Exec("INSERT OR IGNORE INTO profile_tags (profile_id, tag) VALUES (?, ?)", profileID, tag)
+	_, err := db.ExecR("INSERT OR IGNORE INTO profile_tags (profile_id, tag) VALUES (?, ?)", profileID, tag)
 	return err
 }
 
 // RemoveProfileTag removes a tag from a profile
 func (db *DB) RemoveProfileTag(profileID, tag string) error {
-	_, err := db.Exec("DELETE FROM profile_tags WHERE profile_id = ? AND tag = ?", profileID, tag)
+	_, err := db.ExecR("DELETE FROM profile_tags WHERE profile_id = ? AND tag = ?", profileID, tag)
 	return err
 }
 
 // GetProfileTags retrieves all tags for a profile
 func (db *DB) GetProfileTags(profileID string) ([]string, error) {
-	rows, err := db.Query("SELECT tag FROM profile_tags WHERE profile_id = ? ORDER BY tag", profileID)
+	rows, err := db.QueryR("SELECT tag FROM profile_tags WHERE profile_id = ? ORDER BY tag", profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -1023,7 +1023,7 @@ func (db *DB) GetProfileTags(profileID string) ([]string, error) {
 
 // SearchProfilesByTag searches profiles by tag
 func (db *DB) SearchProfilesByTag(tag string, limit, offset int) ([]*Profile, error) {
-	rows, err := db.Query(`
+	rows, err := db.QueryR(`
 		SELECT p.id, p.user_id, p.slug, p.display_name, p.bio, p.avatar_url, p.header_image_url,
 		       p.theme_id, p.custom_css, p.show_usernames, p.is_public, p.password_protected,
 		       p.protection_password, p.custom_domain, p.domain_verified, p.analytics_enabled,

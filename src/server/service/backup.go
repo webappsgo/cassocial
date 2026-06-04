@@ -254,9 +254,18 @@ func (s *BackupService) addUploadsToBackup(tw *tar.Writer) error {
 	})
 }
 
-// rotateBackups keeps only the most recent N backups
+// rotateBackups keeps only the most recent N backups.
+// The count is derived from backup_retention_days in settings, defaulting to 30.
 func (s *BackupService) rotateBackups(backupDir string) error {
-	maxBackups := 4 // Keep max 4 backups
+	retentionDays := 30
+	if retStr, err := s.db.GetSetting("backup_retention_days"); err == nil {
+		var n int
+		if _, err := fmt.Sscanf(retStr, "%d", &n); err == nil && n > 0 {
+			retentionDays = n
+		}
+	}
+	// Keep at least 1 backup per day over the retention period (daily schedule assumed)
+	maxBackups := retentionDays
 
 	backups, err := s.ListBackups()
 	if err != nil {

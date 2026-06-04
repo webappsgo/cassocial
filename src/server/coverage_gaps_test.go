@@ -255,9 +255,10 @@ func TestMaintenanceMode_Enable_MessageSetSettingError(t *testing.T) {
 // dir simply has no hostname file. This test will take up to 60s in CI unless
 // we mock time — we skip it in short mode.
 func TestWaitForOnionAddress_Timeout_ShortMode(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping 60s timeout test in short mode")
-	}
+	// Override poll interval to 1ms so 60 iterations complete in ~60ms, not 60s.
+	orig := torOnionWaitInterval
+	torOnionWaitInterval = time.Millisecond
+	defer func() { torOnionWaitInterval = orig }()
 
 	ts := NewTorService(t.TempDir())
 	// Create the torDataDir but NOT the hostname file.
@@ -336,9 +337,11 @@ func TestTorService_Stop_ProcessExitsImmediately(t *testing.T) {
 // and sending SIGTERM which it ignores. Since we cannot override the timeout
 // duration, this test is skipped in short mode.
 func TestTorService_Stop_Timeout(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping 10s timeout test in short mode")
-	}
+	// Override stop timeout to 50ms so the test completes immediately.
+	orig := torStopTimeout
+	torStopTimeout = 50 * time.Millisecond
+	defer func() { torStopTimeout = orig }()
+
 	// Start a process that ignores SIGTERM: `sleep 60` with SIGTERM trapped.
 	// On Linux, we can use `sh -c 'trap "" TERM; sleep 60'`.
 	ts := NewTorService(t.TempDir())

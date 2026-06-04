@@ -96,8 +96,12 @@ func TestEnable2FA_Success(t *testing.T) {
 	counter := time.Now().Unix() / TOTPPeriod
 	code := a.generateTOTP(decoded, counter)
 
-	if err := a.Enable2FA(user.ID, setup.Secret, code); err != nil {
+	backupCodes, err := a.Enable2FA(user.ID, setup.Secret, code)
+	if err != nil {
 		t.Fatalf("Enable2FA valid code: %v", err)
+	}
+	if len(backupCodes) != 10 {
+		t.Errorf("Enable2FA returned %d backup codes, want 10", len(backupCodes))
 	}
 
 	// Verify it was actually stored in the DB.
@@ -123,7 +127,7 @@ func TestEnable2FA_InvalidCode(t *testing.T) {
 		t.Fatalf("Generate2FASecret: %v", err)
 	}
 
-	err = a.Enable2FA(user.ID, setup.Secret, "000000")
+	_, err = a.Enable2FA(user.ID, setup.Secret, "000000")
 	if err != ErrInvalidCredentials {
 		t.Errorf("Enable2FA with invalid code: got %v, want ErrInvalidCredentials", err)
 	}
@@ -132,7 +136,7 @@ func TestEnable2FA_InvalidCode(t *testing.T) {
 // TestEnable2FA_UserNotFound verifies that an unknown userID returns an error.
 func TestEnable2FA_UserNotFound(t *testing.T) {
 	a := newTestAuth(t)
-	err := a.Enable2FA("nonexistent-id", "JBSWY3DPEHPK3PXP", "123456")
+	_, err := a.Enable2FA("nonexistent-id", "JBSWY3DPEHPK3PXP", "123456")
 	if err == nil {
 		t.Error("Enable2FA with unknown user should return error")
 	}
@@ -145,7 +149,7 @@ func TestDisable2FA_Success(t *testing.T) {
 
 	// Enable 2FA directly in DB so Disable2FA has something to clear.
 	query := "UPDATE users SET two_factor_enabled = 1, two_factor_secret = 'JBSWY3DPEHPK3PXP' WHERE id = ?"
-	if _, err := a.db.Exec(query, user.ID); err != nil {
+	if _, err := a.db.ExecR(query, user.ID); err != nil {
 		t.Fatalf("enabling 2FA in DB: %v", err)
 	}
 
@@ -282,15 +286,50 @@ func TestGenerateTOTP_VariesWithCounter(t *testing.T) {
 	}
 }
 
-// TestValidateBackupCode_NotImplemented verifies the placeholder returns false and an error.
-func TestValidateBackupCode_NotImplemented(t *testing.T) {
+// TestValidateBackupCode_Success verifies that a valid backup code is accepted and marked used.
+func TestValidateBackupCode_Success(t *testing.T) {
 	a := newTestAuth(t)
-	valid, err := a.ValidateBackupCode("some-user-id", "some-code")
-	if valid {
-		t.Error("ValidateBackupCode should return false (not implemented)")
+	user := registerTestUser(t, a, "backupcode-user", "backupcode@example.com", "ValidPass1")
+
+	codes, err := a.RegenerateBackupCodes(user.ID)
+	if err != nil {
+		t.Fatalf("RegenerateBackupCodes: %v", err)
 	}
-	if err == nil {
-		t.Error("ValidateBackupCode should return error (not implemented)")
+
+	// First use — should succeed
+	valid, err := a.ValidateBackupCode(user.ID, codes[0])
+	if err != nil {
+		t.Fatalf("ValidateBackupCode: %v", err)
+	}
+	if !valid {
+		t.Error("ValidateBackupCode should return true for a valid unused code")
+	}
+
+	// Second use of same code — should fail (marked used)
+	valid, err = a.ValidateBackupCode(user.ID, codes[0])
+	if err != nil {
+		t.Fatalf("ValidateBackupCode second use: %v", err)
+	}
+	if valid {
+		t.Error("ValidateBackupCode should return false for an already-used code")
+	}
+}
+
+// TestValidateBackupCode_Invalid verifies that a wrong code is rejected.
+func TestValidateBackupCode_Invalid(t *testing.T) {
+	a := newTestAuth(t)
+	user := registerTestUser(t, a, "backupcode-invalid", "backupcode-invalid@example.com", "ValidPass1")
+
+	if _, err := a.RegenerateBackupCodes(user.ID); err != nil {
+		t.Fatalf("RegenerateBackupCodes: %v", err)
+	}
+
+	valid, err := a.ValidateBackupCode(user.ID, "wrong-code-xxx")
+	if err != nil {
+		t.Fatalf("ValidateBackupCode invalid: %v", err)
+	}
+	if valid {
+		t.Error("ValidateBackupCode should return false for an invalid code")
 	}
 }
 
@@ -462,7 +501,7 @@ func TestEnable2FA_DBExecError(t *testing.T) {
 	}
 	defer a.db.Exec("DROP TRIGGER IF EXISTS block_2fa_update")
 
-	err = a.Enable2FA(user.ID, setup.Secret, code)
+	_, err = a.Enable2FA(user.ID, setup.Secret, code)
 	if err == nil {
 		t.Error("Enable2FA with blocked UPDATE trigger should return error")
 	}
@@ -529,7 +568,7 @@ func TestEnable2FA_PostgresQueryBranch(t *testing.T) {
 	defer func() { a.db.Driver = origDriver }()
 
 	// modernc SQLite accepts $1 placeholders, so this should succeed.
-	if err = a.Enable2FA(user.ID, setup.Secret, code); err != nil {
+	if _, err = a.Enable2FA(user.ID, setup.Secret, code); err != nil {
 		t.Errorf("Enable2FA with postgres query branch should succeed on SQLite: %v", err)
 	}
 }

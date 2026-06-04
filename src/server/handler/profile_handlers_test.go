@@ -794,6 +794,13 @@ func TestVerifyDomain_Valid(t *testing.T) {
 	userID := createTestUser(t, db, "vdvalid", "vdvalid@example.com")
 	profileID := createTestProfile(t, h, userID, "vdvalidslug")
 
+	// Set a real public domain so DNS resolution succeeds.
+	// TXT record will not be present, so the response is 200 verified=false.
+	_, err := db.ExecR("UPDATE profiles SET custom_domain = ? WHERE id = ?", "example.com", profileID)
+	if err != nil {
+		t.Fatalf("set custom_domain: %v", err)
+	}
+
 	req := httptest.NewRequest(http.MethodPost, "/api/profiles/"+profileID+"/verify-domain", nil)
 	req.SetPathValue("id", profileID)
 	req = withUserID(req, userID)

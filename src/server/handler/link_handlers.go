@@ -79,7 +79,7 @@ func (h *LinkHandlers) ListLinks(w http.ResponseWriter, r *http.Request) {
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	rows, err := h.db.Query(query, profileID)
+	rows, err := h.db.QueryR(query, profileID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch links")
 		return
@@ -176,7 +176,7 @@ func (h *LinkHandlers) CreateLink(w http.ResponseWriter, r *http.Request) {
 				 background_color, text_color, position, is_active, click_count, created_at, updated_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 				 RETURNING id`
-		err := h.db.QueryRow(query, link.ProfileID, link.ServiceID, link.Title, link.Username,
+		err := h.db.QueryRowR(query, link.ProfileID, link.ServiceID, link.Title, link.Username,
 			link.URL, link.IconURL, link.BackgroundColor, link.TextColor, link.Position,
 			link.IsActive, 0, h.db.BindTime(link.CreatedAt), h.db.BindTime(link.UpdatedAt)).Scan(&link.ID)
 		if err != nil {
@@ -185,7 +185,7 @@ func (h *LinkHandlers) CreateLink(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		link.ID = generateUUID()
-		_, err := h.db.Exec(query, link.ID, link.ProfileID, link.ServiceID, link.Title,
+		_, err := h.db.ExecR(query, link.ID, link.ProfileID, link.ServiceID, link.Title,
 			link.Username, link.URL, link.IconURL, link.BackgroundColor, link.TextColor,
 			link.Position, link.IsActive, 0, h.db.BindTime(link.CreatedAt), h.db.BindTime(link.UpdatedAt))
 		if err != nil {
@@ -271,7 +271,7 @@ func (h *LinkHandlers) UpdateLink(w http.ResponseWriter, r *http.Request) {
 		query = replaceQuestionMarks(query, 9)
 	}
 
-	_, err = h.db.Exec(query, link.Title, link.Username, link.URL, link.IconURL,
+	_, err = h.db.ExecR(query, link.Title, link.Username, link.URL, link.IconURL,
 		link.BackgroundColor, link.TextColor, link.IsActive, h.db.BindTime(link.UpdatedAt), linkID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update link")
@@ -315,7 +315,7 @@ func (h *LinkHandlers) DeleteLink(w http.ResponseWriter, r *http.Request) {
 		query = "DELETE FROM links WHERE id = $1"
 	}
 
-	_, err = h.db.Exec(query, linkID)
+	_, err = h.db.ExecR(query, linkID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to delete link")
 		return
@@ -369,7 +369,7 @@ func (h *LinkHandlers) ReorderLinks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, linkID := range req.LinkIDs {
-		_, err := h.db.Exec(query, i, linkID)
+		_, err := h.db.ExecR(query, i, linkID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to reorder links")
 			return
@@ -419,7 +419,7 @@ func (h *LinkHandlers) ToggleLink(w http.ResponseWriter, r *http.Request) {
 		query = "UPDATE links SET is_active = $1, updated_at = $2 WHERE id = $3"
 	}
 
-	_, err = h.db.Exec(query, link.IsActive, h.db.BindTime(link.UpdatedAt), linkID)
+	_, err = h.db.ExecR(query, link.IsActive, h.db.BindTime(link.UpdatedAt), linkID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to toggle link")
 		return
@@ -441,7 +441,7 @@ func (h *LinkHandlers) getLinkByID(id string) (*model.Link, error) {
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	err := h.db.QueryRow(query, id).Scan(&link.ID, &link.ProfileID, &link.ServiceID,
+	err := h.db.QueryRowR(query, id).Scan(&link.ID, &link.ProfileID, &link.ServiceID,
 		&link.Title, &link.Username, &link.URL, &link.IconURL, &link.BackgroundColor,
 		&link.TextColor, &link.Position, &link.IsActive, &link.ClickCount, &link.CreatedAt,
 		&link.UpdatedAt)
@@ -455,7 +455,7 @@ func (h *LinkHandlers) getLinkCount(profileID string) (int, error) {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM links WHERE profile_id = $1"
 	}
-	err := h.db.QueryRow(query, profileID).Scan(&count)
+	err := h.db.QueryRowR(query, profileID).Scan(&count)
 	return count, err
 }
 
@@ -465,7 +465,7 @@ func (h *LinkHandlers) getNextLinkPosition(profileID string) int {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COALESCE(MAX(position), -1) FROM links WHERE profile_id = $1"
 	}
-	h.db.QueryRow(query, profileID).Scan(&maxPosition)
+	h.db.QueryRowR(query, profileID).Scan(&maxPosition)
 	return maxPosition + 1
 }
 
@@ -475,7 +475,7 @@ func (h *LinkHandlers) userOwnsProfile(userID, profileID string) bool {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM profiles WHERE id = $1 AND user_id = $2"
 	}
-	h.db.QueryRow(query, profileID, userID).Scan(&count)
+	h.db.QueryRowR(query, profileID, userID).Scan(&count)
 	return count > 0
 }
 
@@ -486,7 +486,7 @@ func (h *LinkHandlers) reorderLinks(profileID string) {
 		query = "SELECT id FROM links WHERE profile_id = $1 ORDER BY position ASC"
 	}
 
-	rows, err := h.db.Query(query, profileID)
+	rows, err := h.db.QueryR(query, profileID)
 	if err != nil {
 		return
 	}
@@ -506,6 +506,6 @@ func (h *LinkHandlers) reorderLinks(profileID string) {
 	}
 
 	for i, linkID := range linkIDs {
-		h.db.Exec(updateQuery, i, linkID)
+		h.db.ExecR(updateQuery, i, linkID)
 	}
 }

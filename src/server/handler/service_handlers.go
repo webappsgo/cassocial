@@ -53,7 +53,7 @@ func (h *ServiceHandlers) ListServices(w http.ResponseWriter, r *http.Request) {
 		query = replaceQuestionMarksWithArgs(query, len(args))
 	}
 
-	rows, err := h.db.Query(query, args...)
+	rows, err := h.db.QueryR(query, args...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch services")
 		return
@@ -99,7 +99,7 @@ func (h *ServiceHandlers) SearchServices(w http.ResponseWriter, r *http.Request)
 	}
 
 	searchPattern := "%" + searchQuery + "%"
-	rows, err := h.db.Query(query, true, searchPattern)
+	rows, err := h.db.QueryR(query, true, searchPattern)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to search services")
 		return
@@ -134,7 +134,7 @@ func (h *ServiceHandlers) ListCategories(w http.ResponseWriter, r *http.Request)
 				 GROUP BY category ORDER BY category ASC`
 	}
 
-	rows, err := h.db.Query(query, true)
+	rows, err := h.db.QueryR(query, true)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch categories")
 		return
@@ -180,7 +180,7 @@ func (h *ServiceHandlers) ListPopularServices(w http.ResponseWriter, r *http.Req
 				 ORDER BY popularity DESC LIMIT $2`
 	}
 
-	rows, err := h.db.Query(query, true, limitStr)
+	rows, err := h.db.QueryR(query, true, limitStr)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch popular services")
 		return
@@ -221,7 +221,7 @@ func (h *ServiceHandlers) GetService(w http.ResponseWriter, r *http.Request) {
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	err := h.db.QueryRow(query, serviceID).Scan(&service.ID, &service.Name, &service.Category,
+	err := h.db.QueryRowR(query, serviceID).Scan(&service.ID, &service.Name, &service.Category,
 		&service.IconURL, &service.IconSVG, &service.URLPattern, &service.BackgroundColor,
 		&service.TextColor, &service.Popularity, &service.IsActive, &service.RequiresUsername,
 		&service.PlaceholderText, &service.ValidationPattern, &service.CreatedAt, &service.UpdatedAt)

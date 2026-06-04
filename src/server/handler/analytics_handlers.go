@@ -143,7 +143,7 @@ func (h *AnalyticsHandlers) GetLinkAnalytics(w http.ResponseWriter, r *http.Requ
 	// Last 30 days
 	startDate := time.Now().AddDate(0, 0, -30)
 
-	rows, err := h.db.Query(query, h.db.BindTime(startDate), profileID)
+	rows, err := h.db.QueryR(query, h.db.BindTime(startDate), profileID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch link analytics")
 		return
@@ -220,7 +220,7 @@ func (h *AnalyticsHandlers) getTotalViews(profileID string, startDate, endDate t
 				 AND created_at BETWEEN $2 AND $3`
 	}
 
-	h.db.QueryRow(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate)).Scan(&count)
+	h.db.QueryRowR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate)).Scan(&count)
 	return count
 }
 
@@ -236,7 +236,7 @@ func (h *AnalyticsHandlers) getUniqueVisitors(profileID string, startDate, endDa
 				 AND created_at BETWEEN $2 AND $3`
 	}
 
-	h.db.QueryRow(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate)).Scan(&count)
+	h.db.QueryRowR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate)).Scan(&count)
 	return count
 }
 
@@ -252,7 +252,7 @@ func (h *AnalyticsHandlers) getTotalClicks(profileID string, startDate, endDate 
 				 AND created_at BETWEEN $2 AND $3`
 	}
 
-	h.db.QueryRow(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate)).Scan(&count)
+	h.db.QueryRowR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate)).Scan(&count)
 	return count
 }
 
@@ -273,7 +273,7 @@ func (h *AnalyticsHandlers) getViewsByDay(profileID string, startDate, endDate t
 				 ORDER BY date ASC`
 	}
 
-	rows, err := h.db.Query(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate))
+	rows, err := h.db.QueryR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate))
 	if err != nil {
 		return []map[string]interface{}{}
 	}
@@ -312,7 +312,7 @@ func (h *AnalyticsHandlers) getTopReferrers(profileID string, startDate, endDate
 				 ORDER BY count DESC LIMIT $4`
 	}
 
-	rows, err := h.db.Query(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate), limit)
+	rows, err := h.db.QueryR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate), limit)
 	if err != nil {
 		return []map[string]interface{}{}
 	}
@@ -347,7 +347,7 @@ func (h *AnalyticsHandlers) getDeviceBreakdown(profileID string, startDate, endD
 				 GROUP BY device_type`
 	}
 
-	rows, err := h.db.Query(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate))
+	rows, err := h.db.QueryR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate))
 	if err != nil {
 		return map[string]int{}
 	}
@@ -388,7 +388,7 @@ func (h *AnalyticsHandlers) getCountryBreakdown(profileID string, startDate, end
 				 ORDER BY count DESC LIMIT $4`
 	}
 
-	rows, err := h.db.Query(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate), limit)
+	rows, err := h.db.QueryR(query, profileID, h.db.BindTime(startDate), h.db.BindTime(endDate), limit)
 	if err != nil {
 		return []map[string]interface{}{}
 	}
@@ -414,6 +414,6 @@ func (h *AnalyticsHandlers) userOwnsProfile(userID, profileID string) bool {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM profiles WHERE id = $1 AND user_id = $2"
 	}
-	h.db.QueryRow(query, profileID, userID).Scan(&count)
+	h.db.QueryRowR(query, profileID, userID).Scan(&count)
 	return count > 0
 }

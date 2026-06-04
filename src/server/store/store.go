@@ -116,6 +116,12 @@ type Store interface {
 	DeletePasswordResetToken(token string) error
 	DeleteExpiredPasswordResetTokens() error
 
+	// 2FA backup code operations (PART 23)
+	StoreBackupCodes(userID string, codeHashes []string) error
+	GetUnusedBackupCodes(userID string) ([]BackupCode, error)
+	MarkBackupCodeUsed(id string) error
+	DeleteBackupCodes(userID string) error
+
 	// Analytics operations (PART 36: ProfileView and LinkClick models)
 	// Per PART 36: IP addresses are hashed for GDPR compliance
 	RecordProfileView(view *ProfileView) error
@@ -326,6 +332,15 @@ type PasswordResetToken struct {
 	Token     string
 	UserID    string
 	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+// BackupCode represents a single hashed 2FA backup code
+type BackupCode struct {
+	ID        string
+	UserID    string
+	CodeHash  string
+	UsedAt    *time.Time
 	CreatedAt time.Time
 }
 

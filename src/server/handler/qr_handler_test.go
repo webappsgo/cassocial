@@ -81,12 +81,15 @@ func TestHandleGenerateQR(t *testing.T) {
 		}
 	})
 
-	t.Run("svg format returns 501 not implemented", func(t *testing.T) {
+	t.Run("svg format returns 200 with image/svg+xml", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/qr/generate?url=https://example.com&format=svg", nil)
 		rr := httptest.NewRecorder()
 		h.HandleGenerateQR(rr, req)
-		if rr.Code != http.StatusNotImplemented {
-			t.Errorf("got %d, want %d", rr.Code, http.StatusNotImplemented)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
+		}
+		if ct := rr.Header().Get("Content-Type"); ct != "image/svg+xml" {
+			t.Errorf("Content-Type = %q, want image/svg+xml", ct)
 		}
 	})
 
@@ -189,13 +192,20 @@ func TestGeneratePNG(t *testing.T) {
 	})
 }
 
-// TestGenerateSVG verifies the SVG stub returns 501.
+// TestGenerateSVG verifies the SVG generator returns 200 with valid SVG content.
 func TestGenerateSVG(t *testing.T) {
 	h := NewQRHandler()
 	rr := httptest.NewRecorder()
 	h.generateSVG(rr, "https://example.com", 256)
-	if rr.Code != http.StatusNotImplemented {
-		t.Errorf("got %d, want %d", rr.Code, http.StatusNotImplemented)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "<svg") {
+		t.Error("generateSVG: response does not contain <svg element")
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "image/svg+xml" {
+		t.Errorf("Content-Type = %q, want image/svg+xml", ct)
 	}
 }
 

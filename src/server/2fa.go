@@ -3,8 +3,10 @@ package server
 import (
 	"crypto/hmac"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"strings"
@@ -22,8 +24,8 @@ const (
 
 // TwoFactorSetup contains the setup information for 2FA
 type TwoFactorSetup struct {
-	Secret     string   `json:"secret"`
-	QRCodeURL  string   `json:"qr_code_url"`
+	Secret      string   `json:"secret"`
+	QRCodeURL   string   `json:"qr_code_url"`
 	BackupCodes []string `json:"backup_codes"`
 }
 
@@ -38,7 +40,7 @@ func (a *Auth) Generate2FASecret(user *model.User) (*TwoFactorSetup, error) {
 	// Remove padding
 	encodedSecret = strings.TrimRight(encodedSecret, "=")
 
-	// Generate backup codes
+	// Generate plaintext backup codes (shown to user once, stored as hashes)
 	backupCodes := make([]string, 10)
 	for i := 0; i < 10; i++ {
 		backupCodes[i] = generateRandomString(8)
@@ -67,18 +69,20 @@ func (a *Auth) Generate2FASecret(user *model.User) (*TwoFactorSetup, error) {
 	}, nil
 }
 
-// Enable2FA enables two-factor authentication for a user
-func (a *Auth) Enable2FA(userID, secret, code string) error {
+// Enable2FA enables two-factor authentication for a user.
+// It verifies the TOTP code, stores the secret, generates and stores hashed backup codes,
+// and returns the plaintext backup codes (shown to user exactly once).
+func (a *Auth) Enable2FA(userID, secret, code string) ([]string, error) {
 	// Get user
 	_, err := a.GetUserByID(userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Verify the code with the secret
 	valid := a.verifyTOTP(secret, code)
 	if !valid {
-		return ErrInvalidCredentials
+		return nil, ErrInvalidCredentials
 	}
 
 	// Update user in database
@@ -87,12 +91,23 @@ func (a *Auth) Enable2FA(userID, secret, code string) error {
 		query = "UPDATE users SET two_factor_enabled = $1, two_factor_secret = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	_, err = a.db.Exec(query, true, secret, a.db.BindTime(time.Now()), userID)
+	_, err = a.db.ExecR(query, true, secret, a.db.BindTime(time.Now()), userID)
 	if err != nil {
-		return fmt.Errorf("failed to enable 2FA: %w", err)
+		return nil, fmt.Errorf("failed to enable 2FA: %w", err)
 	}
 
-	return nil
+	// Generate 10 backup codes, store hashes, return plaintext (shown once)
+	backupCodes := make([]string, 10)
+	hashes := make([]string, 10)
+	for i := 0; i < 10; i++ {
+		backupCodes[i] = generateRandomString(8)
+		hashes[i] = hashBackupCode(backupCodes[i])
+	}
+	if err := a.db.StoreBackupCodes(userID, hashes); err != nil {
+		return nil, fmt.Errorf("failed to store backup codes: %w", err)
+	}
+
+	return backupCodes, nil
 }
 
 // Disable2FA disables two-factor authentication for a user.
@@ -104,8 +119,13 @@ func (a *Auth) Disable2FA(userID string) error {
 		query = "UPDATE users SET two_factor_enabled = $1, two_factor_secret = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	if _, err := a.db.Exec(query, false, "", a.db.BindTime(time.Now()), userID); err != nil {
+	if _, err := a.db.ExecR(query, false, "", a.db.BindTime(time.Now()), userID); err != nil {
 		return fmt.Errorf("failed to disable 2FA: %w", err)
+	}
+
+	// Remove stored backup codes
+	if err := a.db.DeleteBackupCodes(userID); err != nil {
+		return fmt.Errorf("failed to delete backup codes: %w", err)
 	}
 
 	return nil
@@ -171,21 +191,27 @@ func (a *Auth) generateTOTP(secret []byte, counter int64) string {
 	return fmt.Sprintf("%0*d", TOTPDigits, otp)
 }
 
-// ValidateBackupCode validates a backup code
-// Note: In a production system, backup codes should be hashed and stored in the database
+// ValidateBackupCode validates a backup code for a user, marking it used on success
 func (a *Auth) ValidateBackupCode(userID, code string) (bool, error) {
-	// This is a placeholder implementation
-	// In production, you would:
-	// 1. Query backup_codes table for the user
-	// 2. Hash the provided code and compare with stored hashes
-	// 3. Mark the code as used if valid
-	// 4. Return whether the code was valid
+	codes, err := a.db.GetUnusedBackupCodes(userID)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve backup codes: %w", err)
+	}
 
-	// For now, return false as backup codes need database implementation
-	return false, fmt.Errorf("backup code validation not implemented - requires database table")
+	codeHash := hashBackupCode(code)
+	for _, bc := range codes {
+		if hmac.Equal([]byte(bc.CodeHash), []byte(codeHash)) {
+			if err := a.db.MarkBackupCodeUsed(bc.ID); err != nil {
+				return false, fmt.Errorf("failed to mark backup code used: %w", err)
+			}
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
-// RegenerateBackupCodes generates new backup codes for a user
+// RegenerateBackupCodes generates new backup codes for a user, replaces old ones
 func (a *Auth) RegenerateBackupCodes(userID string) ([]string, error) {
 	// Get user to verify they exist
 	_, err := a.GetUserByID(userID)
@@ -193,16 +219,20 @@ func (a *Auth) RegenerateBackupCodes(userID string) ([]string, error) {
 		return nil, err
 	}
 
-	// Generate new backup codes
+	// Generate new plaintext backup codes
 	backupCodes := make([]string, 10)
 	for i := 0; i < 10; i++ {
 		backupCodes[i] = generateRandomString(8)
 	}
 
-	// In production, you would:
-	// 1. Hash each backup code
-	// 2. Delete old backup codes from database
-	// 3. Store new hashed backup codes in database
+	// Hash and store them
+	hashes := make([]string, len(backupCodes))
+	for i, bc := range backupCodes {
+		hashes[i] = hashBackupCode(bc)
+	}
+	if err := a.db.StoreBackupCodes(userID, hashes); err != nil {
+		return nil, fmt.Errorf("failed to store backup codes: %w", err)
+	}
 
 	return backupCodes, nil
 }
@@ -216,3 +246,10 @@ func (a *Auth) Get2FAStatus(userID string) (bool, error) {
 
 	return user.TwoFactorEnabled, nil
 }
+
+// hashBackupCode hashes a backup code with SHA-256
+func hashBackupCode(code string) string {
+	h := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(h[:])
+}
+

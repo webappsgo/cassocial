@@ -139,12 +139,12 @@ func (a *Auth) Register(username, email, password string) (*model.User, error) {
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			RETURNING id
 		`
-		err = a.db.QueryRow(query, user.Username, user.Email, user.PasswordHash, user.Role, user.Status,
+		err = a.db.QueryRowR(query, user.Username, user.Email, user.PasswordHash, user.Role, user.Status,
 			a.db.BindTime(user.CreatedAt), a.db.BindTime(user.UpdatedAt), user.EmailVerified, user.TwoFactorEnabled).Scan(&user.ID)
 	} else {
 		userID := generateUUID()
 		user.ID = userID
-		_, err = a.db.Exec(query, userID, user.Username, user.Email, user.PasswordHash, user.Role, user.Status,
+		_, err = a.db.ExecR(query, userID, user.Username, user.Email, user.PasswordHash, user.Role, user.Status,
 			a.db.BindTime(user.CreatedAt), a.db.BindTime(user.UpdatedAt), user.EmailVerified, user.TwoFactorEnabled)
 	}
 
@@ -371,7 +371,7 @@ func (a *Auth) GetUserByID(id string) (*model.User, error) {
 	}
 
 	var twoFactorSecret sql.NullString
-	err := a.db.QueryRow(query, id).Scan(
+	err := a.db.QueryRowR(query, id).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
 		&user.TwoFactorEnabled, &twoFactorSecret,
@@ -400,7 +400,7 @@ func (a *Auth) GetUserByUsername(username string) (*model.User, error) {
 	}
 
 	var twoFactorSecret sql.NullString
-	err := a.db.QueryRow(query, username).Scan(
+	err := a.db.QueryRowR(query, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
 		&user.TwoFactorEnabled, &twoFactorSecret,
@@ -429,7 +429,7 @@ func (a *Auth) GetUserByEmail(email string) (*model.User, error) {
 	}
 
 	var twoFactorSecret sql.NullString
-	err := a.db.QueryRow(query, email).Scan(
+	err := a.db.QueryRowR(query, email).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
 		&user.TwoFactorEnabled, &twoFactorSecret,
@@ -459,7 +459,7 @@ func (a *Auth) GetUserByUsernameOrEmail(usernameOrEmail string) (*model.User, er
 	}
 
 	var twoFactorSecret sql.NullString
-	err := a.db.QueryRow(query, usernameOrEmail, usernameOrEmail).Scan(
+	err := a.db.QueryRowR(query, usernameOrEmail, usernameOrEmail).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLogin, &user.EmailVerified,
 		&user.TwoFactorEnabled, &twoFactorSecret,
@@ -485,7 +485,7 @@ func (a *Auth) usernameExists(username string) (bool, error) {
 		query = "SELECT COUNT(*) FROM users WHERE username = $1"
 	}
 
-	err := a.db.QueryRow(query, username).Scan(&count)
+	err := a.db.QueryRowR(query, username).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -502,7 +502,7 @@ func (a *Auth) emailExists(email string) (bool, error) {
 		query = "SELECT COUNT(*) FROM users WHERE email = $1"
 	}
 
-	err := a.db.QueryRow(query, email).Scan(&count)
+	err := a.db.QueryRowR(query, email).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -518,7 +518,7 @@ func (a *Auth) updateLastLogin(userID string) error {
 		query = "UPDATE users SET last_login = $1 WHERE id = $2"
 	}
 
-	_, err := a.db.Exec(query, a.db.BindTime(time.Now()), userID)
+	_, err := a.db.ExecR(query, a.db.BindTime(time.Now()), userID)
 	return err
 }
 

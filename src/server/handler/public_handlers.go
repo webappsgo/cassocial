@@ -39,7 +39,7 @@ func (h *PublicHandlers) GetPublicProfile(w http.ResponseWriter, r *http.Request
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	err := h.db.QueryRow(query, username).Scan(&profile.ID, &profile.UserID, &profile.Slug,
+	err := h.db.QueryRowR(query, username).Scan(&profile.ID, &profile.UserID, &profile.Slug,
 		&profile.DisplayName, &profile.Bio, &profile.AvatarURL, &profile.HeaderImageURL,
 		&profile.ThemeID, &profile.ShowUsernames, &profile.IsPublic, &profile.PasswordProtected,
 		&profile.CustomDomain, &profile.DomainVerified, &profile.MetaTitle,
@@ -83,7 +83,7 @@ func (h *PublicHandlers) GetPublicProfileLinks(w http.ResponseWriter, r *http.Re
 		query = "SELECT id, is_public FROM profiles WHERE slug = $1"
 	}
 
-	err := h.db.QueryRow(query, username).Scan(&profileID, &isPublic)
+	err := h.db.QueryRowR(query, username).Scan(&profileID, &isPublic)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "profile not found")
 		return
@@ -107,7 +107,7 @@ func (h *PublicHandlers) GetPublicProfileLinks(w http.ResponseWriter, r *http.Re
 		query = replaceQuestionMarks(query, 2)
 	}
 
-	rows, err := h.db.Query(query, profileID, true)
+	rows, err := h.db.QueryR(query, profileID, true)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch links")
 		return
@@ -146,7 +146,7 @@ func (h *PublicHandlers) GetPublicProfileQR(w http.ResponseWriter, r *http.Reque
 		query = "SELECT id, is_public, qr_code_enabled FROM profiles WHERE slug = $1"
 	}
 
-	err := h.db.QueryRow(query, username).Scan(&profileID, &isPublic, &qrEnabled)
+	err := h.db.QueryRowR(query, username).Scan(&profileID, &isPublic, &qrEnabled)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "profile not found")
 		return
@@ -188,7 +188,7 @@ func (h *PublicHandlers) TrackLinkClick(w http.ResponseWriter, r *http.Request) 
 		query = replaceQuestionMarks(query, 1)
 	}
 
-	err := h.db.QueryRow(query, linkID).Scan(&link.ID, &link.ProfileID, &link.URL, &link.IsActive)
+	err := h.db.QueryRowR(query, linkID).Scan(&link.ID, &link.ProfileID, &link.URL, &link.IsActive)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "link not found")
 		return
@@ -217,7 +217,7 @@ func (h *PublicHandlers) incrementViewCount(profileID string) {
 	if h.db.Driver == "postgres" {
 		query = "UPDATE profiles SET view_count = view_count + 1 WHERE id = $1"
 	}
-	h.db.Exec(query, profileID)
+	h.db.ExecR(query, profileID)
 }
 
 func (h *PublicHandlers) incrementClickCount(linkID string) {
@@ -225,7 +225,7 @@ func (h *PublicHandlers) incrementClickCount(linkID string) {
 	if h.db.Driver == "postgres" {
 		query = "UPDATE links SET click_count = click_count + 1 WHERE id = $1"
 	}
-	h.db.Exec(query, linkID)
+	h.db.ExecR(query, linkID)
 }
 
 func (h *PublicHandlers) trackView(r *http.Request, profileID string) {
@@ -245,10 +245,10 @@ func (h *PublicHandlers) trackView(r *http.Request, profileID string) {
 		query = `INSERT INTO analytics (profile_id, event_type, ip_hash, user_agent,
 				 referrer, device_type, created_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)`
-		h.db.Exec(query, profileID, "view", ipHash, r.UserAgent(),
+		h.db.ExecR(query, profileID, "view", ipHash, r.UserAgent(),
 			r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	} else {
-		h.db.Exec(query, generateUUID(), profileID, "view", ipHash, r.UserAgent(),
+		h.db.ExecR(query, generateUUID(), profileID, "view", ipHash, r.UserAgent(),
 			r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	}
 }
@@ -270,10 +270,10 @@ func (h *PublicHandlers) trackClick(r *http.Request, profileID, linkID string) {
 		query = `INSERT INTO analytics (profile_id, link_id, event_type, ip_hash,
 				 user_agent, referrer, device_type, created_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-		h.db.Exec(query, profileID, linkID, "click", ipHash, r.UserAgent(),
+		h.db.ExecR(query, profileID, linkID, "click", ipHash, r.UserAgent(),
 			r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	} else {
-		h.db.Exec(query, generateUUID(), profileID, linkID, "click", ipHash,
+		h.db.ExecR(query, generateUUID(), profileID, linkID, "click", ipHash,
 			r.UserAgent(), r.Referer(), deviceType, h.db.BindTime(getCurrentTimestamp()))
 	}
 }

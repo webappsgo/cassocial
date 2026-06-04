@@ -125,23 +125,23 @@ func run(args []string) int {
 	}
 
 	if *daemon {
-		fmt.Fprintln(os.Stderr, "error: --daemon not yet implemented")
-		return 1
+		if rc := handleDaemon(args); rc >= 0 {
+			return rc
+		}
+		// rc == -1 means we're running inside the daemonized child — continue normally
 	}
 
 	if *service != "" {
-		fmt.Fprintln(os.Stderr, "error: --service not yet implemented")
-		return 1
+		return handleService(*service)
 	}
 
 	if *maintenance != "" {
-		fmt.Fprintln(os.Stderr, "error: --maintenance not yet implemented")
-		return 1
+		// Pass any trailing positional args (e.g. filename for restore, enable/disable for mode)
+		return handleMaintenance(*maintenance, cfg, fs.Args())
 	}
 
 	if *update != "" {
-		fmt.Fprintln(os.Stderr, "error: --update not yet implemented")
-		return 1
+		return handleUpdate(*update, fs.Args())
 	}
 
 	// Write PID file
@@ -241,9 +241,7 @@ func printHelp() {
 	fmt.Println()
 }
 
-func handleStatus(cfg *config.Config, pidFile string) {
-	fmt.Println("Status: not yet implemented")
-}
+// handleStatus is implemented in cli_ops.go
 
 // applyColorPreference applies NO_COLOR and --color preference.
 // When NO_COLOR is set (any non-empty value) or --color=never, color output is disabled.

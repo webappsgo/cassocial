@@ -1,6 +1,7 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -15,6 +16,18 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
+
+// generateUUID returns a random hex string suitable for use as a row ID.
+func generateUUID() string {
+	b := make([]byte, 16)
+	rand.Read(b) //nolint:errcheck
+	return fmt.Sprintf("%x", b)
+}
+
+// NewUUID is the exported form of generateUUID for use by other packages.
+func NewUUID() string {
+	return generateUUID()
+}
 
 // sqliteTimeFmt is SQLite's native datetime format for string comparison
 // with datetime('now') and CURRENT_TIMESTAMP.
@@ -154,7 +167,7 @@ func (db *DB) RunMigrations() error {
 		sqlContent = db.adaptSQL(sqlContent)
 
 		// Execute migration
-		if _, err := db.Exec(sqlContent); err != nil {
+		if _, err := db.ExecR(sqlContent); err != nil {
 			log.Printf("Migration %s error (may be already applied): %v", file.Name(), err)
 		} else {
 			log.Printf("Applied migration: %s", file.Name())
@@ -220,7 +233,7 @@ func getDataDirectory() string {
 // GetSetting retrieves a setting value
 func (db *DB) GetSetting(key string) (string, error) {
 	var value string
-	err := db.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	err := db.QueryRowR("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
 	if err != nil {
 		return "", err
 	}
@@ -229,32 +242,28 @@ func (db *DB) GetSetting(key string) (string, error) {
 
 // SetSetting updates or inserts a setting
 func (db *DB) SetSetting(key, value string) error {
-	placeholder := "?, ?"
-	if db.Driver == "pgx" {
-		placeholder = "$1, $2"
-	}
-
-	query := fmt.Sprintf(`
-		INSERT INTO settings (key, value, updated_at)
-		VALUES (%s, CURRENT_TIMESTAMP)
-		ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
-	`, placeholder)
-
+	var query string
 	if db.Driver == "mysql" {
 		query = `
 			INSERT INTO settings (key, value, updated_at)
 			VALUES (?, ?, CURRENT_TIMESTAMP)
 			ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = CURRENT_TIMESTAMP
 		`
+	} else {
+		query = `
+			INSERT INTO settings (key, value, updated_at)
+			VALUES (?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+		`
 	}
 
-	_, err := db.Exec(query, key, value)
+	_, err := db.ExecR(query, key, value)
 	return err
 }
 
 // GetAllSettings retrieves all settings
 func (db *DB) GetAllSettings() (map[string]string, error) {
-rows, err := db.Query("SELECT key, value FROM settings")
+rows, err := db.QueryR("SELECT key, value FROM settings")
 if err != nil {
 return nil, err
 }
@@ -278,7 +287,7 @@ return settings, rows.Err()
 // GetUserByID retrieves a user by ID
 func (db *DB) GetUserByID(id string) (*User, error) {
 user := &User{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, role, status,
        email_verified, two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -298,7 +307,7 @@ return user, nil
 // GetUserByEmail retrieves a user by email
 func (db *DB) GetUserByEmail(email string) (*User, error) {
 user := &User{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, role, status,
        email_verified, two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -318,7 +327,7 @@ return user, nil
 // GetUserByUsername retrieves a user by username
 func (db *DB) GetUserByUsername(username string) (*User, error) {
 user := &User{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, role, status,
        email_verified, two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -337,7 +346,7 @@ return user, nil
 
 // CreateUser creates a new user
 func (db *DB) CreateUser(user *User) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 INSERT INTO users (id, username, email, password_hash, role, status,
                    email_verified, two_factor_enabled, two_factor_secret,
                    created_at, updated_at)
@@ -349,7 +358,7 @@ return err
 
 // UpdateUser updates an existing user
 func (db *DB) UpdateUser(user *User) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 UPDATE users SET
 username = ?, email = ?, password_hash = ?, role = ?, status = ?,
 email_verified = ?, two_factor_enabled = ?, two_factor_secret = ?,
@@ -362,13 +371,13 @@ return err
 
 // DeleteUser deletes a user
 func (db *DB) DeleteUser(id string) error {
-_, err := db.Exec("DELETE FROM users WHERE id = ?", id)
+_, err := db.ExecR("DELETE FROM users WHERE id = ?", id)
 return err
 }
 
 // ListUsers retrieves a paginated list of users
 func (db *DB) ListUsers(limit, offset int) ([]*User, error) {
-rows, err := db.Query(`
+rows, err := db.QueryR(`
 SELECT id, username, email, password_hash, role, status,
        email_verified, two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -401,7 +410,7 @@ return users, rows.Err()
 // CountUsers returns the total number of users
 func (db *DB) CountUsers() (int, error) {
 var count int
-err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+err := db.QueryRowR("SELECT COUNT(*) FROM users").Scan(&count)
 return count, err
 }
 
@@ -411,7 +420,7 @@ return count, err
 // GetServerAdminByID retrieves a server admin by ID
 func (db *DB) GetServerAdminByID(id string) (*ServerAdmin, error) {
 admin := &ServerAdmin{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, is_primary,
        two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -430,7 +439,7 @@ return admin, nil
 // GetServerAdminByEmail retrieves a server admin by email
 func (db *DB) GetServerAdminByEmail(email string) (*ServerAdmin, error) {
 admin := &ServerAdmin{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, is_primary,
        two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -449,7 +458,7 @@ return admin, nil
 // GetServerAdminByUsername retrieves a server admin by username
 func (db *DB) GetServerAdminByUsername(username string) (*ServerAdmin, error) {
 admin := &ServerAdmin{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, is_primary,
        two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -467,7 +476,7 @@ return admin, nil
 
 // CreateServerAdmin creates a new server admin
 func (db *DB) CreateServerAdmin(admin *ServerAdmin) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 INSERT INTO server_admins (id, username, email, password_hash, is_primary,
                             two_factor_enabled, two_factor_secret,
                             created_at, updated_at)
@@ -479,7 +488,7 @@ return err
 
 // UpdateServerAdmin updates an existing server admin
 func (db *DB) UpdateServerAdmin(admin *ServerAdmin) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 UPDATE server_admins SET
 username = ?, email = ?, password_hash = ?, is_primary = ?,
 two_factor_enabled = ?, two_factor_secret = ?,
@@ -494,7 +503,7 @@ return err
 // Per PART 23: Primary Admin cannot be deleted
 func (db *DB) DeleteServerAdmin(id string) error {
 var isPrimary bool
-err := db.QueryRow("SELECT is_primary FROM server_admins WHERE id = ?", id).Scan(&isPrimary)
+err := db.QueryRowR("SELECT is_primary FROM server_admins WHERE id = ?", id).Scan(&isPrimary)
 if err != nil {
 return err
 }
@@ -503,14 +512,14 @@ if isPrimary {
 return fmt.Errorf("cannot delete primary admin")
 }
 
-_, err = db.Exec("DELETE FROM server_admins WHERE id = ?", id)
+_, err = db.ExecR("DELETE FROM server_admins WHERE id = ?", id)
 return err
 }
 
 // GetPrimaryAdmin retrieves the primary admin
 func (db *DB) GetPrimaryAdmin() (*ServerAdmin, error) {
 admin := &ServerAdmin{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, username, email, password_hash, is_primary,
        two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -528,7 +537,7 @@ return admin, nil
 
 // ListServerAdmins retrieves all server admins
 func (db *DB) ListServerAdmins() ([]*ServerAdmin, error) {
-rows, err := db.Query(`
+rows, err := db.QueryR(`
 SELECT id, username, email, password_hash, is_primary,
        two_factor_enabled, two_factor_secret,
        created_at, updated_at, last_login
@@ -561,7 +570,7 @@ return admins, rows.Err()
 
 // CreateSession creates a new session
 func (db *DB) CreateSession(session *Session) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 INSERT INTO sessions (id, user_id, user_type, username, role, expires_at, created_at)
 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `, session.ID, session.UserID, session.UserType, session.Username, session.Role, db.BindTime(session.ExpiresAt))
@@ -571,7 +580,7 @@ return err
 // GetSession retrieves a session by ID
 func (db *DB) GetSession(sessionID string) (*Session, error) {
 session := &Session{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT id, user_id, user_type, username, role, expires_at, created_at
 FROM sessions WHERE id = ?
 `, sessionID).Scan(
@@ -586,19 +595,19 @@ return session, nil
 
 // DeleteSession deletes a session
 func (db *DB) DeleteSession(sessionID string) error {
-_, err := db.Exec("DELETE FROM sessions WHERE id = ?", sessionID)
+_, err := db.ExecR("DELETE FROM sessions WHERE id = ?", sessionID)
 return err
 }
 
 // DeleteSessionsByUserID deletes all sessions for a user
 func (db *DB) DeleteSessionsByUserID(userID string) error {
-_, err := db.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+_, err := db.ExecR("DELETE FROM sessions WHERE user_id = ?", userID)
 return err
 }
 
 // CleanupExpiredSessions removes expired sessions
 func (db *DB) CleanupExpiredSessions() error {
-_, err := db.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
+_, err := db.ExecR("DELETE FROM sessions WHERE expires_at < datetime('now')")
 return err
 }
 
@@ -607,7 +616,7 @@ return err
 
 // CreateEmailVerificationToken creates a verification token
 func (db *DB) CreateEmailVerificationToken(token *EmailVerificationToken) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 INSERT INTO email_verification_tokens (token, user_id, expires_at, created_at)
 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 `, token.Token, token.UserID, db.BindTime(token.ExpiresAt))
@@ -617,7 +626,7 @@ return err
 // GetEmailVerificationToken retrieves a verification token
 func (db *DB) GetEmailVerificationToken(token string) (*EmailVerificationToken, error) {
 evt := &EmailVerificationToken{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT token, user_id, expires_at, created_at
 FROM email_verification_tokens WHERE token = ?
 `, token).Scan(&evt.Token, &evt.UserID, &evt.ExpiresAt, &evt.CreatedAt)
@@ -629,13 +638,13 @@ return evt, nil
 
 // DeleteEmailVerificationToken deletes a verification token
 func (db *DB) DeleteEmailVerificationToken(token string) error {
-_, err := db.Exec("DELETE FROM email_verification_tokens WHERE token = ?", token)
+_, err := db.ExecR("DELETE FROM email_verification_tokens WHERE token = ?", token)
 return err
 }
 
 // DeleteExpiredEmailVerificationTokens removes expired tokens
 func (db *DB) DeleteExpiredEmailVerificationTokens() error {
-_, err := db.Exec("DELETE FROM email_verification_tokens WHERE expires_at < datetime('now')")
+_, err := db.ExecR("DELETE FROM email_verification_tokens WHERE expires_at < datetime('now')")
 return err
 }
 
@@ -644,7 +653,7 @@ return err
 
 // CreatePasswordResetToken creates a password reset token
 func (db *DB) CreatePasswordResetToken(token *PasswordResetToken) error {
-_, err := db.Exec(`
+_, err := db.ExecR(`
 INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at)
 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 `, token.Token, token.UserID, db.BindTime(token.ExpiresAt))
@@ -654,7 +663,7 @@ return err
 // GetPasswordResetToken retrieves a password reset token
 func (db *DB) GetPasswordResetToken(token string) (*PasswordResetToken, error) {
 prt := &PasswordResetToken{}
-err := db.QueryRow(`
+err := db.QueryRowR(`
 SELECT token, user_id, expires_at, created_at
 FROM password_reset_tokens WHERE token = ?
 `, token).Scan(&prt.Token, &prt.UserID, &prt.ExpiresAt, &prt.CreatedAt)
@@ -666,12 +675,68 @@ return prt, nil
 
 // DeletePasswordResetToken deletes a password reset token
 func (db *DB) DeletePasswordResetToken(token string) error {
-_, err := db.Exec("DELETE FROM password_reset_tokens WHERE token = ?", token)
+_, err := db.ExecR("DELETE FROM password_reset_tokens WHERE token = ?", token)
 return err
 }
 
 // DeleteExpiredPasswordResetTokens removes expired tokens
 func (db *DB) DeleteExpiredPasswordResetTokens() error {
-_, err := db.Exec("DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')")
+_, err := db.ExecR("DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')")
+return err
+}
+
+// StoreBackupCodes deletes all existing backup codes for the user and inserts new ones
+func (db *DB) StoreBackupCodes(userID string, codeHashes []string) error {
+tx, err := db.Begin()
+if err != nil {
+return fmt.Errorf("failed to start transaction: %w", err)
+}
+defer tx.Rollback()
+
+if _, err = tx.Exec(db.Rebind("DELETE FROM two_factor_backup_codes WHERE user_id = ?"), userID); err != nil {
+return fmt.Errorf("failed to delete old backup codes: %w", err)
+}
+
+for _, hash := range codeHashes {
+id := generateUUID()
+if _, err = tx.Exec(
+db.Rebind("INSERT INTO two_factor_backup_codes (id, user_id, code_hash, created_at) VALUES (?, ?, ?, ?)"),
+id, userID, hash, db.BindTime(time.Now()),
+); err != nil {
+return fmt.Errorf("failed to insert backup code: %w", err)
+}
+}
+
+return tx.Commit()
+}
+
+// GetUnusedBackupCodes returns all unused backup codes for a user
+func (db *DB) GetUnusedBackupCodes(userID string) ([]BackupCode, error) {
+rows, err := db.QueryR("SELECT id, user_id, code_hash, used_at, created_at FROM two_factor_backup_codes WHERE user_id = ? AND used_at IS NULL", userID)
+if err != nil {
+return nil, fmt.Errorf("failed to query backup codes: %w", err)
+}
+defer rows.Close()
+
+var codes []BackupCode
+for rows.Next() {
+var bc BackupCode
+if err := rows.Scan(&bc.ID, &bc.UserID, &bc.CodeHash, &bc.UsedAt, &bc.CreatedAt); err != nil {
+return nil, fmt.Errorf("failed to scan backup code: %w", err)
+}
+codes = append(codes, bc)
+}
+return codes, rows.Err()
+}
+
+// MarkBackupCodeUsed marks a backup code as used
+func (db *DB) MarkBackupCodeUsed(id string) error {
+_, err := db.ExecR("UPDATE two_factor_backup_codes SET used_at = ? WHERE id = ?", db.BindTime(time.Now()), id)
+return err
+}
+
+// DeleteBackupCodes removes all backup codes for a user
+func (db *DB) DeleteBackupCodes(userID string) error {
+_, err := db.ExecR("DELETE FROM two_factor_backup_codes WHERE user_id = ?", userID)
 return err
 }

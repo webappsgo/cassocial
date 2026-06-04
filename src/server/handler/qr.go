@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/skip2/go-qrcode"
 )
@@ -94,7 +95,45 @@ func (h *QRHandler) generatePNG(w http.ResponseWriter, content string, size int)
 
 // generateSVG generates and serves an SVG QR code
 func (h *QRHandler) generateSVG(w http.ResponseWriter, content string, size int) {
-	http.Error(w, "SVG format not yet implemented", http.StatusNotImplemented)
+	qr, err := qrcode.New(content, qrcode.Medium)
+	if err != nil {
+		http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
+		return
+	}
+
+	bitmap := qr.Bitmap()
+	numModules := len(bitmap)
+	if numModules == 0 {
+		http.Error(w, "Failed to generate QR code bitmap", http.StatusInternalServerError)
+		return
+	}
+
+	moduleSize := size / numModules
+	if moduleSize < 1 {
+		moduleSize = 1
+	}
+	svgSize := moduleSize * numModules
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, `<?xml version="1.0" encoding="UTF-8"?>`)
+	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 %d %d" width="%d" height="%d">`,
+		svgSize, svgSize, svgSize, svgSize)
+	fmt.Fprintf(&sb, `<rect width="%d" height="%d" fill="white"/>`, svgSize, svgSize)
+
+	for y, row := range bitmap {
+		for x, module := range row {
+			if module {
+				fmt.Fprintf(&sb, `<rect x="%d" y="%d" width="%d" height="%d" fill="black"/>`,
+					x*moduleSize, y*moduleSize, moduleSize, moduleSize)
+			}
+		}
+	}
+
+	fmt.Fprintf(&sb, `</svg>`)
+
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	fmt.Fprint(w, sb.String())
 }
 
 // generateBase64 generates and returns a base64-encoded QR code

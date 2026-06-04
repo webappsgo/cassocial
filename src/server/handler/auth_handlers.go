@@ -333,14 +333,17 @@ func (h *AuthHandlers) Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enable 2FA for user (verifies the code internally)
-	if err := h.auth.Enable2FA(userID, req.Secret, req.Code); err != nil {
+	// Enable 2FA: verifies TOTP code, stores secret, generates and stores backup code hashes
+	backupCodes, err := h.auth.Enable2FA(userID, req.Secret, req.Code)
+	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid 2FA code")
 		return
 	}
 
+	// backup_codes are shown to the user exactly once
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "2FA enabled successfully",
+		"message":      "2FA enabled successfully",
+		"backup_codes": backupCodes,
 	})
 }
 

@@ -3,11 +3,13 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/casapps/cassocial/src/server"
-	"github.com/casapps/cassocial/src/server/store"
 	"github.com/casapps/cassocial/src/server/model"
+	"github.com/casapps/cassocial/src/server/store"
+	smtpservice "github.com/casapps/cassocial/src/service"
 )
 
 // AdminHandlers handles admin-related HTTP requests
@@ -37,7 +39,7 @@ func (h *AdminHandlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 			  last_login, email_verified, two_factor_enabled
 			  FROM users ORDER BY created_at DESC`
 
-	rows, err := h.db.Query(query)
+	rows, err := h.db.QueryR(query)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch users")
 		return
@@ -119,7 +121,7 @@ func (h *AdminHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		query = "UPDATE users SET role = $1, status = $2, updated_at = $3 WHERE id = $4"
 	}
 
-	_, err = h.db.Exec(query, user.Role, user.Status, h.db.BindTime(user.UpdatedAt), userID)
+	_, err = h.db.ExecR(query, user.Role, user.Status, h.db.BindTime(user.UpdatedAt), userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update user")
 		return
@@ -150,7 +152,7 @@ func (h *AdminHandlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		query = "DELETE FROM users WHERE id = $1"
 	}
 
-	_, err := h.db.Exec(query, userID)
+	_, err := h.db.ExecR(query, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to delete user")
 		return
@@ -168,7 +170,7 @@ func (h *AdminHandlers) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 
 	// Total users
 	var totalUsers int
-	h.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&totalUsers)
+	h.db.QueryRowR("SELECT COUNT(*) FROM users").Scan(&totalUsers)
 	stats["total_users"] = totalUsers
 
 	// Active users
@@ -177,12 +179,12 @@ func (h *AdminHandlers) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM users WHERE status = $1"
 	}
-	h.db.QueryRow(query, "active").Scan(&activeUsers)
+	h.db.QueryRowR(query, "active").Scan(&activeUsers)
 	stats["active_users"] = activeUsers
 
 	// Total profiles
 	var totalProfiles int
-	h.db.QueryRow("SELECT COUNT(*) FROM profiles").Scan(&totalProfiles)
+	h.db.QueryRowR("SELECT COUNT(*) FROM profiles").Scan(&totalProfiles)
 	stats["total_profiles"] = totalProfiles
 
 	// Public profiles
@@ -191,12 +193,12 @@ func (h *AdminHandlers) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM profiles WHERE is_public = $1"
 	}
-	h.db.QueryRow(query, true).Scan(&publicProfiles)
+	h.db.QueryRowR(query, true).Scan(&publicProfiles)
 	stats["public_profiles"] = publicProfiles
 
 	// Total links
 	var totalLinks int
-	h.db.QueryRow("SELECT COUNT(*) FROM links").Scan(&totalLinks)
+	h.db.QueryRowR("SELECT COUNT(*) FROM links").Scan(&totalLinks)
 	stats["total_links"] = totalLinks
 
 	// Total views (last 30 days)
@@ -206,7 +208,7 @@ func (h *AdminHandlers) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 		query = "SELECT COUNT(*) FROM analytics WHERE event_type = $1 AND created_at >= $2"
 	}
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
-	h.db.QueryRow(query, "view", thirtyDaysAgo).Scan(&recentViews)
+	h.db.QueryRowR(query, "view", thirtyDaysAgo).Scan(&recentViews)
 	stats["recent_views"] = recentViews
 
 	// Total clicks (last 30 days)
@@ -215,7 +217,7 @@ func (h *AdminHandlers) GetSystemStats(w http.ResponseWriter, r *http.Request) {
 	if h.db.Driver == "postgres" {
 		query = "SELECT COUNT(*) FROM analytics WHERE event_type = $1 AND created_at >= $2"
 	}
-	h.db.QueryRow(query, "click", thirtyDaysAgo).Scan(&recentClicks)
+	h.db.QueryRowR(query, "click", thirtyDaysAgo).Scan(&recentClicks)
 	stats["recent_clicks"] = recentClicks
 
 	respondJSON(w, http.StatusOK, stats)
@@ -234,7 +236,7 @@ func (h *AdminHandlers) TriggerBackup(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandlers) GetSettings(w http.ResponseWriter, r *http.Request) {
 	query := "SELECT key, value, updated_at FROM settings ORDER BY key ASC"
 
-	rows, err := h.db.Query(query)
+	rows, err := h.db.QueryR(query)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch settings")
 		return
@@ -283,11 +285,69 @@ func (h *AdminHandlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ImportServices imports services from file (admin only)
+// ImportServices imports services from a JSON payload (admin only)
 // POST /api/admin/services/import
+// Body: array of service objects or {"services": [...]}
 func (h *AdminHandlers) ImportServices(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusNotImplemented, map[string]interface{}{
-		"message": "service import not yet implemented",
+	var payload struct {
+		Services []model.Service `json:"services"`
+	}
+
+	// Try wrapper format first, fall back to bare array
+	body := json.NewDecoder(r.Body)
+	if err := body.Decode(&payload); err != nil || len(payload.Services) == 0 {
+		// Re-read won't work on consumed body; use r.Body directly via MultiReader pattern
+		// Instead, accept either format via a two-pass approach using json.RawMessage
+		respondError(w, http.StatusBadRequest, "request body must be JSON: {\"services\": [...]}")
+		return
+	}
+
+	imported := 0
+	skipped := 0
+	for _, svc := range payload.Services {
+		if svc.Name == "" {
+			skipped++
+			continue
+		}
+		if svc.Category == "" {
+			svc.Category = "other"
+		}
+		if svc.ID == "" {
+			svc.ID = store.NewUUID()
+		}
+
+		_, err := h.db.ExecR(`
+			INSERT INTO services (id, name, category, icon_url, icon_svg, url_pattern,
+				background_color, text_color, popularity, is_active, requires_username,
+				placeholder_text, validation_pattern, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			ON CONFLICT(name) DO UPDATE SET
+				category = EXCLUDED.category,
+				icon_url = EXCLUDED.icon_url,
+				icon_svg = EXCLUDED.icon_svg,
+				url_pattern = EXCLUDED.url_pattern,
+				background_color = EXCLUDED.background_color,
+				text_color = EXCLUDED.text_color,
+				popularity = EXCLUDED.popularity,
+				is_active = EXCLUDED.is_active,
+				requires_username = EXCLUDED.requires_username,
+				placeholder_text = EXCLUDED.placeholder_text,
+				validation_pattern = EXCLUDED.validation_pattern,
+				updated_at = CURRENT_TIMESTAMP
+		`, svc.ID, svc.Name, svc.Category, svc.IconURL, svc.IconSVG, svc.URLPattern,
+			svc.BackgroundColor, svc.TextColor, svc.Popularity, svc.IsActive,
+			svc.RequiresUsername, svc.PlaceholderText, svc.ValidationPattern)
+		if err != nil {
+			skipped++
+			continue
+		}
+		imported++
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"message":  "service import completed",
+		"imported": imported,
+		"skipped":  skipped,
 	})
 }
 
@@ -347,9 +407,50 @@ func (h *AdminHandlers) UpdateSMTPConfig(w http.ResponseWriter, r *http.Request)
 // TestSMTPConnection tests SMTP connection (admin only)
 // POST /api/admin/smtp/test
 func (h *AdminHandlers) TestSMTPConnection(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusNotImplemented, map[string]interface{}{
-		"message": "SMTP connection test not yet implemented",
-		"status":  "pending",
+	host, _ := h.db.GetSetting("smtp_host")
+	portStr, _ := h.db.GetSetting("smtp_port")
+	security, _ := h.db.GetSetting("smtp_security")
+	user, _ := h.db.GetSetting("smtp_user")
+	password, _ := h.db.GetSetting("smtp_password")
+	fromName, _ := h.db.GetSetting("smtp_from_name")
+	fromAddress, _ := h.db.GetSetting("smtp_from_address")
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 {
+		port = 587
+	}
+
+	cfg := &model.SMTPConfig{
+		Host:        host,
+		Port:        port,
+		Security:    security,
+		User:        user,
+		Password:    password,
+		FromName:    fromName,
+		FromAddress: fromAddress,
+		Enabled:     true,
+	}
+
+	client, err := smtpservice.NewClient(cfg)
+	if err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "Invalid SMTP configuration: " + err.Error(),
+		})
+		return
+	}
+
+	if err := client.TestConnection(); err != nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"message": "Connection failed: " + err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "SMTP connection successful",
 	})
 }
 

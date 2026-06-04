@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// torOnionWaitInterval is the sleep duration between hostname file poll attempts.
+// It defaults to 1 second but can be overridden in tests for fast execution.
+var torOnionWaitInterval = time.Second
+
+// torStopTimeout is the duration Stop() waits before force-killing the process.
+// It defaults to 10 seconds but can be overridden in tests for fast execution.
+var torStopTimeout = 10 * time.Second
+
 // TorService manages Tor hidden service
 type TorService struct {
 	dataDir    string
@@ -99,7 +107,7 @@ func (t *TorService) Stop() error {
 	select {
 	case <-done:
 		log.Println("Tor stopped")
-	case <-time.After(10 * time.Second):
+	case <-time.After(torStopTimeout):
 		log.Println("Tor shutdown timeout, force killing")
 		t.cmd.Process.Kill()
 	}
@@ -136,14 +144,14 @@ Log notice file %s
 func (t *TorService) waitForOnionAddress() error {
 	hostnameFile := filepath.Join(t.torDataDir, "hidden_service", "hostname")
 
-	// Wait up to 60 seconds
+	// Poll up to 60 times using torOnionWaitInterval between attempts.
 	for i := 0; i < 60; i++ {
 		if data, err := os.ReadFile(hostnameFile); err == nil {
 			t.onionAddr = string(data)
 			t.onionAddr = filepath.Base(t.onionAddr) // Trim whitespace
 			return nil
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(torOnionWaitInterval)
 	}
 
 	return fmt.Errorf("timeout waiting for .onion address")
