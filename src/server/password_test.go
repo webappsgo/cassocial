@@ -1,7 +1,6 @@
 package server
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -265,12 +264,17 @@ func TestCheckPasswordStrength_MaxScore(t *testing.T) {
 
 func TestForcePasswordChange(t *testing.T) {
 	a := newTestAuth(t)
-	err := a.ForcePasswordChange("any-user-id")
-	if err == nil {
-		t.Error("ForcePasswordChange should return error (not implemented)")
+	user := registerTestUser(t, a, "forcepass", "forcepass@example.com", "ValidPass1")
+	if err := a.ForcePasswordChange(user.ID); err != nil {
+		t.Errorf("ForcePasswordChange returned unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Errorf("error = %q, want 'not implemented' message", err.Error())
+}
+
+func TestForcePasswordChange_UnknownUser(t *testing.T) {
+	a := newTestAuth(t)
+	// Updating a non-existent user should succeed (0 rows affected, not an error).
+	if err := a.ForcePasswordChange("nonexistent-id"); err != nil {
+		t.Errorf("ForcePasswordChange on unknown user returned unexpected error: %v", err)
 	}
 }
 

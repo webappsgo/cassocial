@@ -35,9 +35,9 @@ func TestNewI18N_NoDir(t *testing.T) {
 	if i == nil {
 		t.Fatal("NewI18N returned nil")
 	}
-	// No i18n dir -> not enabled
-	if i.enabled {
-		t.Error("i18n should not be enabled when no i18n dir exists")
+	// Embedded locale files are always loaded, so i18n is always enabled.
+	if !i.enabled {
+		t.Error("i18n should be enabled (embedded locales are always loaded)")
 	}
 }
 
@@ -52,11 +52,12 @@ func TestNewI18N_WithTranslations(t *testing.T) {
 	}
 }
 
-func TestTranslate_Disabled(t *testing.T) {
+func TestTranslate_DisabledKey(t *testing.T) {
+	// Embedded locales are always loaded; look for a key that does not exist in any locale.
 	i := NewI18N(t.TempDir(), "en")
-	result := i.Translate("hello", "en")
-	if result != "hello" {
-		t.Errorf("Translate (disabled) = %q, want key %q", result, "hello")
+	result := i.Translate("nonexistent.key.xyz", "en")
+	if result != "nonexistent.key.xyz" {
+		t.Errorf("Translate (missing key) = %q, want key itself", result)
 	}
 }
 
@@ -180,8 +181,10 @@ func TestGetAvailableLanguages(t *testing.T) {
 	i := NewI18N(configDir, "en")
 
 	langs := i.GetAvailableLanguages()
-	if len(langs) != 3 {
-		t.Errorf("GetAvailableLanguages = %v, want 3 entries", langs)
+	// Embedded locales (ar, de, en, es, fr, ja, zh) are always loaded.
+	// Runtime locales may override embedded ones; total is at least 7.
+	if len(langs) < 7 {
+		t.Errorf("GetAvailableLanguages = %v, want at least 7 entries (all embedded locales)", langs)
 	}
 }
 
@@ -274,14 +277,15 @@ func TestLoadTranslations_ReadDirError(t *testing.T) {
 	if err := os.WriteFile(i18nFile, []byte("not a dir"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	// NewI18N should not panic; loadTranslations returns the error, which NewI18N logs and ignores.
+	// NewI18N should not panic; loadTranslations logs the error and continues.
+	// Embedded locales are still loaded, so enabled = true.
 	i := NewI18N(base, "en")
 	if i == nil {
 		t.Fatal("NewI18N returned nil")
 	}
-	// Should not be enabled (ReadDir failed, no translations loaded).
-	if i.enabled {
-		t.Error("i18n should not be enabled when ReadDir fails")
+	// Embedded locales are always loaded regardless of runtime errors.
+	if !i.enabled {
+		t.Error("i18n should be enabled (embedded locales loaded even when runtime ReadDir fails)")
 	}
 }
 

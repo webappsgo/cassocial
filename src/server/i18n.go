@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	commonI18n "github.com/casapps/cassocial/src/common/i18n"
 )
 
 // I18N provides internationalization support
@@ -16,7 +18,8 @@ type I18N struct {
 	enabled     bool
 }
 
-// NewI18N creates a new I18N instance
+// NewI18N creates a new I18N instance.
+// Embedded locale files are always loaded first; runtime files in configDir/i18n/ override them.
 func NewI18N(configDir string, defaultLang string) *I18N {
 	i18n := &I18N{
 		defaultLang: defaultLang,
@@ -24,22 +27,61 @@ func NewI18N(configDir string, defaultLang string) *I18N {
 		enabled:     false,
 	}
 
-	// Load translations
-	if err := i18n.loadTranslations(configDir); err != nil {
-		// Log but don't fail - app works without translations
-		fmt.Printf("Failed to load translations: %v\n", err)
+	// Load embedded defaults first
+	if err := i18n.loadEmbedded(); err != nil {
+		fmt.Printf("Failed to load embedded translations: %v\n", err)
+	}
+
+	// Load runtime overrides (configDir/i18n/*.json) — these replace embedded entries
+	if configDir != "" {
+		if err := i18n.loadTranslations(configDir); err != nil {
+			fmt.Printf("Failed to load translations: %v\n", err)
+		}
 	}
 
 	return i18n
 }
 
-// loadTranslations loads translation files
+// loadEmbedded loads translations from the bundled locale files.
+func (i *I18N) loadEmbedded() error {
+	entries, err := commonI18n.Locales.ReadDir("locales")
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		lang := strings.TrimSuffix(entry.Name(), ".json")
+
+		data, err := commonI18n.Locales.ReadFile("locales/" + entry.Name())
+		if err != nil {
+			fmt.Printf("Failed to read embedded translation %s: %v\n", entry.Name(), err)
+			continue
+		}
+
+		translations := make(map[string]string)
+		if err := json.Unmarshal(data, &translations); err != nil {
+			fmt.Printf("Failed to parse embedded translation %s: %v\n", entry.Name(), err)
+			continue
+		}
+
+		i.languages[lang] = translations
+		i.enabled = true
+	}
+
+	return nil
+}
+
+// loadTranslations loads translation files from configDir/i18n/, overriding embedded defaults.
 func (i *I18N) loadTranslations(configDir string) error {
 	i18nDir := filepath.Join(configDir, "i18n")
 
 	// Check if i18n directory exists
 	if _, err := os.Stat(i18nDir); os.IsNotExist(err) {
-		return nil // No translations configured
+		return nil
 	}
 
 	// Read translation files
@@ -78,25 +120,28 @@ func (i *I18N) loadTranslations(configDir string) error {
 	return nil
 }
 
-// Translate translates a key to the specified language
+// Translate translates a key to the specified language.
+// If the key is missing from the requested language it falls back to the default language.
+// If the key is still not found the key itself is returned.
 func (i *I18N) Translate(key, lang string) string {
 	if !i.enabled {
 		return key
 	}
 
-	// Get translations for language
-	translations, exists := i.languages[lang]
-	if !exists {
-		// Fallback to default language
-		translations, exists = i.languages[i.defaultLang]
-		if !exists {
-			return key
+	// Try the requested language first
+	if translations, exists := i.languages[lang]; exists {
+		if translated, ok := translations[key]; ok {
+			return translated
 		}
 	}
 
-	// Get translation
-	if translated, exists := translations[key]; exists {
-		return translated
+	// Fall back to the default language
+	if lang != i.defaultLang {
+		if translations, exists := i.languages[i.defaultLang]; exists {
+			if translated, ok := translations[key]; ok {
+				return translated
+			}
+		}
 	}
 
 	return key
@@ -150,10 +195,10 @@ func (i *I18N) GetAvailableLanguages() []string {
 // IsRTL checks if a language is right-to-left
 func (i *I18N) IsRTL(lang string) bool {
 	rtlLanguages := map[string]bool{
-		"ar": true, // Arabic
-		"he": true, // Hebrew
-		"fa": true, // Persian
-		"ur": true, // Urdu
+		"ar": true,
+		"he": true,
+		"fa": true,
+		"ur": true,
 	}
 
 	return rtlLanguages[lang]

@@ -383,10 +383,15 @@ func (a *Auth) CheckPasswordStrength(password string) map[string]interface{} {
 	return strength
 }
 
-// ForcePasswordChange marks a user as requiring a password change on next login
-// This would require an additional field in the database
+// ForcePasswordChange marks a user as requiring a password change on next login.
+// The user will be required to change their password the next time they authenticate.
 func (a *Auth) ForcePasswordChange(userID string) error {
-	// This is a placeholder for future implementation
-	// Would require adding a force_password_change column to users table
-	return fmt.Errorf("force password change not implemented - requires database column")
+	var query string
+	if a.db.Driver == "postgres" {
+		query = `UPDATE users SET force_password_change = true, updated_at = $2 WHERE id = $1`
+	} else {
+		query = `UPDATE users SET force_password_change = 1, updated_at = ? WHERE id = ?`
+	}
+	_, err := a.db.ExecR(query, userID, a.db.BindTime(time.Now()))
+	return err
 }
