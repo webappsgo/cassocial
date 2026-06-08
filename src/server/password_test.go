@@ -380,9 +380,9 @@ func TestVerifyEmail_Expired(t *testing.T) {
 		t.Fatalf("GenerateEmailVerificationToken: %v / %q", err, tok)
 	}
 
-	// Manually expire the token
+	// Manually expire the token in the email_verification_tokens table.
 	_, err = a.db.Exec(
-		`UPDATE users SET password_reset_expires = ? WHERE id = ?`,
+		`UPDATE email_verification_tokens SET expires_at = ? WHERE user_id = ?`,
 		"2000-01-01T00:00:00Z", user.ID,
 	)
 	if err != nil {

@@ -97,11 +97,54 @@ func TestGetTLSConfig_LetsEncrypt(t *testing.T) {
 		LetsEncrypt: true,
 		Domain:      "example.com",
 		Email:       "admin@example.com",
+		DataDir:     t.TempDir(),
+	})
+	tlsCfg, err := m.GetTLSConfig()
+	if err != nil {
+		t.Fatalf("GetTLSConfig(letsencrypt) error = %v, want nil", err)
+	}
+	if tlsCfg == nil {
+		t.Error("GetTLSConfig(letsencrypt) should return non-nil TLS config")
+	}
+}
+
+func TestGetTLSConfig_LetsEncrypt_NoDomain(t *testing.T) {
+	m := NewManager(&Config{
+		Enabled:     true,
+		LetsEncrypt: true,
+		Domain:      "",
+		DataDir:     t.TempDir(),
 	})
 	_, err := m.GetTLSConfig()
-	// Let's Encrypt is not implemented — expect an error
 	if err == nil {
-		t.Error("GetTLSConfig(letsencrypt) should return error (not implemented)")
+		t.Error("GetTLSConfig(letsencrypt, no domain) should return error")
+	}
+}
+
+func TestNewACMEManager_NotConfigured(t *testing.T) {
+	m := NewManager(&Config{LetsEncrypt: false})
+	if mgr := m.NewACMEManager(); mgr != nil {
+		t.Error("NewACMEManager should return nil when LetsEncrypt=false")
+	}
+}
+
+func TestNewACMEManager_NoDomain(t *testing.T) {
+	m := NewManager(&Config{LetsEncrypt: true, Domain: ""})
+	if mgr := m.NewACMEManager(); mgr != nil {
+		t.Error("NewACMEManager should return nil when domain is empty")
+	}
+}
+
+func TestNewACMEManager_Configured(t *testing.T) {
+	m := NewManager(&Config{
+		LetsEncrypt: true,
+		Domain:      "example.com",
+		Email:       "admin@example.com",
+		DataDir:     t.TempDir(),
+	})
+	mgr := m.NewACMEManager()
+	if mgr == nil {
+		t.Fatal("NewACMEManager should return a non-nil manager when configured")
 	}
 }
 

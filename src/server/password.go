@@ -179,58 +179,52 @@ func (a *Auth) ChangePassword(userID, currentPassword, newPassword string) error
 	return nil
 }
 
-// GenerateEmailVerificationToken generates an email verification token for a user
+// GenerateEmailVerificationToken generates an email verification token for a user.
+// The token is stored in the email_verification_tokens table (not the password_reset_token
+// column) to prevent collision with concurrent password-reset flows.
 func (a *Auth) GenerateEmailVerificationToken(userID string) (string, error) {
-	// Get user to verify they exist
-	_, err := a.GetUserByID(userID)
-	if err != nil {
+	// Verify the user exists before issuing a token.
+	if _, err := a.GetUserByID(userID); err != nil {
 		return "", err
 	}
 
-	// Generate verification token
 	token := generateRandomString(32)
-
-	// In production, you would store this token in a separate table with expiry
-	// For now, we'll use the password_reset_token field as a placeholder
-	// A proper implementation would have a separate email_verification_tokens table
-
+	tokenHash := HashToken(token)
 	expiry := time.Now().Add(EmailVerificationTokenExpiry)
 
-	query := `UPDATE users
-			  SET password_reset_token = ?, password_reset_expires = ?, updated_at = ?
-			  WHERE id = ?`
-
+	// Delete any existing verification tokens for this user before inserting a new one.
+	delQuery := `DELETE FROM email_verification_tokens WHERE user_id = ?`
 	if a.db.Driver == "postgres" {
-		query = `UPDATE users
-				 SET password_reset_token = $1, password_reset_expires = $2, updated_at = $3
-				 WHERE id = $4`
+		delQuery = `DELETE FROM email_verification_tokens WHERE user_id = $1`
+	}
+	if _, err := a.db.ExecR(delQuery, userID); err != nil {
+		return "", fmt.Errorf("failed to clear old verification tokens: %w", err)
 	}
 
-	_, err = a.db.ExecR(query, "EMAIL_"+token, a.db.BindTime(expiry), a.db.BindTime(time.Now()), userID)
-	if err != nil {
+	insQuery := `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`
+	if a.db.Driver == "postgres" {
+		insQuery = `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`
+	}
+	if _, err := a.db.ExecR(insQuery, userID, tokenHash, a.db.BindTime(expiry)); err != nil {
 		return "", fmt.Errorf("failed to store verification token: %w", err)
 	}
 
 	return token, nil
 }
 
-// VerifyEmail verifies a user's email using a verification token
+// VerifyEmail verifies a user's email address using a verification token.
 func (a *Auth) VerifyEmail(token string) error {
+	tokenHash := HashToken(token)
+
 	var userID string
 	var expires sql.NullTime
 
-	// Prefix token to distinguish from password reset tokens
-	token = "EMAIL_" + token
-
-	query := `SELECT id, password_reset_expires
-			  FROM users
-			  WHERE password_reset_token = ?`
-
+	selQuery := `SELECT user_id, expires_at FROM email_verification_tokens WHERE token_hash = ?`
 	if a.db.Driver == "postgres" {
-		query = strings.Replace(query, "?", "$1", 1)
+		selQuery = `SELECT user_id, expires_at FROM email_verification_tokens WHERE token_hash = $1`
 	}
 
-	err := a.db.QueryRowR(query, token).Scan(&userID, &expires)
+	err := a.db.QueryRowR(selQuery, tokenHash).Scan(&userID, &expires)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return ErrInvalidVerificationToken
@@ -238,25 +232,26 @@ func (a *Auth) VerifyEmail(token string) error {
 		return fmt.Errorf("failed to validate token: %w", err)
 	}
 
-	// Check if token has expired
 	if !expires.Valid || time.Now().After(expires.Time) {
 		return ErrInvalidVerificationToken
 	}
 
-	// Mark email as verified and clear token
-	updateQuery := `UPDATE users
-					SET email_verified = ?, password_reset_token = NULL, password_reset_expires = NULL, updated_at = ?
-					WHERE id = ?`
-
+	// Mark email as verified.
+	updateQuery := `UPDATE users SET email_verified = ?, updated_at = ? WHERE id = ?`
 	if a.db.Driver == "postgres" {
-		updateQuery = `UPDATE users
-					   SET email_verified = $1, password_reset_token = NULL, password_reset_expires = NULL, updated_at = $2
-					   WHERE id = $3`
+		updateQuery = `UPDATE users SET email_verified = $1, updated_at = $2 WHERE id = $3`
+	}
+	if _, err := a.db.ExecR(updateQuery, true, a.db.BindTime(time.Now()), userID); err != nil {
+		return fmt.Errorf("failed to verify email: %w", err)
 	}
 
-	_, err = a.db.ExecR(updateQuery, true, a.db.BindTime(time.Now()), userID)
-	if err != nil {
-		return fmt.Errorf("failed to verify email: %w", err)
+	// Delete the consumed token.
+	delQuery := `DELETE FROM email_verification_tokens WHERE token_hash = ?`
+	if a.db.Driver == "postgres" {
+		delQuery = `DELETE FROM email_verification_tokens WHERE token_hash = $1`
+	}
+	if _, err := a.db.ExecR(delQuery, tokenHash); err != nil {
+		return fmt.Errorf("failed to remove verification token: %w", err)
 	}
 
 	return nil
@@ -386,12 +381,10 @@ func (a *Auth) CheckPasswordStrength(password string) map[string]interface{} {
 // ForcePasswordChange marks a user as requiring a password change on next login.
 // The user will be required to change their password the next time they authenticate.
 func (a *Auth) ForcePasswordChange(userID string) error {
-	var query string
+	query := `UPDATE users SET force_password_change = ?, updated_at = ? WHERE id = ?`
 	if a.db.Driver == "postgres" {
-		query = `UPDATE users SET force_password_change = true, updated_at = $2 WHERE id = $1`
-	} else {
-		query = `UPDATE users SET force_password_change = 1, updated_at = ? WHERE id = ?`
+		query = `UPDATE users SET force_password_change = $1, updated_at = $2 WHERE id = $3`
 	}
-	_, err := a.db.ExecR(query, userID, a.db.BindTime(time.Now()))
+	_, err := a.db.ExecR(query, true, a.db.BindTime(time.Now()), userID)
 	return err
 }

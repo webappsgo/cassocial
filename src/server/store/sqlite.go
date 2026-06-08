@@ -614,31 +614,32 @@ return err
 // Email verification operations
 // Per PART 23: Email verification flow
 
-// CreateEmailVerificationToken creates a verification token
+// CreateEmailVerificationToken creates a verification token.
+// token.TokenHash must be the SHA-256 hex digest of the raw token — never the raw token itself.
 func (db *DB) CreateEmailVerificationToken(token *EmailVerificationToken) error {
 _, err := db.ExecR(`
-INSERT INTO email_verification_tokens (token, user_id, expires_at, created_at)
-VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-`, token.Token, token.UserID, db.BindTime(token.ExpiresAt))
+INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+VALUES (?, ?, ?)
+`, token.UserID, token.TokenHash, db.BindTime(token.ExpiresAt))
 return err
 }
 
-// GetEmailVerificationToken retrieves a verification token
-func (db *DB) GetEmailVerificationToken(token string) (*EmailVerificationToken, error) {
+// GetEmailVerificationToken retrieves a verification token by its SHA-256 hash.
+func (db *DB) GetEmailVerificationToken(tokenHash string) (*EmailVerificationToken, error) {
 evt := &EmailVerificationToken{}
 err := db.QueryRowR(`
-SELECT token, user_id, expires_at, created_at
-FROM email_verification_tokens WHERE token = ?
-`, token).Scan(&evt.Token, &evt.UserID, &evt.ExpiresAt, &evt.CreatedAt)
+SELECT id, token_hash, user_id, expires_at, created_at
+FROM email_verification_tokens WHERE token_hash = ?
+`, tokenHash).Scan(&evt.ID, &evt.TokenHash, &evt.UserID, &evt.ExpiresAt, &evt.CreatedAt)
 if err != nil {
 return nil, err
 }
 return evt, nil
 }
 
-// DeleteEmailVerificationToken deletes a verification token
-func (db *DB) DeleteEmailVerificationToken(token string) error {
-_, err := db.ExecR("DELETE FROM email_verification_tokens WHERE token = ?", token)
+// DeleteEmailVerificationToken deletes a verification token by its SHA-256 hash.
+func (db *DB) DeleteEmailVerificationToken(tokenHash string) error {
+_, err := db.ExecR("DELETE FROM email_verification_tokens WHERE token_hash = ?", tokenHash)
 return err
 }
 

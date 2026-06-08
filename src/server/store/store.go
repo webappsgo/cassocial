@@ -319,8 +319,10 @@ type Session struct {
 
 // EmailVerificationToken represents an email verification token
 // Per PART 23: Email verification flow
+// TokenHash is the SHA-256 hex digest of the raw token — never the raw token itself.
 type EmailVerificationToken struct {
-	Token     string
+	ID        string
+	TokenHash string
 	UserID    string
 	ExpiresAt time.Time
 	CreatedAt time.Time

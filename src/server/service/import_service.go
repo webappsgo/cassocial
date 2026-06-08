@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casapps/cassocial/src/server/store"
 	"github.com/casapps/cassocial/src/server/model"
+	"github.com/casapps/cassocial/src/server/store"
 )
 
 var (
@@ -241,41 +241,83 @@ func (s *ImportService) importFromLinkstack(userID string, data []byte) (map[str
 	}, nil
 }
 
+// importFromCarrd parses a Carrd JSON export and creates a profile with links.
+// The expected JSON format is:
+//
+//	{"title": "...", "bio": "...", "links": ["https://...", "https://..."]}
+//
+// Links are plain URL strings; invalid or non-HTTP(S) URLs are skipped.
 func (s *ImportService) importFromCarrd(userID string, data []byte) (map[string]interface{}, error) {
-	// Parse Carrd HTML export (simplified - actual implementation would parse HTML)
-	// This is a placeholder implementation
 	var carrdData struct {
 		Title string   `json:"title"`
 		Bio   string   `json:"bio"`
 		Links []string `json:"links"`
 	}
-
 	if err := json.Unmarshal(data, &carrdData); err != nil {
 		return nil, fmt.Errorf("failed to parse Carrd data: %w", err)
 	}
 
-	// Create profile
-	slug := strings.ToLower(strings.ReplaceAll(carrdData.Title, " ", "-"))
+	title := strings.TrimSpace(carrdData.Title)
+	if title == "" {
+		title = "Carrd Import"
+	}
+	bio := strings.TrimSpace(carrdData.Bio)
+
+	type carrdLink struct {
+		URL  string
+		Text string
+	}
+	seen := make(map[string]bool)
+	var links []carrdLink
+	for _, rawURL := range carrdData.Links {
+		href := strings.TrimSpace(rawURL)
+		// Skip non-HTTP(S) and duplicate URLs.
+		if !strings.HasPrefix(href, "http://") && !strings.HasPrefix(href, "https://") {
+			continue
+		}
+		if seen[href] {
+			continue
+		}
+		seen[href] = true
+		links = append(links, carrdLink{URL: href})
+	}
+
+	// Derive a slug from the title.
+	slug := strings.ToLower(strings.ReplaceAll(title, " ", "-"))
+	// Strip characters that are invalid in slugs.
+	var slugBuf strings.Builder
+	for _, r := range slug {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			slugBuf.WriteRune(r)
+		}
+	}
+	slug = strings.Trim(slugBuf.String(), "-")
+	if slug == "" {
+		slug = "carrd-import"
+	}
+
 	profile := &model.Profile{
 		Slug:        slug,
-		DisplayName: carrdData.Title,
-		Bio:         carrdData.Bio,
+		DisplayName: title,
+		Bio:         bio,
 	}
 
 	if err := s.profileService.Create(userID, profile); err != nil {
 		return nil, fmt.Errorf("failed to create profile: %w", err)
 	}
 
-	// Import links
 	imported := 0
-	for i, url := range carrdData.Links {
+	for i, lnk := range links {
+		linkTitle := lnk.Text
+		if linkTitle == "" {
+			linkTitle = fmt.Sprintf("Link %d", i+1)
+		}
 		link := &model.Link{
 			ProfileID: profile.ID,
-			Title:     fmt.Sprintf("Link %d", i+1),
-			URL:       url,
+			Title:     linkTitle,
+			URL:       lnk.URL,
 			Position:  i + 1,
 		}
-
 		if err := s.linkService.Create(link); err != nil {
 			continue
 		}
@@ -283,9 +325,9 @@ func (s *ImportService) importFromCarrd(userID string, data []byte) (map[string]
 	}
 
 	return map[string]interface{}{
-		"profile_id":    profile.ID,
+		"profile_id":     profile.ID,
 		"links_imported": imported,
-		"total_links":   len(carrdData.Links),
+		"total_links":    len(links),
 	}, nil
 }
 

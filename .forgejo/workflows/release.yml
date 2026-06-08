@@ -1,0 +1,212 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build All Platforms
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            ext: ""
+          - os: linux
+            arch: arm64
+            ext: ""
+          - os: darwin
+            arch: amd64
+            ext: ""
+          - os: darwin
+            arch: arm64
+            ext: ""
+          - os: windows
+            arch: amd64
+            ext: ".exe"
+          - os: windows
+            arch: arm64
+            ext: ".exe"
+          - os: freebsd
+            arch: amd64
+            ext: ""
+          - os: freebsd
+            arch: arm64
+            ext: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Set up Go
+        uses: actions/setup-go@78961f6f84d799cd858575bb931c3e51d3b13290
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -f release.txt ]; then
+            VERSION=$(cat release.txt | tr -d '[:space:]')
+          elif [ -n "${{ github.ref_name }}" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="0.0.0-$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "yymm=$(date -u +%y%m)" >> "$GITHUB_OUTPUT"
+
+      - name: Build server binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -buildvcs=false \
+            -ldflags "-s -w \
+              -X 'main.Version=${{ steps.version.outputs.version }}' \
+              -X 'main.CommitID=${{ steps.version.outputs.commit }}' \
+              -X 'main.BuildDate=${{ steps.version.outputs.build_date }}' \
+              -X 'main.OfficialSite=https://casjay.link'" \
+            -o binaries/cassocial-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./src
+
+      - name: Build client binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -buildvcs=false \
+            -ldflags "-s -w \
+              -X 'main.Version=${{ steps.version.outputs.version }}' \
+              -X 'main.CommitID=${{ steps.version.outputs.commit }}' \
+              -X 'main.BuildDate=${{ steps.version.outputs.build_date }}' \
+              -X 'main.OfficialSite=https://casjay.link'" \
+            -o binaries/cassocial-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./src/client
+
+      - name: Generate checksums
+        run: |
+          cd binaries
+          sha256sum cassocial-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} \
+            > cassocial-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
+          sha256sum cassocial-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} \
+            > cassocial-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cassocial-${{ matrix.os }}-${{ matrix.arch }}
+          path: binaries/
+          retention-days: 7
+
+  docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -f release.txt ]; then
+            VERSION=$(cat release.txt | tr -d '[:space:]')
+          elif [ -n "${{ github.ref_name }}" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="0.0.0-$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "yymm=$(date -u +%y%m)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@22b48a429f10e1de233237b5c534c9c3d2e41597
+
+      - name: Log in to Forgejo Container Registry
+        uses: docker/login-action@0267638d8ae53966df71bb06d552129dd542dfa7
+        with:
+          registry: ${{ env.FORGEJO_SERVER_URL }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.FORGEJO_TOKEN }}
+
+      - name: Build and push Docker image
+        id: docker-build
+        uses: docker/build-push-action@7b93b2b85cab035420f0625ccc86452575bab2be
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/casapps/cassocial:${{ steps.version.outputs.version }}
+            ghcr.io/casapps/cassocial:latest
+            ghcr.io/casapps/cassocial:${{ steps.version.outputs.yymm }}
+            ghcr.io/casapps/cassocial:${{ github.sha }}
+
+      - name: Trivy image scan
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image \
+              --exit-code 1 \
+              --severity HIGH,CRITICAL \
+              --no-progress \
+              ghcr.io/casapps/cassocial:${{ github.sha }}
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, docker]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -f release.txt ]; then
+            VERSION=$(cat release.txt | tr -d '[:space:]')
+          elif [ -n "${{ github.ref_name }}" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="0.0.0-$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: all-binaries
+          path: binaries/
+
+      - name: Create release
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token ${FORGEJO_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${FORGEJO_SERVER_URL}/api/v1/repos/${{ github.repository }}/releases" \
+            -d "{\"tag_name\": \"${{ github.ref_name }}\", \"name\": \"cassocial ${{ steps.version.outputs.version }}\"}" \
+            2>/dev/null || true

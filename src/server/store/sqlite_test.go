@@ -1,7 +1,9 @@
 package store
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -10,6 +12,13 @@ import (
 	"testing"
 	"time"
 )
+
+// hashToken returns the SHA-256 hex digest of a raw token string.
+// Mirrors server.HashToken without creating an import cycle.
+func hashToken(raw string) string {
+	h := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(h[:])
+}
 
 // newTestDB opens an in-memory SQLite database and runs migrations.
 func newTestDB(t *testing.T) *DB {
@@ -305,8 +314,9 @@ func createMissingTables(t *testing.T, db *DB) {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS email_verification_tokens (
-			token TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL,
+			id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			token_hash TEXT NOT NULL UNIQUE,
 			expires_at TIMESTAMP NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -967,8 +977,9 @@ func TestCleanupExpiredSessions(t *testing.T) {
 func TestCreateAndGetEmailVerificationToken(t *testing.T) {
 	db := newFullTestDB(t)
 
+	rawToken := "verify-token-abc123"
 	tok := &EmailVerificationToken{
-		Token:     "verify-token-abc123",
+		TokenHash: hashToken(rawToken),
 		UserID:    "user-ev-001",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
@@ -976,7 +987,7 @@ func TestCreateAndGetEmailVerificationToken(t *testing.T) {
 		t.Fatalf("CreateEmailVerificationToken: %v", err)
 	}
 
-	got, err := db.GetEmailVerificationToken(tok.Token)
+	got, err := db.GetEmailVerificationToken(tok.TokenHash)
 	if err != nil {
 		t.Fatalf("GetEmailVerificationToken: %v", err)
 	}
@@ -987,7 +998,7 @@ func TestCreateAndGetEmailVerificationToken(t *testing.T) {
 
 func TestGetEmailVerificationToken_NotFound(t *testing.T) {
 	db := newFullTestDB(t)
-	_, err := db.GetEmailVerificationToken("no-such-token-xyz")
+	_, err := db.GetEmailVerificationToken(hashToken("no-such-token-xyz"))
 	if err == nil {
 		t.Error("GetEmailVerificationToken(nonexistent) returned nil error")
 	}
@@ -996,18 +1007,19 @@ func TestGetEmailVerificationToken_NotFound(t *testing.T) {
 func TestDeleteEmailVerificationToken(t *testing.T) {
 	db := newFullTestDB(t)
 
+	rawToken := "delete-me-token-001"
 	tok := &EmailVerificationToken{
-		Token:     "delete-me-token-001",
+		TokenHash: hashToken(rawToken),
 		UserID:    "user-ev-del",
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := db.CreateEmailVerificationToken(tok); err != nil {
 		t.Fatalf("CreateEmailVerificationToken: %v", err)
 	}
-	if err := db.DeleteEmailVerificationToken(tok.Token); err != nil {
+	if err := db.DeleteEmailVerificationToken(tok.TokenHash); err != nil {
 		t.Fatalf("DeleteEmailVerificationToken: %v", err)
 	}
-	_, err := db.GetEmailVerificationToken(tok.Token)
+	_, err := db.GetEmailVerificationToken(tok.TokenHash)
 	if err == nil {
 		t.Error("token still present after DeleteEmailVerificationToken")
 	}
@@ -1017,7 +1029,7 @@ func TestDeleteExpiredEmailVerificationTokens(t *testing.T) {
 	db := newFullTestDB(t)
 
 	expired := &EmailVerificationToken{
-		Token:     "expired-ev-token",
+		TokenHash: hashToken("expired-ev-token"),
 		UserID:    "user-ev-exp",
 		ExpiresAt: time.Now().Add(-time.Hour),
 	}
@@ -1026,7 +1038,7 @@ func TestDeleteExpiredEmailVerificationTokens(t *testing.T) {
 	}
 
 	valid := &EmailVerificationToken{
-		Token:     "valid-ev-token",
+		TokenHash: hashToken("valid-ev-token"),
 		UserID:    "user-ev-val",
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
@@ -1038,11 +1050,11 @@ func TestDeleteExpiredEmailVerificationTokens(t *testing.T) {
 		t.Fatalf("DeleteExpiredEmailVerificationTokens: %v", err)
 	}
 
-	_, err := db.GetEmailVerificationToken(expired.Token)
+	_, err := db.GetEmailVerificationToken(expired.TokenHash)
 	if err == nil {
 		t.Error("expired token still present after DeleteExpiredEmailVerificationTokens")
 	}
-	_, err = db.GetEmailVerificationToken(valid.Token)
+	_, err = db.GetEmailVerificationToken(valid.TokenHash)
 	if err != nil {
 		t.Errorf("valid token removed by DeleteExpiredEmailVerificationTokens: %v", err)
 	}

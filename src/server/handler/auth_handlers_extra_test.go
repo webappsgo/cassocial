@@ -7,6 +7,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,12 @@ import (
 	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
 )
+
+// hashTestToken returns the SHA-256 hex of a raw token string for test injection.
+func hashTestToken(raw string) string {
+	h := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(h[:])
+}
 
 // ---- RefreshToken ----
 
@@ -716,15 +724,20 @@ func TestVerifyEmail_Success(t *testing.T) {
 		t.Fatalf("Register returned %d; body: %s", rr.Code, rr.Body.String())
 	}
 
-	// Inject a verification token directly into the DB.
-	// VerifyEmail prefixes the lookup token with "EMAIL_", so store "EMAIL_" + token.
+	// Inject a verification token directly into the email_verification_tokens table.
+	// Store the SHA-256 hash — never the raw token.
 	rawToken := "testverifytoken123"
-	stored := "EMAIL_" + rawToken
+	tokenHash := hashTestToken(rawToken)
 	expiry := "2099-01-01 00:00:00"
+
+	// Retrieve the user ID to link the token.
+	var userID string
+	if err := h.db.QueryRow(`SELECT id FROM users WHERE username = 'verifyemailuser'`).Scan(&userID); err != nil {
+		t.Fatalf("get user id: %v", err)
+	}
 	if _, err := h.db.Exec(
-		`UPDATE users SET password_reset_token = ?, password_reset_expires = ?, email_verified = 0
-		 WHERE username = 'verifyemailuser'`,
-		stored, expiry,
+		`INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
+		userID, tokenHash, expiry,
 	); err != nil {
 		t.Fatalf("inject verification token: %v", err)
 	}

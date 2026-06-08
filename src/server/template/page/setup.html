@@ -8,15 +8,7 @@
   <link rel="stylesheet" href="/static/css/main.css">
   <link rel="stylesheet" href="/static/css/themes.css">
   <link rel="icon" href="/static/images/logo.svg" type="image/svg+xml">
-  <script>
-    (function() {
-      var saved = localStorage.getItem('cassocial-theme');
-      if (saved) { document.documentElement.setAttribute('data-theme', saved); }
-      else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-        document.documentElement.setAttribute('data-theme', 'light');
-      }
-    })();
-  </script>
+  <script src="/static/js/theme-init.js"></script>
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>

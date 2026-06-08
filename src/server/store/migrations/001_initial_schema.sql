@@ -375,11 +375,11 @@ CREATE TABLE IF NOT EXISTS profile_maintenance (
 );
 
 CREATE TABLE IF NOT EXISTS email_verification_tokens (
-    token TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (

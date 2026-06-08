@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // Config represents SSL/TLS configuration
@@ -77,10 +79,52 @@ func (m *Manager) getManualCertConfig() (*tls.Config, error) {
 	}, nil
 }
 
-// getLetsEncryptConfig sets up Let's Encrypt automatic certificates
+// getLetsEncryptConfig sets up Let's Encrypt automatic certificates via ACME autocert.
+// Certificates are cached in {DataDir}/ssl/letsencrypt/ and renewed automatically
+// 30 days before expiry. The ACME HTTP-01 challenge handler must be mounted at
+// "/.well-known/acme-challenge/" on port 80 by the caller (use m.ACMEHandler()).
 func (m *Manager) getLetsEncryptConfig() (*tls.Config, error) {
-	log.Println("Let's Encrypt support not yet implemented")
-	return nil, fmt.Errorf("Let's Encrypt support coming soon")
+	if m.config.Domain == "" {
+		return nil, fmt.Errorf("Let's Encrypt requires a domain name")
+	}
+
+	cacheDir := filepath.Join(m.config.DataDir, "ssl", "letsencrypt")
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create ACME cache directory: %w", err)
+	}
+
+	mgr := &autocert.Manager{
+		Cache:      autocert.DirCache(cacheDir),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(m.config.Domain),
+	}
+	if m.config.Email != "" {
+		mgr.Email = m.config.Email
+	}
+
+	log.Printf("Let's Encrypt enabled for domain %q; cache: %s", m.config.Domain, cacheDir)
+
+	return mgr.TLSConfig(), nil
+}
+
+// NewACMEManager returns a configured *autocert.Manager for use when the caller
+// needs to mount the HTTP-01 challenge handler on port 80. Call mgr.HTTPHandler(nil)
+// to get the http.Handler and mount it at "/.well-known/acme-challenge/".
+// Returns nil when Let's Encrypt is not configured.
+func (m *Manager) NewACMEManager() *autocert.Manager {
+	if !m.config.LetsEncrypt || m.config.Domain == "" {
+		return nil
+	}
+	cacheDir := filepath.Join(m.config.DataDir, "ssl", "letsencrypt")
+	mgr := &autocert.Manager{
+		Cache:      autocert.DirCache(cacheDir),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(m.config.Domain),
+	}
+	if m.config.Email != "" {
+		mgr.Email = m.config.Email
+	}
+	return mgr
 }
 
 // CheckCertificateExpiry checks if certificates are expiring soon

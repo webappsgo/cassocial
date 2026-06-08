@@ -113,7 +113,8 @@ func (h *UserHandler) HandleVerifyEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	record, err := h.db.GetEmailVerificationToken(token)
+	tokenHash := server.HashToken(token)
+	record, err := h.db.GetEmailVerificationToken(tokenHash)
 	if err != nil {
 		h.renderError(w, http.StatusBadRequest, "Invalid or expired verification token")
 		return
@@ -131,7 +132,7 @@ func (h *UserHandler) HandleVerifyEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.db.DeleteEmailVerificationToken(token)
+	h.db.DeleteEmailVerificationToken(tokenHash)
 
 	h.renderJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
@@ -304,10 +305,9 @@ func (h *UserHandler) generateVerificationToken(email string) (string, error) {
 	}
 
 	record := &store.EmailVerificationToken{
-		Token:     token,
+		TokenHash: server.HashToken(token),
 		UserID:    user.ID,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
-		CreatedAt: time.Now(),
 	}
 
 	if err := h.db.CreateEmailVerificationToken(record); err != nil {
