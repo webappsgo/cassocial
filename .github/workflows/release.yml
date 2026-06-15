@@ -106,12 +106,12 @@ jobs:
             > cassocial-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
 
       - name: Attest server binary
-        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275
+        uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf
         with:
           subject-path: binaries/cassocial-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
       - name: Attest client binary
-        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275
+        uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf
         with:
           subject-path: binaries/cassocial-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
@@ -149,10 +149,10 @@ jobs:
           echo "yymm=$(date -u +%y%m)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@22b48a429f10e1de233237b5c534c9c3d2e41597
+        uses: docker/setup-buildx-action@c887d9748da14dcb42b11cf8bcc773b301ea55b5
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@0267638d8ae53966df71bb06d552129dd542dfa7
+        uses: docker/login-action@3864d6aed8ff134b2ed894ce00c87695c709c870
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -160,7 +160,7 @@ jobs:
 
       - name: Build and push Docker image
         id: docker-build
-        uses: docker/build-push-action@7b93b2b85cab035420f0625ccc86452575bab2be
+        uses: docker/build-push-action@ff26911fd365b0233252dfbd8eede1c0e9ef9a51
         with:
           context: .
           file: docker/Dockerfile
@@ -173,7 +173,7 @@ jobs:
             ghcr.io/casapps/cassocial:${{ github.sha }}
 
       - name: Attest Docker image
-        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275
+        uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf
         with:
           subject-name: ghcr.io/casapps/cassocial
           subject-digest: ${{ steps.docker-build.outputs.digest }}
