@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Weekly security-only run — Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ forgejo.workflow }}-${{ forgejo.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    if: forgejo.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: go vet ./src/...
+      - run: staticcheck ./src/...
+
+  test:
+    if: forgejo.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Run tests with coverage
+        run: |
+          mkdir -p "/tmp/${{ forgejo.repository_owner }}"
+          COVDIR=$(mktemp -d "/tmp/${{ forgejo.repository_owner }}/$(basename "${{ forgejo.repository }}")-XXXXXX")
+          echo "COVDIR=$COVDIR" >> "$FORGEJO_ENV"
+          go test -cover -coverprofile="$COVDIR/coverage.out" ./src/...
+      - name: Enforce coverage threshold
+        run: |
+          THRESHOLD=60
+          PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          if [ "$PCT" -lt "$THRESHOLD" ]; then
+            echo "::error::coverage $PCT% < threshold $THRESHOLD%"
+            exit 1
+          fi
+
+  build:
+    if: forgejo.event_name != 'schedule'
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: go build ./src/...
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # push event: use before/after — never default_branch (resolves to HEAD post-push)
+      - name: Secret scan (push)
+        if: forgejo.event_name == 'push'
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.96.0
+        with:
+          base: ${{ forgejo.event.before }}
+          head: ${{ forgejo.event.after }}
+          extra_args: --only-verified
+
+      - name: Secret scan (pull_request)
+        if: forgejo.event_name == 'pull_request'
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.96.0
+        with:
+          base: ${{ forgejo.event.pull_request.base.sha }}
+          head: ${{ forgejo.event.pull_request.head.sha }}
+          extra_args: --only-verified
+
+      # Weekly schedule: no before/after available — scan full history
+      - name: Secret scan (scheduled)
+        if: forgejo.event_name == 'schedule'
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11  # v3.96.0
+        with:
+          extra_args: --only-verified
+
+  workflow-policy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Verify action pinning and forbidden triggers
+        run: |
+          fail=0
+          for f in .forgejo/workflows/*.yml; do
+            while IFS= read -r line; do
+              ref="${line##*@}"
+              ref="${ref%% *}"
+              if ! printf '%s' "$ref" | grep -qE '^[0-9a-f]{40}$'; then
+                echo "::error file=$f::action not pinned to a 40-char commit SHA: $line"
+                fail=1
+              fi
+            done < <(grep -E '^\s*-?\s*uses:\s*[A-Za-z0-9_.-]+/' "$f" || true)
+            if grep -q 'pull_request_target' "$f"; then
+              echo "::error file=$f::pull_request_target is forbidden"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+  vuln-scan:
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: govulncheck ./src/...

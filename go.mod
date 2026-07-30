@@ -20,10 +20,7 @@ require (
 	modernc.org/sqlite v1.34.5 // SQLite (pure Go) - REQUIRED instead of mattn/go-sqlite3
 )
 
-require (
-	github.com/robfig/cron/v3 v3.0.1
-	golang.org/x/sys v0.35.0
-)
+require golang.org/x/sys v0.35.0
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect

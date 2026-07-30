@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"strings"
 
 	"github.com/casapps/cassocial/src/server/store"
 	"github.com/casapps/cassocial/src/server/model"
@@ -161,55 +162,109 @@ func (s *QRService) generatePNG(url string, settings *model.QRCodeSettings, erro
 }
 
 func (s *QRService) generateSVG(url string, settings *model.QRCodeSettings) ([]byte, error) {
-	// Get error correction level
 	errorCorrection := s.mapErrorCorrection(settings.ErrorCorrection)
 
-	// Create QR code
 	qr, err := qrcode.New(url, errorCorrection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create QR code: %w", err)
 	}
 
-	// Parse colors
+	// The module matrix is rendered directly as SVG vector rectangles so the
+	// output is a scalable, scannable QR code with no raster or external deps.
+	bitmap := qr.Bitmap()
+	modules := len(bitmap)
+	if modules == 0 {
+		return nil, ErrQRGeneration
+	}
+
+	size := settings.Size
+	if size <= 0 {
+		size = 256
+	}
+	moduleSize := float64(size) / float64(modules)
+
+	dark := settings.DarkColor
+	if _, err := s.parseColor(dark); err != nil {
+		dark = "#000000"
+	}
+	light := settings.LightColor
+	if _, err := s.parseColor(light); err != nil {
+		light = "#ffffff"
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="%d" height="%d" viewBox="0 0 %d %d" shape-rendering="crispEdges">
+`, size, size, size, size)
+	fmt.Fprintf(&b, "\t<rect width=\"%d\" height=\"%d\" fill=\"%s\"/>\n", size, size, light)
+	fmt.Fprintf(&b, "\t<g fill=\"%s\">\n", dark)
+	for row := 0; row < modules; row++ {
+		for col := 0; col < len(bitmap[row]); col++ {
+			if !bitmap[row][col] {
+				continue
+			}
+			x := float64(col) * moduleSize
+			y := float64(row) * moduleSize
+			fmt.Fprintf(&b, "\t\t<rect x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\"/>\n", x, y, moduleSize, moduleSize)
+		}
+	}
+	b.WriteString("\t</g>\n</svg>\n")
+
+	return []byte(b.String()), nil
+}
+
+func (s *QRService) generatePDF(url string, settings *model.QRCodeSettings) ([]byte, error) {
+	// Build the QR module matrix, then render it as PDF vector rectangles.
+	// This keeps the output pure Go and CGO-free (no raster/PDF C libraries).
+	errorCorrection := s.mapErrorCorrection(settings.ErrorCorrection)
+	qr, err := qrcode.New(url, errorCorrection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create QR code: %w", err)
+	}
+
+	bitmap := qr.Bitmap()
+	modules := len(bitmap)
+	if modules == 0 {
+		return nil, ErrQRGeneration
+	}
+
+	size := float64(settings.Size)
+	if size <= 0 {
+		size = 256
+	}
+	moduleSize := size / float64(modules)
+
 	darkColor, err := s.parseColor(settings.DarkColor)
 	if err != nil {
 		darkColor = color.Black
 	}
-
 	lightColor, err := s.parseColor(settings.LightColor)
 	if err != nil {
 		lightColor = color.White
 	}
 
-	qr.ForegroundColor = darkColor
-	qr.BackgroundColor = lightColor
+	doc := newPDFDoc(size, size)
 
-	// Generate SVG string
-	// Note: go-qrcode doesn't natively support SVG
-	// This is a simplified implementation - in production, use a proper SVG QR library
-	svg := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="%d" height="%d" viewBox="0 0 %d %d">
-	<rect width="%d" height="%d" fill="%s"/>
-	<!-- QR code content would be rendered here -->
-</svg>`, settings.Size, settings.Size, settings.Size, settings.Size, settings.Size, settings.Size, settings.LightColor)
+	// Background
+	lr, lg, lb := colorToUnit(lightColor)
+	doc.setFillColor(lr, lg, lb)
+	doc.fillRect(0, 0, size, size)
 
-	return []byte(svg), nil
-}
-
-func (s *QRService) generatePDF(url string, settings *model.QRCodeSettings) ([]byte, error) {
-	// Generate PNG first
-	errorCorrection := s.mapErrorCorrection(settings.ErrorCorrection)
-	pngData, err := s.generatePNG(url, settings, errorCorrection)
-	if err != nil {
-		return nil, err
+	// Dark modules. PDF's origin is bottom-left, so the top row is drawn last.
+	dr, dg, db := colorToUnit(darkColor)
+	doc.setFillColor(dr, dg, db)
+	for row := 0; row < modules; row++ {
+		for col := 0; col < len(bitmap[row]); col++ {
+			if !bitmap[row][col] {
+				continue
+			}
+			x := float64(col) * moduleSize
+			y := size - float64(row+1)*moduleSize
+			doc.fillRect(x, y, moduleSize, moduleSize)
+		}
 	}
 
-	// In production, convert PNG to PDF using a library like gofpdf
-	// For now, return a placeholder
-	_ = pngData
-
-	pdf := []byte("%PDF-1.4\n%placeholder for QR code PDF\n")
-	return pdf, nil
+	return doc.render(), nil
 }
 
 func (s *QRService) embedLogo(baseImg, logoImg image.Image, logoSize int) image.Image {

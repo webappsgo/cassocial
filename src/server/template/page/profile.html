@@ -14,8 +14,7 @@
        alt="{{.Profile.DisplayName}} avatar"
        class="profile-avatar">
   {{else}}
-  <div class="profile-avatar"
-       style="background-color: var(--accent-primary); display:flex; align-items:center; justify-content:center; font-size:3rem; color:#fff;"
+  <div class="profile-avatar profile-avatar-placeholder"
        aria-hidden="true">
     {{if .Profile.DisplayName}}{{slice .Profile.DisplayName 0 1}}{{else}}?{{end}}
   </div>

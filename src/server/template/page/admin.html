@@ -3,7 +3,7 @@
 {{define "content"}}
 <div class="admin-page-header">
   <h1>Admin Dashboard</h1>
-  <p style="color: var(--text-secondary);">System overview for {{.SiteName}}</p>
+  <p class="text-secondary">System overview for {{.SiteName}}</p>
 </div>
 
 {{if .FlashSuccess}}
@@ -76,7 +76,7 @@
     </table>
   </div>
   {{else}}
-  <p class="mt-2" style="color: var(--text-secondary);">No users yet.</p>
+  <p class="mt-2 text-secondary">No users yet.</p>
   {{end}}
 </section>
 

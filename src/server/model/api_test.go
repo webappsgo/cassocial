@@ -116,24 +116,45 @@ func TestAPIWebhook_UpdateLastTriggered(t *testing.T) {
 }
 
 func TestAPIKey_HasScope(t *testing.T) {
-	ak := &APIKey{}
-	// HasScope always returns true in current implementation
-	if !ak.HasScope("read") {
-		t.Error("HasScope() should return true")
+	ak := &APIKey{Scopes: "profile:read, link:write"}
+	if !ak.HasScope("profile:read") {
+		t.Error("HasScope() should return true for a granted scope")
 	}
-	if !ak.HasScope("write") {
-		t.Error("HasScope() should return true for any scope")
+	if !ak.HasScope("link:write") {
+		t.Error("HasScope() should return true for a granted scope (whitespace-trimmed)")
+	}
+	if ak.HasScope("user:write") {
+		t.Error("HasScope() should return false for a scope that was not granted")
+	}
+
+	empty := &APIKey{}
+	if empty.HasScope("profile:read") {
+		t.Error("HasScope() should return false when no scopes are granted")
+	}
+
+	wildcard := &APIKey{Scopes: "*"}
+	if !wildcard.HasScope("anything") {
+		t.Error("HasScope() should return true for any scope when wildcard is granted")
 	}
 }
 
 func TestAPIWebhook_HasEvent(t *testing.T) {
-	wh := &APIWebhook{}
-	// HasEvent always returns true in current implementation
-	if !wh.HasEvent("user.created") {
-		t.Error("HasEvent() should return true")
-	}
+	wh := &APIWebhook{Events: "profile.updated,link.clicked"}
 	if !wh.HasEvent("profile.updated") {
-		t.Error("HasEvent() should return true for any event")
+		t.Error("HasEvent() should return true for a subscribed event")
+	}
+	if wh.HasEvent("user.created") {
+		t.Error("HasEvent() should return false for an event that was not subscribed")
+	}
+
+	empty := &APIWebhook{}
+	if empty.HasEvent("profile.updated") {
+		t.Error("HasEvent() should return false when no events are subscribed")
+	}
+
+	wildcard := &APIWebhook{Events: "*"}
+	if !wildcard.HasEvent("anything") {
+		t.Error("HasEvent() should return true for any event when wildcard is subscribed")
 	}
 }
 

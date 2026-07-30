@@ -512,6 +512,13 @@ input[type="radio"] {
   outline-offset: 2px;
 }
 
+/* Per-link custom colors. The declarations live here; only the data-driven
+   --link-bg / --link-fg values are supplied per link via a style attribute. */
+.profile-link-custom {
+  background-color: var(--link-bg);
+  color: var(--link-fg);
+}
+
 .profile-link-icon {
   width: 32px;
   height: 32px;
@@ -583,6 +590,33 @@ input[type="radio"] {
 .card-footer {
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+/* Centered single-column auth/setup cards (login, register, setup wizard) */
+.card-login {
+  max-width: 440px;
+  margin: 3rem auto;
+}
+
+.card-register {
+  max-width: 480px;
+  margin: 3rem auto;
+}
+
+.card-setup {
+  max-width: 560px;
+  margin: 4rem auto;
+}
+
+/* Fallback avatar shown when a profile has no AvatarURL (composes with
+   .profile-avatar sizing/shape rules defined in themes.css) */
+.profile-avatar-placeholder {
+  background-color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  color: #fff;
 }
 
 /* ============================================================================
@@ -762,6 +796,7 @@ tr:hover {
 .text-center { text-align: center; }
 .text-left { text-align: left; }
 .text-right { text-align: right; }
+.text-secondary { color: var(--text-secondary); }
 
 .mt-0 { margin-top: 0; }
 .mt-1 { margin-top: 0.5rem; }

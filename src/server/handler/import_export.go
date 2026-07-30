@@ -1,13 +1,14 @@
 package handler
 
 import (
-	"encoding/csv"
 	"encoding/json"
-	"io"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/casapps/cassocial/src/config"
 	"github.com/casapps/cassocial/src/server"
+	"github.com/casapps/cassocial/src/server/service"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -84,29 +85,63 @@ func (h *ImportExportHandler) HandleImport(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// HandleExport handles exporting profile data
+// HandleExport handles exporting profile data. It delegates to ExportService,
+// which enforces profile ownership and produces real data for every supported
+// format (json, csv, html, pdf, vcard).
 func (h *ImportExportHandler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	profileID := r.URL.Query().Get("profile_id")
-	format := r.URL.Query().Get("format") // json, csv, html, pdf, vcard
+	format := r.URL.Query().Get("format")
 
 	if profileID == "" {
 		h.renderError(w, http.StatusBadRequest, "Profile ID required")
 		return
 	}
 
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	exportService := service.NewExportService(
+		h.db,
+		service.NewProfileService(h.db),
+		service.NewLinkService(h.db),
+	)
+
+	data, filename, err := exportService.ExportProfile(profileID, userID, format)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrProfileAccessDenied):
+			h.renderError(w, http.StatusForbidden, "You do not have access to this profile")
+		case errors.Is(err, service.ErrUnsupportedExportFormat):
+			h.renderError(w, http.StatusBadRequest, "Invalid format. Use json, csv, html, pdf, or vcard")
+		default:
+			h.renderError(w, http.StatusInternalServerError, "Failed to export profile")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", exportContentType(format))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Write(data)
+}
+
+// exportContentType maps an export format to its response MIME type.
+func exportContentType(format string) string {
 	switch format {
 	case "json":
-		h.exportJSON(w, profileID)
+		return "application/json"
 	case "csv":
-		h.exportCSV(w, profileID)
+		return "text/csv"
 	case "html":
-		h.exportHTML(w, profileID)
+		return "text/html; charset=utf-8"
 	case "pdf":
-		h.exportPDF(w, profileID)
+		return "application/pdf"
 	case "vcard":
-		h.exportVCard(w, profileID)
+		return "text/vcard"
 	default:
-		h.renderError(w, http.StatusBadRequest, "Invalid format. Use json, csv, html, pdf, or vcard")
+		return "application/octet-stream"
 	}
 }
 
@@ -161,75 +196,6 @@ func (h *ImportExportHandler) importFromJSON(userID string, data json.RawMessage
 	}
 
 	return len(importData.Links), nil
-}
-
-// Export implementations
-
-func (h *ImportExportHandler) exportJSON(w http.ResponseWriter, profileID string) {
-	data := map[string]interface{}{
-		"profile": map[string]interface{}{
-			"id":          profileID,
-			"title":       "Profile Title",
-			"description": "Description",
-		},
-		"links": []interface{}{},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", "attachment; filename=profile.json")
-	json.NewEncoder(w).Encode(data)
-}
-
-func (h *ImportExportHandler) exportCSV(w http.ResponseWriter, profileID string) {
-	_ = profileID
-
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", "attachment; filename=profile.csv")
-
-	writer := csv.NewWriter(w)
-	defer writer.Flush()
-
-	writer.Write([]string{"Service", "Title", "URL", "Enabled"})
-}
-
-func (h *ImportExportHandler) exportHTML(w http.ResponseWriter, profileID string) {
-	_ = profileID
-
-	html := `<!DOCTYPE html>
-<html>
-<head>
-    <title>Profile Export</title>
-    <meta charset="UTF-8">
-</head>
-<body>
-    <h1>Profile</h1>
-    <div class="links">
-        <!-- Links here -->
-    </div>
-</body>
-</html>`
-
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Content-Disposition", "attachment; filename=profile.html")
-	io.WriteString(w, html)
-}
-
-func (h *ImportExportHandler) exportPDF(w http.ResponseWriter, profileID string) {
-	http.Error(w, "PDF export not yet implemented", http.StatusNotImplemented)
-}
-
-func (h *ImportExportHandler) exportVCard(w http.ResponseWriter, profileID string) {
-	_ = profileID
-
-	vcard := `BEGIN:VCARD
-VERSION:3.0
-FN:Profile Name
-URL:https://example.com/profile
-END:VCARD`
-
-	w.Header().Set("Content-Type", "text/vcard")
-	w.Header().Set("Content-Disposition", "attachment; filename=profile.vcf")
-	io.WriteString(w, vcard)
 }
 
 // generateGraphiQLHTML generates a self-contained GraphQL playground without CDN dependencies

@@ -234,26 +234,46 @@ func (s *ExportService) exportToHTML(profile *model.Profile, links []*model.Link
 	return []byte(html.String()), filename, nil
 }
 
-// ExportToPDF exports profile to PDF format
+// ExportToPDF exports profile to a real, valid PDF document (pure Go, no deps).
 func (s *ExportService) exportToPDF(profile *model.Profile, links []*model.Link) ([]byte, string, error) {
-	// In production, use a library like gofpdf to generate actual PDF
-	// This is a placeholder implementation
+	// US Letter page (612 x 792 points).
+	const (
+		pageWidth  = 612.0
+		pageHeight = 792.0
+		leftMargin = 56.0
+		bottom     = 56.0
+	)
 
-	var pdf strings.Builder
-	pdf.WriteString("%PDF-1.4\n")
-	pdf.WriteString("%Profile Export\n")
-	pdf.WriteString(fmt.Sprintf("Profile: %s\n", profile.DisplayName))
-	pdf.WriteString(fmt.Sprintf("Bio: %s\n\n", profile.Bio))
-	pdf.WriteString("Links:\n")
+	doc := newPDFDoc(pageWidth, pageHeight)
+	doc.setFillColor(0, 0, 0)
+
+	y := pageHeight - 56.0
+	doc.text(leftMargin, y, 20, profile.DisplayName)
+	y -= 28
+
+	if profile.Bio != "" {
+		doc.text(leftMargin, y, 11, profile.Bio)
+		y -= 22
+	}
+
+	y -= 8
+	doc.text(leftMargin, y, 14, "Links")
+	y -= 22
 
 	for _, link := range links {
-		if link.IsActive {
-			pdf.WriteString(fmt.Sprintf("- %s: %s\n", link.Title, link.URL))
+		if !link.IsActive {
+			continue
 		}
+		if y < bottom {
+			// Single-page export; stop once the page is full.
+			break
+		}
+		doc.text(leftMargin, y, 11, fmt.Sprintf("%s: %s", link.Title, link.URL))
+		y -= 16
 	}
 
 	filename := fmt.Sprintf("%s.pdf", profile.Slug)
-	return []byte(pdf.String()), filename, nil
+	return doc.render(), filename, nil
 }
 
 // ExportToVCard exports profile to vCard format (VCF)

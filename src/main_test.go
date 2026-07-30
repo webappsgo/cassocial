@@ -55,7 +55,7 @@ func TestPrintHelp(t *testing.T) {
 	}
 }
 
-func TestApplyColorPreference_Never(t *testing.T) {
+func TestApplyColorPreference_No(t *testing.T) {
 	// Clear any existing NO_COLOR before test.
 	old := os.Getenv("NO_COLOR")
 	os.Unsetenv("NO_COLOR")
@@ -67,16 +67,16 @@ func TestApplyColorPreference_Never(t *testing.T) {
 		}
 	})
 
-	applyColorPreference("never")
+	applyColorPreference("no")
 	if os.Getenv("NO_COLOR") == "" {
-		t.Error("applyColorPreference('never') did not set NO_COLOR")
+		t.Error("applyColorPreference('no') did not set NO_COLOR")
 	}
 }
 
-func TestApplyColorPreference_Always(t *testing.T) {
-	// Clear any existing NO_COLOR before test.
+func TestApplyColorPreference_Yes(t *testing.T) {
+	// --color=yes has highest precedence and must clear NO_COLOR even when preset.
 	old := os.Getenv("NO_COLOR")
-	os.Unsetenv("NO_COLOR")
+	os.Setenv("NO_COLOR", "1")
 	t.Cleanup(func() {
 		if old != "" {
 			os.Setenv("NO_COLOR", old)
@@ -85,10 +85,10 @@ func TestApplyColorPreference_Always(t *testing.T) {
 		}
 	})
 
-	applyColorPreference("always")
-	// "always" must NOT set NO_COLOR.
+	applyColorPreference("yes")
+	// "yes" must NOT leave NO_COLOR set.
 	if os.Getenv("NO_COLOR") != "" {
-		t.Error("applyColorPreference('always') unexpectedly set NO_COLOR")
+		t.Error("applyColorPreference('yes') did not clear NO_COLOR")
 	}
 }
 

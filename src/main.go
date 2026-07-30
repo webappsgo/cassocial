@@ -39,7 +39,7 @@ func run(args []string) int {
 		showVersionS = fs.Bool("v", false, "Show version information")
 
 		// Output control flags (PART 8 — NON-NEGOTIABLE)
-		colorMode = fs.String("color", "auto", "Color output mode (always|never|auto)")
+		colorMode = fs.String("color", "auto", "Color output mode (auto|yes|no)")
 		lang      = fs.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
 
 		// Directory flags
@@ -214,7 +214,7 @@ func printHelp() {
 	fmt.Println("Options:")
 	fmt.Println("  -h, --help                          Show this help message")
 	fmt.Println("  -v, --version                       Show version information")
-	fmt.Println("  --color {always|never|auto}         Color output (default: auto; respects NO_COLOR)")
+	fmt.Println("  --color {auto|yes|no}               Color output (default: auto; respects NO_COLOR)")
 	fmt.Println("  --lang CODE                         Language code (default: auto from LANG env)")
 	fmt.Println("  --mode {production|development}     Set application mode")
 	fmt.Println("  --config {dir}                   Configuration directory")
@@ -243,11 +243,20 @@ func printHelp() {
 
 // handleStatus is implemented in cli_ops.go
 
-// applyColorPreference applies NO_COLOR and --color preference.
-// When NO_COLOR is set (any non-empty value) or --color=never, color output is disabled.
+// applyColorPreference applies the --color flag and NO_COLOR preference.
+// Precedence (PART 8): the CLI flag wins over NO_COLOR.
+//   --color=no  -> color disabled
+//   --color=yes -> color forced on (overrides NO_COLOR)
+//   --color=auto (or unset) -> honor NO_COLOR when it is set to a non-empty value
 func applyColorPreference(mode string) {
-	if os.Getenv("NO_COLOR") != "" || mode == "never" {
-		// Color disabled — future colored output checks this package-level flag
+	switch mode {
+	case "no":
+		// Color disabled — downstream output checks NO_COLOR
 		os.Setenv("NO_COLOR", "1")
+	case "yes":
+		// CLI flag has highest precedence; force color on even if NO_COLOR was set
+		os.Unsetenv("NO_COLOR")
+	default:
+		// auto — respect NO_COLOR as-is; nothing to change
 	}
 }

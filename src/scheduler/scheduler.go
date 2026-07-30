@@ -5,82 +5,140 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/robfig/cron/v3"
 )
 
-// Scheduler manages background tasks and cron jobs
+// Scheduler manages background tasks using the built-in cron implementation.
+// It requires no external scheduler (PART 19).
 type Scheduler struct {
-	cron   *cron.Cron
 	tasks  map[string]*Task
 	mu     sync.RWMutex
 	logger *log.Logger
+
+	stop    chan struct{}
+	wg      sync.WaitGroup
+	running bool
 }
 
 // Task represents a scheduled task
 type Task struct {
-	Name        string
-	Schedule    string // Cron expression
-	Handler     func() error
-	LastRun     time.Time
-	NextRun     time.Time
-	RunCount    int
-	ErrorCount  int
-	LastError   string
-	Enabled     bool
+	Name       string
+	Schedule   string // Cron expression (6 fields, with seconds)
+	Handler    func() error
+	LastRun    time.Time
+	NextRun    time.Time
+	RunCount   int
+	ErrorCount int
+	LastError  string
+	Enabled    bool
+
+	sched     *cronSchedule
+	lastFired time.Time
 }
 
 // New creates a new scheduler
 func New() *Scheduler {
 	return &Scheduler{
-		cron:   cron.New(cron.WithSeconds()),
 		tasks:  make(map[string]*Task),
 		logger: log.New(log.Writer(), "[scheduler] ", log.LstdFlags),
 	}
 }
 
-// Start starts the scheduler
+// Start starts the scheduler tick loop
 func (s *Scheduler) Start() {
 	s.logger.Println("Starting scheduler...")
-	s.cron.Start()
+
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running = true
+	s.stop = make(chan struct{})
+	s.mu.Unlock()
+
+	s.wg.Add(1)
+	go s.loop()
+
 	s.logger.Println("Scheduler started")
 }
 
-// Stop stops the scheduler
+// Stop stops the scheduler tick loop
 func (s *Scheduler) Stop() {
 	s.logger.Println("Stopping scheduler...")
-	ctx := s.cron.Stop()
-	<-ctx.Done()
+
+	s.mu.Lock()
+	if !s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running = false
+	close(s.stop)
+	s.mu.Unlock()
+
+	s.wg.Wait()
 	s.logger.Println("Scheduler stopped")
+}
+
+// loop ticks once per second and dispatches any tasks whose schedule matches.
+func (s *Scheduler) loop() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.stop:
+			return
+		case now := <-ticker.C:
+			s.tick(now)
+		}
+	}
+}
+
+// tick dispatches all tasks whose schedule matches the truncated current second.
+func (s *Scheduler) tick(now time.Time) {
+	now = now.Truncate(time.Second)
+
+	s.mu.Lock()
+	var due []*Task
+	for _, task := range s.tasks {
+		if task.sched == nil || !task.sched.match(now) {
+			continue
+		}
+		// Guard against dispatching the same task twice within one second.
+		if task.lastFired.Equal(now) {
+			continue
+		}
+		task.lastFired = now
+		task.NextRun = task.sched.next(now)
+		due = append(due, task)
+	}
+	s.mu.Unlock()
+
+	for _, task := range due {
+		go s.runTask(task)
+	}
 }
 
 // RegisterTask registers a new task
 func (s *Scheduler) RegisterTask(name, schedule string, handler func() error) error {
+	sched, err := parseCron(schedule)
+	if err != nil {
+		return fmt.Errorf("failed to register task %s: %w", name, err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Create task
 	task := &Task{
 		Name:     name,
 		Schedule: schedule,
 		Handler:  handler,
 		Enabled:  true,
+		sched:    sched,
+		NextRun:  sched.next(time.Now()),
 	}
-
-	// Wrap handler to track execution
-	wrappedHandler := func() {
-		s.runTask(task)
-	}
-
-	// Add to cron
-	entryID, err := s.cron.AddFunc(schedule, wrappedHandler)
-	if err != nil {
-		return fmt.Errorf("failed to register task %s: %w", name, err)
-	}
-
-	// Get next run time
-	entry := s.cron.Entry(entryID)
-	task.NextRun = entry.Next
 
 	s.tasks[name] = task
 	s.logger.Printf("Registered task: %s (schedule: %s, next run: %s)", name, schedule, task.NextRun)

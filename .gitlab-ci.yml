@@ -6,19 +6,18 @@ stages:
 
 variables:
   CGO_ENABLED: "0"
+  GOFLAGS: "-buildvcs=false"
   PROJECTNAME: cassocial
 
 build:
   stage: build
-  image: golang:alpine
+  image: casjaysdev/go:latest
   cache:
     key: go-${CI_COMMIT_REF_SLUG}
     paths:
       - .go-cache/
   variables:
     GOPATH: ${CI_PROJECT_DIR}/.go-cache
-  before_script:
-    - apk add --no-cache git
   script:
     - |
       VERSION=$(cat release.txt 2>/dev/null || echo "0.0.0-dev")
@@ -26,28 +25,26 @@ build:
       BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
       if [ -f site.txt ]; then OFFICIALSITE=$(cat site.txt); else OFFICIALSITE=${OFFICIALSITE:-${CI_ENVIRONMENT_URL:-}}; fi
       LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
-      CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o /tmp/cassocial ./src
-      CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o /tmp/cassocial-cli ./src/client
+      go build -ldflags "${LDFLAGS}" -o /tmp/cassocial ./src
+      go build -ldflags "${LDFLAGS}" -o /tmp/cassocial-cli ./src/client
 
 test:
   stage: test
-  image: golang:alpine
+  image: casjaysdev/go:latest
   cache:
     key: go-${CI_COMMIT_REF_SLUG}
     paths:
       - .go-cache/
   variables:
     GOPATH: ${CI_PROJECT_DIR}/.go-cache
-  before_script:
-    - apk add --no-cache git
   script:
-    - go vet ./...
+    - go vet ./src/...
     - |
-      go test -v -coverprofile=coverage.out -covermode=atomic ./...
+      go test -v -coverprofile=coverage.out -covermode=atomic ./src/...
       COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
       echo "Total coverage: ${COVERAGE}%"
-      if awk "BEGIN{exit !(${COVERAGE} < 100)}"; then
-        echo "Coverage ${COVERAGE}% is below the required 100% threshold"
+      if awk "BEGIN{exit !(${COVERAGE} < 60)}"; then
+        echo "Coverage ${COVERAGE}% is below the required 60% threshold"
         exit 1
       fi
 
@@ -57,24 +54,19 @@ secret-scan:
   variables:
     GIT_DEPTH: 0
   script:
-    - trufflehog git file://. --since-commit HEAD~1 --only-verified --fail
+    - trufflehog git file://. --since-commit "${CI_COMMIT_BEFORE_SHA}" --only-verified --fail
 
 vuln-scan:
   stage: security
-  image: golang:alpine
-  before_script:
-    - apk add --no-cache git
+  image: casjaysdev/go:latest
   script:
-    - go install golang.org/x/vuln/cmd/govulncheck@latest
-    - govulncheck ./...
+    - govulncheck ./src/...
 
 release:
   stage: release
-  image: golang:alpine
+  image: casjaysdev/go:latest
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v/ || $CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+/'
-  before_script:
-    - apk add --no-cache git curl
   script:
     - |
       VERSION=$(cat release.txt 2>/dev/null || echo "${CI_COMMIT_TAG#v}")

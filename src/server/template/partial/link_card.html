@@ -1,7 +1,7 @@
 {{define "link_card"}}
 <a href="/l/{{.ID}}"
-   class="profile-link btn-animation-lift"
-   {{if .BackgroundColor}}style="background-color: {{.BackgroundColor}}; color: {{.TextColor}};"{{end}}
+   class="profile-link btn-animation-lift{{if .BackgroundColor}} profile-link-custom{{end}}"
+   {{if .BackgroundColor}}style="--link-bg: {{.BackgroundColor}}; --link-fg: {{.TextColor}};"{{end}}
    rel="noopener noreferrer"
    aria-label="{{.Title}}{{if .Username}} ({{.Username}}){{end}}">
   {{if .IconURL}}

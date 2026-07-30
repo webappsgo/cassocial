@@ -53,4 +53,7 @@ nav:
   - Configuration: configuration.md
   - Admin Panel: admin.md
   - API Reference: api.md
+  - CLI Reference: cli.md
+  - Security: security.md
+  - Integrations: integrations.md
   - Development: development.md

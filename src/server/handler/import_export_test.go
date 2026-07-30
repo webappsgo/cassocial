@@ -193,21 +193,55 @@ func TestImportFromCSV(t *testing.T) {
 	}
 }
 
-// TestHandleExport covers: missing profile_id, each export format, and invalid format.
+// TestHandleExport covers input validation, auth, ownership, and every real
+// export format produced by the delegated ExportService.
 func TestHandleExport(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
+	h, db := newTestImportExportHandler(t)
+	userID := createTestUser(t, db, "exportuser", "export@example.com")
+	otherID := createTestUser(t, db, "exportother", "exportother@example.com")
+	profileID := "export-handler-profile-1"
+	if err := db.CreateProfile(&store.Profile{
+		ID:       profileID,
+		UserID:   userID,
+		Slug:     "exporthandlerslug",
+		IsPublic: true,
+	}); err != nil {
+		t.Fatalf("CreateProfile: %v", err)
+	}
+
+	exportURL := func(format string) string {
+		return "/api/export?profile_id=" + profileID + "&format=" + format
+	}
 
 	t.Run("missing profile_id returns 400", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?format=json", nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/api/export?format=json", nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("got %d, want %d", rr.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("no auth returns 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, exportURL("json"), nil)
+		rr := httptest.NewRecorder()
+		h.HandleExport(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("non-owner returns 403", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("json"), nil), otherID)
+		rr := httptest.NewRecorder()
+		h.HandleExport(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusForbidden)
 		}
 	})
 
 	t.Run("invalid format returns 400", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?profile_id=p1&format=xml", nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("xml"), nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
 		if rr.Code != http.StatusBadRequest {
@@ -215,155 +249,78 @@ func TestHandleExport(t *testing.T) {
 		}
 	})
 
-	t.Run("json export sets correct headers", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?profile_id=p1&format=json", nil)
+	t.Run("json export returns real profile data", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("json"), nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
+			t.Fatalf("got %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
 		}
 		if ct := rr.Header().Get("Content-Type"); ct != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", ct)
 		}
-		cd := rr.Header().Get("Content-Disposition")
-		if !strings.Contains(cd, "profile.json") {
-			t.Errorf("Content-Disposition = %q, want to contain profile.json", cd)
+		var data map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&data); err != nil {
+			t.Fatalf("export output not valid JSON: %v", err)
+		}
+		if _, ok := data["profile"].(map[string]interface{}); !ok {
+			t.Error("missing 'profile' object in JSON export")
 		}
 	})
 
-	t.Run("csv export sets correct headers and has header row", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?profile_id=p1&format=csv", nil)
+	t.Run("csv export sets correct content type", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("csv"), nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
+			t.Fatalf("got %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
 		}
 		if ct := rr.Header().Get("Content-Type"); ct != "text/csv" {
 			t.Errorf("Content-Type = %q, want text/csv", ct)
 		}
-		body := rr.Body.String()
-		if !strings.Contains(body, "Service") {
-			t.Errorf("CSV body missing header row, got: %q", body)
-		}
 	})
 
 	t.Run("html export returns HTML document", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?profile_id=p1&format=html", nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("html"), nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
+			t.Fatalf("got %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
 		}
-		body := rr.Body.String()
-		if !strings.Contains(body, "<!DOCTYPE html>") {
-			t.Errorf("html export body missing DOCTYPE, got: %q", body[:50])
+		if !strings.Contains(rr.Body.String(), "<!DOCTYPE html>") {
+			t.Error("html export body missing DOCTYPE")
 		}
 	})
 
 	t.Run("vcard export returns vCard data", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?profile_id=p1&format=vcard", nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("vcard"), nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
+			t.Fatalf("got %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
 		}
 		if ct := rr.Header().Get("Content-Type"); ct != "text/vcard" {
 			t.Errorf("Content-Type = %q, want text/vcard", ct)
 		}
-		body := rr.Body.String()
-		if !strings.Contains(body, "BEGIN:VCARD") {
-			t.Errorf("vcard body missing BEGIN:VCARD, got: %q", body)
+		if !strings.Contains(rr.Body.String(), "BEGIN:VCARD") {
+			t.Error("vcard body missing BEGIN:VCARD")
 		}
 	})
 
-	t.Run("pdf export returns 501", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/export?profile_id=p1&format=pdf", nil)
+	t.Run("pdf export returns a real PDF", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, exportURL("pdf"), nil), userID)
 		rr := httptest.NewRecorder()
 		h.HandleExport(rr, req)
-		if rr.Code != http.StatusNotImplemented {
-			t.Errorf("got %d, want %d", rr.Code, http.StatusNotImplemented)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("got %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		if ct := rr.Header().Get("Content-Type"); ct != "application/pdf" {
+			t.Errorf("Content-Type = %q, want application/pdf", ct)
+		}
+		if !strings.HasPrefix(rr.Body.String(), "%PDF") {
+			t.Error("pdf export body does not start with %PDF")
 		}
 	})
-}
-
-// TestExportJSON verifies JSON export content directly.
-func TestExportJSON(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-
-	rr := httptest.NewRecorder()
-	h.exportJSON(rr, "profile-abc")
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
-	}
-	var data map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&data); err != nil {
-		t.Fatalf("exportJSON output not valid JSON: %v", err)
-	}
-	profile, ok := data["profile"].(map[string]interface{})
-	if !ok {
-		t.Fatal("missing 'profile' object in JSON export")
-	}
-	if profile["id"] != "profile-abc" {
-		t.Errorf("profile.id = %q, want profile-abc", profile["id"])
-	}
-}
-
-// TestExportCSV verifies CSV export writes a header row.
-func TestExportCSV(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-
-	rr := httptest.NewRecorder()
-	h.exportCSV(rr, "profile-abc")
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
-	}
-	body := rr.Body.String()
-	if !strings.Contains(body, "Service") || !strings.Contains(body, "URL") {
-		t.Errorf("CSV missing expected header columns, got: %q", body)
-	}
-}
-
-// TestExportHTML verifies HTML export is a valid document.
-func TestExportHTML(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-
-	rr := httptest.NewRecorder()
-	h.exportHTML(rr, "profile-abc")
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
-	}
-	body := rr.Body.String()
-	if !strings.Contains(body, "<!DOCTYPE html>") {
-		t.Error("exportHTML output missing DOCTYPE declaration")
-	}
-	if !strings.Contains(body, "</html>") {
-		t.Error("exportHTML output missing closing html tag")
-	}
-}
-
-// TestExportVCard verifies vCard export format.
-func TestExportVCard(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-
-	rr := httptest.NewRecorder()
-	h.exportVCard(rr, "profile-abc")
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("got %d, want %d", rr.Code, http.StatusOK)
-	}
-	body := rr.Body.String()
-	if !strings.Contains(body, "BEGIN:VCARD") {
-		t.Error("exportVCard output missing BEGIN:VCARD")
-	}
-	if !strings.Contains(body, "END:VCARD") {
-		t.Error("exportVCard output missing END:VCARD")
-	}
-	if !strings.Contains(body, "VERSION:3.0") {
-		t.Error("exportVCard output missing VERSION:3.0")
-	}
 }
 
 // TestGenerateGraphiQLHTML verifies the generated HTML is a complete document

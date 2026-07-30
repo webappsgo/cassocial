@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -86,11 +87,10 @@ func (ak *APIKey) UpdateLastUsed() {
 	}
 }
 
-// HasScope checks if the API key has a specific scope
+// HasScope checks if the API key grants a specific scope. Scopes are stored as
+// a comma-separated list; the "*" wildcard grants every scope (global tokens).
 func (ak *APIKey) HasScope(scope string) bool {
-	// Simple implementation - in production, properly parse the scopes array
-	// For now, assume scopes is a comma-separated string
-	return true // Placeholder
+	return listContains(ak.Scopes, scope)
 }
 
 // Validate validates the webhook model
@@ -134,9 +134,20 @@ func (wh *APIWebhook) UpdateLastTriggered() {
 	}
 }
 
-// HasEvent checks if the webhook is subscribed to a specific event
+// HasEvent checks if the webhook is subscribed to a specific event. Events are
+// stored as a comma-separated list; the "*" wildcard subscribes to every event.
 func (wh *APIWebhook) HasEvent(event string) bool {
-	// Simple implementation - in production, properly parse the events array
-	// For now, assume events is a comma-separated string
-	return true // Placeholder
+	return listContains(wh.Events, event)
+}
+
+// listContains reports whether a comma-separated list grants the given item.
+// Entries are trimmed of surrounding whitespace and "*" matches anything.
+func listContains(list, item string) bool {
+	for _, entry := range strings.Split(list, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "*" || entry == item {
+			return true
+		}
+	}
+	return false
 }
