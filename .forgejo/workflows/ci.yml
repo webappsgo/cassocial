@@ -118,7 +118,7 @@ jobs:
                 fail=1
               fi
             done < <(grep -E '^\s*-?\s*uses:\s*[A-Za-z0-9_.-]+/' "$f" || true)
-            if grep -q 'pull_request_target' "$f"; then
+            if grep -qE '^\s*(-\s*)?pull_request_target\s*:' "$f"; then
               echo "::error file=$f::pull_request_target is forbidden"
               fail=1
             fi

@@ -323,15 +323,6 @@ func TestRegisterAllTasks_ErrorOnSeventhTask(t *testing.T) {
 	}
 }
 
-func schedulerErrContains(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
-
 // ---- CleanupSessions — error path ----
 
 func TestCleanupSessions_ErrorPath(t *testing.T) {

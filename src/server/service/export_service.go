@@ -170,8 +170,8 @@ func (s *ExportService) exportToHTML(profile *model.Profile, links []*model.Link
 	html.WriteString("<!DOCTYPE html>\n")
 	html.WriteString("<html lang=\"en\">\n")
 	html.WriteString("<head>\n")
-	html.WriteString(fmt.Sprintf("  <meta charset=\"UTF-8\">\n"))
-	html.WriteString(fmt.Sprintf("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"))
+	html.WriteString("  <meta charset=\"UTF-8\">\n")
+	html.WriteString("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
 	html.WriteString(fmt.Sprintf("  <title>%s</title>\n", escapeHTML(profile.DisplayName)))
 
 	if profile.MetaDescription != "" {

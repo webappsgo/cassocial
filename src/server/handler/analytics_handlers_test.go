@@ -205,12 +205,6 @@ func TestGetLinkAnalytics_NotOwner(t *testing.T) {
 
 // ---- GetProfileAnalytics with actual analytics rows exercises getViewsByDay/etc inner loops ----
 
-func insertAnalyticsRow(t *testing.T, db interface {
-	Exec(query string, args ...interface{}) (interface{ LastInsertId() (int64, error) }, error)
-}, profileID, eventType, referrer, country, device string) {
-	t.Helper()
-}
-
 // TestGetProfileAnalytics_WithData inserts analytics rows so the helper
 // query functions (getViewsByDay, getTopReferrers, getDeviceBreakdown,
 // getCountryBreakdown) scan actual rows and exercise their inner loop bodies.

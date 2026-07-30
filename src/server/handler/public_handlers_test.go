@@ -367,7 +367,7 @@ func (s *stringer) Read(p []byte) (int, error) { return 0, nil }
 
 // toReadCloser wraps JSON bytes in an io.ReadCloser.
 func toReadCloser(data []byte) interface{ Read([]byte) (int, error); Close() error } {
-	return noopCloser{data: data, pos: 0}
+	return &noopCloser{data: data, pos: 0}
 }
 
 type noopCloser struct {
@@ -375,7 +375,7 @@ type noopCloser struct {
 	pos  int
 }
 
-func (n noopCloser) Read(p []byte) (int, error) {
+func (n *noopCloser) Read(p []byte) (int, error) {
 	if n.pos >= len(n.data) {
 		return 0, nil
 	}
@@ -384,4 +384,4 @@ func (n noopCloser) Read(p []byte) (int, error) {
 	return copied, nil
 }
 
-func (n noopCloser) Close() error { return nil }
+func (n *noopCloser) Close() error { return nil }

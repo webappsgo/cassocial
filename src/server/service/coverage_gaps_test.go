@@ -29,37 +29,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-func newCovDB(t *testing.T) *store.DB {
-	t.Helper()
-	db, err := store.Connect("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("store.Connect: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := db.RunMigrations(); err != nil {
-		t.Fatalf("RunMigrations: %v", err)
-	}
-	return db
-}
-
-func insertCovUser(t *testing.T, db *store.DB, id, username string) {
-	t.Helper()
-	_, err := db.Exec(
-		`INSERT INTO users (id, username, email, password_hash, role, status,
-		 email_verified, two_factor_enabled, created_at, updated_at)
-		 VALUES (?, ?, ?, '$argon2id$v=19$m=65536,t=3,p=4$s$h',
-		         'user', 'active', 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-		id, username, username+"@covtest.example.com",
-	)
-	if err != nil {
-		t.Fatalf("insertCovUser(%s): %v", id, err)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // analytics_service – TrackView/TrackClick insert error after check succeeds
 // ---------------------------------------------------------------------------
 

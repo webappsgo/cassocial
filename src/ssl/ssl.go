@@ -85,7 +85,7 @@ func (m *Manager) getManualCertConfig() (*tls.Config, error) {
 // "/.well-known/acme-challenge/" on port 80 by the caller (use m.ACMEHandler()).
 func (m *Manager) getLetsEncryptConfig() (*tls.Config, error) {
 	if m.config.Domain == "" {
-		return nil, fmt.Errorf("Let's Encrypt requires a domain name")
+		return nil, fmt.Errorf("let's Encrypt requires a domain name")
 	}
 
 	cacheDir := filepath.Join(m.config.DataDir, "ssl", "letsencrypt")

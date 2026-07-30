@@ -425,16 +425,9 @@ func TestVerifyTOTP_WithPadding(t *testing.T) {
 	a := newTestAuth(t)
 
 	// "JBSWY3D" is 7 chars — not a multiple of 8, so padding must be added.
-	// Re-encode to get a valid base32 string of non-padded length.
-	// Use a raw 5-byte secret so base32 encoding produces 8 chars without trailing '='.
-	// Instead, use base32 encode of some bytes that gives non-mult-of-8 when padding stripped.
-	rawBytes := []byte("hello") // 5 bytes → base32 is "NBSWY3DPEB3W64TMMQ======" → strip = → "NBSWY3DPEB3W64TMMQ" (18 chars, 18%8=2, needs 6 padding)
-	// Actually use raw bytes that produce a clean unpadded length not divisible by 8.
-	// 5 bytes → base32 (8 chars before padding, actually ceil(5*8/5)=8) — let's compute:
-	// 5 bytes = 40 bits / 5 = 8 base32 chars. That IS divisible by 8.
-	// 4 bytes = 32 bits → ceil(32/5) = 7 base32 chars → needs 1 '='
-	// Strip padding from 4 bytes:
-	rawBytes = []byte("test") // 4 bytes → base32 "ORSXG5A=" → without padding "ORSXG5A" (7 chars, 7%8=7, needs 1 padding)
+	// 4 bytes = 32 bits → ceil(32/5) = 7 base32 chars → needs 1 '=' of padding.
+	// Strip padding from 4 bytes to get a clean unpadded length not divisible by 8.
+	rawBytes := []byte("test") // 4 bytes → base32 "ORSXG5A=" → without padding "ORSXG5A" (7 chars, 7%8=7, needs 1 padding)
 	secretNoPad := strings.TrimRight(base32.StdEncoding.EncodeToString(rawBytes), "=")
 
 	// Verify that the secret length is not divisible by 8.
