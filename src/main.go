@@ -8,11 +8,20 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/casapps/cassocial/src/common/shell"
 	"github.com/casapps/cassocial/src/config"
 	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/handler"
 	"github.com/casapps/cassocial/src/server/store"
 )
+
+// sharedFlags lists the top-level long flags offered to --shell completions.
+var sharedFlags = []string{
+	"--help", "--version", "--color", "--lang", "--shell",
+	"--config", "--data", "--log", "--pid",
+	"--address", "--port", "--mode", "--debug", "--status",
+	"--daemon", "--service", "--maintenance", "--update",
+}
 
 // Build info - set via -ldflags at build time
 var (
@@ -41,6 +50,7 @@ func run(args []string) int {
 		// Output control flags (PART 8 — NON-NEGOTIABLE)
 		colorMode = fs.String("color", "auto", "Color output mode (auto|yes|no)")
 		lang      = fs.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
+		shellCmd  = fs.String("shell", "", "Shell integration command (completions|init) [SHELL]")
 
 		// Directory flags
 		configDir = fs.String("config", "", "Configuration directory")
@@ -54,7 +64,6 @@ func run(args []string) int {
 		mode    = fs.String("mode", "", "Application mode (production|development)")
 
 		// Operation flags
-		debug      = fs.Bool("debug", false, "Enable debug mode")
 		showStatus = fs.Bool("status", false, "Show status and health")
 		daemon     = fs.Bool("daemon", false, "Run as daemon")
 
@@ -65,6 +74,12 @@ func run(args []string) int {
 		maintenance = fs.String("maintenance", "", "Maintenance command (backup|restore|update|mode|setup)")
 		update      = fs.String("update", "", "Update command (check|yes|branch)")
 	)
+
+	// --debug is tri-state (config.TriBoolFlag) so `--debug=false` can be
+	// expressed as an explicit override, distinct from "flag not passed"
+	// (AI.md PART 5 — flags > env > file > defaults precedence).
+	var debugFlag config.TriBoolFlag
+	fs.Var(&debugFlag, "debug", "Enable debug mode")
 
 	if err := fs.Parse(args); err != nil {
 		// flag.ContinueOnError writes usage to os.Stderr automatically on error
@@ -86,13 +101,17 @@ func run(args []string) int {
 		return 0
 	}
 
+	// Handle --shell completions/init (AI.md PART 33 — NON-NEGOTIABLE)
+	if *shellCmd != "" {
+		return shell.Handle(filepath.Base(os.Args[0]), *shellCmd, fs.Args(), sharedFlags, os.Stdout)
+	}
+
 	// Apply language preference (auto-detect from LANG env if not set)
 	if *lang == "" {
 		if l := os.Getenv("LANG"); l != "" {
 			*lang = l
 		}
 	}
-	_ = *lang // Language handling deferred to i18n layer
 
 	// Load configuration
 	cfg, err := config.Load(*configDir, *dataDir, *logDir)
@@ -101,19 +120,19 @@ func run(args []string) int {
 		return 1
 	}
 
-	// Override config with CLI flags
+	// Apply CLI-flag overrides — highest-precedence layer over env/file/defaults
+	// (AI.md PART 5 — flags > env > file > defaults precedence).
+	overrides := config.Overrides{Debug: debugFlag.Pointer()}
 	if *address != "" {
-		cfg.Server.Address = *address
+		overrides.Address = address
 	}
 	if *port != 0 {
-		cfg.Server.Port = *port
+		overrides.Port = port
 	}
 	if *mode != "" {
-		cfg.Server.Mode = *mode
+		overrides.Mode = mode
 	}
-	if *debug {
-		cfg.Server.Debug = true
-	}
+	cfg.ApplyOverrides(overrides)
 
 	// Determine PID file path
 	pidFilePath := config.DeterminePIDFile(*pidFile)
@@ -173,7 +192,7 @@ func run(args []string) int {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	authSvc := server.NewAuth(db, jwtSecret)
-	router := handler.NewRouter(db, authSvc, cfg)
+	router := handler.NewRouter(db, authSvc, cfg, *lang)
 	h := router.SetupRoutes()
 
 	srv, err := server.New(cfg, db, h)
@@ -197,7 +216,7 @@ func printVersion() {
 
 	// Format exactly as specified in AI.md PART 16
 	fmt.Printf("%s v%s\n", binaryName, Version)
-	fmt.Printf("Built: %s\n", BuildDate) // Already in ISO 8601 from Makefile
+	fmt.Printf("Built: %s\n", BuildDate)          // Already in ISO 8601 from Makefile
 	fmt.Printf("Go: %s\n", runtime.Version()[2:]) // Remove "go" prefix
 	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 }
@@ -216,6 +235,7 @@ func printHelp() {
 	fmt.Println("  -v, --version                       Show version information")
 	fmt.Println("  --color {auto|yes|no}               Color output (default: auto; respects NO_COLOR)")
 	fmt.Println("  --lang CODE                         Language code (default: auto from LANG env)")
+	fmt.Println("  --shell {completions|init} [SHELL]  Shell integration (auto-detect if SHELL omitted)")
 	fmt.Println("  --mode {production|development}     Set application mode")
 	fmt.Println("  --config {dir}                   Configuration directory")
 	fmt.Println("  --data {dir}                     Data directory")
@@ -245,9 +265,10 @@ func printHelp() {
 
 // applyColorPreference applies the --color flag and NO_COLOR preference.
 // Precedence (PART 8): the CLI flag wins over NO_COLOR.
-//   --color=no  -> color disabled
-//   --color=yes -> color forced on (overrides NO_COLOR)
-//   --color=auto (or unset) -> honor NO_COLOR when it is set to a non-empty value
+//
+//	--color=no  -> color disabled
+//	--color=yes -> color forced on (overrides NO_COLOR)
+//	--color=auto (or unset) -> honor NO_COLOR when it is set to a non-empty value
 func applyColorPreference(mode string) {
 	switch mode {
 	case "no":

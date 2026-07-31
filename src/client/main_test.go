@@ -918,15 +918,15 @@ func TestRunCLI_ServerFromFlag_CommandSucceeds(t *testing.T) {
 	}
 }
 
-func TestRunCLI_ColorNever_SetsNO_COLOR(t *testing.T) {
+func TestRunCLI_ColorNo_SetsNO_COLOR(t *testing.T) {
 	os.Unsetenv("NO_COLOR")
 	os.Unsetenv("CASSOCIAL_SERVER")
 
-	runCLI([]string{"--color", "never"})
+	runCLI([]string{"--color", "no"})
 
-	// NO_COLOR should be set after runCLI processes --color never
+	// NO_COLOR should be set after runCLI processes --color no
 	if os.Getenv("NO_COLOR") == "" {
-		t.Error("runCLI(--color never) should set NO_COLOR env var")
+		t.Error("runCLI(--color no) should set NO_COLOR env var")
 	}
 	os.Unsetenv("NO_COLOR")
 }

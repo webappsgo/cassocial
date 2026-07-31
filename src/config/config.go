@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,6 +22,15 @@ type Config struct {
 	// Cassocial-specific configuration
 	Cassocial CassocialConfig `yaml:"cassocial"`
 
+	// Scheduler manages all background tasks (geoip/blocklist updates, backups, etc.)
+	Scheduler SchedulerConfig `yaml:"scheduler"`
+
+	// RateLimit controls per-IP request throttling
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
+
+	// Web is the frontend configuration (theme, CORS)
+	Web WebConfig `yaml:"web"`
+
 	// Internal fields (not in YAML)
 	ConfigDir string `yaml:"-"`
 	DataDir   string `yaml:"-"`
@@ -30,8 +40,114 @@ type Config struct {
 type ServerConfig struct {
 	Address string `yaml:"address"`
 	Port    int    `yaml:"port"`
-	Mode    string `yaml:"mode"`    // production or development
+	FQDN    string `yaml:"fqdn"` // Auto-detected from host, overridable via DOMAIN env var
+	Mode    string `yaml:"mode"` // production or development
 	Debug   bool   `yaml:"debug"`
+
+	// AdminPath is the admin panel URL path segment (default: admin) - see PART 17
+	AdminPath string `yaml:"admin_path"`
+	// APIVersion is the API version prefix used in /api/{api_version}/ routes
+	APIVersion string `yaml:"api_version"`
+
+	Healthz HealthzConfig `yaml:"healthz"`
+
+	// Branding & SEO - see PART 16 for full details
+	Branding BrandingConfig `yaml:"branding"`
+	SEO      SEOConfig      `yaml:"seo"`
+
+	// System user/group the server runs as
+	User  string `yaml:"user"`
+	Group string `yaml:"group"`
+
+	// PIDFile enables writing a PID file on start
+	PIDFile bool `yaml:"pidfile"`
+
+	// Daemonize detaches from the terminal on start (default: false)
+	Daemonize bool `yaml:"daemonize"`
+
+	Admin AdminPanelConfig `yaml:"admin"`
+}
+
+// HealthzConfig configures the /server/healthz endpoint family.
+type HealthzConfig struct {
+	Root HealthzRootConfig `yaml:"root"`
+}
+
+// HealthzRootConfig controls the optional /healthz root compatibility alias.
+type HealthzRootConfig struct {
+	// Enabled mounts /healthz to the SAME handler as /server/healthz (never redirect)
+	Enabled bool `yaml:"enabled"`
+}
+
+// BrandingConfig holds site branding shown in the UI and page metadata.
+type BrandingConfig struct {
+	Title       string `yaml:"title"`
+	Tagline     string `yaml:"tagline"`
+	Description string `yaml:"description"`
+}
+
+// SEOConfig holds search-engine metadata.
+type SEOConfig struct {
+	Keywords []string `yaml:"keywords"`
+}
+
+// AdminPanelConfig holds admin-panel settings that live in server.yml.
+// Username, password, and token are stored in the database (admins table),
+// never in this config file.
+type AdminPanelConfig struct {
+	Email string `yaml:"email"`
+}
+
+// SchedulerConfig controls the built-in background task scheduler.
+type SchedulerConfig struct {
+	Enabled bool                           `yaml:"enabled"`
+	Tasks   map[string]SchedulerTaskConfig `yaml:"tasks"`
+}
+
+// SchedulerTaskConfig configures a single scheduled task.
+type SchedulerTaskConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	Schedule     string `yaml:"schedule"`
+	RetryOnFail  bool   `yaml:"retry_on_fail,omitempty"`
+	RetryDelay   string `yaml:"retry_delay,omitempty"`
+	Retention    int    `yaml:"retention,omitempty"`
+	RenewBefore  string `yaml:"renew_before,omitempty"`
+}
+
+// RateLimitConfig controls per-IP request throttling.
+type RateLimitConfig struct {
+	Enabled bool             `yaml:"enabled"`
+	Read    RateLimitRule    `yaml:"read"`
+	Write   RateLimitRule    `yaml:"write"`
+	Health  RateLimitRule    `yaml:"health"`
+	// GlobalBurst is the absolute per-IP ceiling across all endpoint types (per minute)
+	GlobalBurst int                 `yaml:"global_burst"`
+	Auth        RateLimitAuthConfig `yaml:"auth"`
+}
+
+// RateLimitRule is a requests-per-window throttle.
+type RateLimitRule struct {
+	Requests int `yaml:"requests"`
+	Window   int `yaml:"window"` // seconds
+}
+
+// RateLimitAuthConfig holds stricter limits for authentication endpoints,
+// applied independently of the general limits above.
+type RateLimitAuthConfig struct {
+	Login          RateLimitRule `yaml:"login"`
+	PasswordReset  RateLimitRule `yaml:"password_reset"`
+	Registration   RateLimitRule `yaml:"registration"`
+}
+
+// WebConfig is the frontend configuration.
+type WebConfig struct {
+	UI   WebUIConfig `yaml:"ui"`
+	CORS string      `yaml:"cors"`
+}
+
+// WebUIConfig holds frontend UI preferences.
+type WebUIConfig struct {
+	Theme string `yaml:"theme"` // dark, light, or auto
 }
 
 type DatabaseConfig struct {
@@ -66,8 +182,14 @@ type EmailConfig struct {
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	// FromName is the sender display name (default: app title)
+	FromName string `yaml:"from_name"`
 	From     string `yaml:"from"`
-	TLS      bool   `yaml:"tls"`
+	// TLS enables/disables SMTP transport security; derived from TLSMode
+	// (false only when TLSMode is "none")
+	TLS bool `yaml:"tls"`
+	// TLSMode is the SMTP transport security mode: auto, starttls, tls, none
+	TLSMode string `yaml:"tls_mode"`
 }
 
 // CassocialConfig contains Cassocial-specific settings
@@ -204,6 +326,22 @@ func (cfg *Config) setDefaults() error {
 	cfg.Server.Mode = "production"
 	cfg.Server.Debug = false
 
+	cfg.Server.FQDN = detectFQDN()
+	cfg.Server.AdminPath = "admin"
+	cfg.Server.APIVersion = "v1"
+	cfg.Server.Healthz.Root.Enabled = false
+
+	cfg.Server.Branding.Title = "Cassocial"
+	cfg.Server.Branding.Tagline = ""
+	cfg.Server.Branding.Description = ""
+	cfg.Server.SEO.Keywords = []string{}
+
+	cfg.Server.User = currentUsername()
+	cfg.Server.Group = currentGroupname()
+	cfg.Server.PIDFile = true
+	cfg.Server.Daemonize = false
+	cfg.Server.Admin.Email = "admin@" + cfg.Server.FQDN
+
 	cfg.Database.Driver = "sqlite"
 	cfg.Database.Name = filepath.Join(cfg.DataDir, "db", "cassocial.db")
 	cfg.Database.MaxConns = 10
@@ -218,6 +356,25 @@ func (cfg *Config) setDefaults() error {
 	cfg.Email.Enabled = false
 	cfg.Email.Port = 587
 	cfg.Email.TLS = true
+	cfg.Email.TLSMode = "auto"
+	cfg.Email.FromName = cfg.Server.Branding.Title
+
+	cfg.Scheduler.Enabled = true
+	cfg.Scheduler.Tasks = defaultSchedulerTasks()
+
+	cfg.RateLimit.Enabled = true
+	cfg.RateLimit.Read = RateLimitRule{Requests: 120, Window: 60}
+	cfg.RateLimit.Write = RateLimitRule{Requests: 10, Window: 60}
+	cfg.RateLimit.Health = RateLimitRule{Requests: 120, Window: 60}
+	cfg.RateLimit.GlobalBurst = 240
+	cfg.RateLimit.Auth = RateLimitAuthConfig{
+		Login:         RateLimitRule{Requests: 5, Window: 900},
+		PasswordReset: RateLimitRule{Requests: 3, Window: 3600},
+		Registration:  RateLimitRule{Requests: 5, Window: 3600},
+	}
+
+	cfg.Web.UI.Theme = "dark"
+	cfg.Web.CORS = "*"
 
 	cfg.Cassocial.SiteName = "Cassocial"
 	cfg.Cassocial.SiteDescription = "Self-hosted link aggregator and social profile"
@@ -226,6 +383,54 @@ func (cfg *Config) setDefaults() error {
 	cfg.Cassocial.MaxLinksPerProfile = 100
 
 	return nil
+}
+
+// defaultSchedulerTasks returns the built-in scheduled tasks with sane
+// defaults, all enabled, per AI.md PART 5.
+func defaultSchedulerTasks() map[string]SchedulerTaskConfig {
+	return map[string]SchedulerTaskConfig{
+		"geoip_update":     {Enabled: true, Schedule: "0 3 * * 0", RetryOnFail: true, RetryDelay: "1h"},
+		"blocklist_update": {Enabled: true, Schedule: "0 4 * * *", RetryOnFail: true, RetryDelay: "1h"},
+		"cve_update":       {Enabled: true, Schedule: "0 5 * * *", RetryOnFail: true, RetryDelay: "1h"},
+		"log_rotation":     {Enabled: true, Schedule: "0 0 * * *"},
+		"session_cleanup":  {Enabled: true, Schedule: "@hourly"},
+		"backup":           {Enabled: true, Schedule: "0 2 * * *", Retention: 4},
+		"ssl_renewal":      {Enabled: true, Schedule: "0 3 * * *", RenewBefore: "7d"},
+		"health_check":     {Enabled: true, Schedule: "*/5 * * * *"},
+		"tor_health":       {Enabled: true, Schedule: "*/10 * * * *"},
+	}
+}
+
+// detectFQDN resolves the server FQDN: DOMAIN env var > os.Hostname() > localhost.
+func detectFQDN() string {
+	if domain := os.Getenv("DOMAIN"); domain != "" {
+		return domain
+	}
+	if host, err := os.Hostname(); err == nil && host != "" {
+		return host
+	}
+	return "localhost"
+}
+
+// currentUsername returns the current OS username, or "" if it cannot be determined.
+func currentUsername() string {
+	if u, err := user.Current(); err == nil {
+		return u.Username
+	}
+	return ""
+}
+
+// currentGroupname returns the current OS primary group name, or "" if it cannot be determined.
+func currentGroupname() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	g, err := user.LookupGroupId(u.Gid)
+	if err != nil {
+		return ""
+	}
+	return g.Name
 }
 
 func (cfg *Config) loadFromEnv() {
@@ -237,6 +442,10 @@ func (cfg *Config) loadFromEnv() {
 	}
 	if listen := os.Getenv("LISTEN"); listen != "" {
 		cfg.Server.Address = listen
+	}
+	// DOMAIN has the highest priority for hostname/FQDN resolution.
+	if domain := os.Getenv("DOMAIN"); domain != "" {
+		cfg.Server.FQDN = domain
 	}
 	if modeVal := os.Getenv("MODE"); modeVal != "" {
 		if strings.EqualFold(modeVal, "debug") {
@@ -277,8 +486,48 @@ func (cfg *Config) loadFromEnv() {
 	if password := os.Getenv("SMTP_PASSWORD"); password != "" {
 		cfg.Email.Password = password
 	}
+	if fromName := os.Getenv("SMTP_FROM_NAME"); fromName != "" {
+		cfg.Email.FromName = fromName
+	}
 	if from := os.Getenv("SMTP_FROM_EMAIL"); from != "" {
 		cfg.Email.From = from
+	}
+	if tlsMode := os.Getenv("SMTP_TLS"); tlsMode != "" {
+		cfg.Email.TLSMode = strings.ToLower(tlsMode)
+		// Keep the legacy boolean in sync: only "none" disables TLS outright.
+		cfg.Email.TLS = cfg.Email.TLSMode != "none"
+	}
+}
+
+// Overrides holds CLI-flag values that take precedence over environment
+// variables, the config file, and defaults (see AI.md PART 5: "Flags > env >
+// file > defaults"). A nil field means "flag not provided" and leaves the
+// underlying config value untouched, including when the flag can express an
+// explicit false (see TriBoolFlag).
+type Overrides struct {
+	Address *string
+	Port    *int
+	Mode    *string
+	Debug   *bool
+}
+
+// ApplyOverrides applies CLI-flag overrides on top of the already-loaded
+// (file + env + defaults) configuration. This is the final, highest-priority
+// layer in the precedence chain and must be called after Load returns.
+func (cfg *Config) ApplyOverrides(ov Overrides) {
+	if ov.Address != nil && *ov.Address != "" {
+		cfg.Server.Address = *ov.Address
+	}
+	if ov.Port != nil && *ov.Port != 0 {
+		cfg.Server.Port = *ov.Port
+	}
+	if ov.Mode != nil && *ov.Mode != "" {
+		cfg.Server.Mode = *ov.Mode
+	}
+	if ov.Debug != nil {
+		// Explicit --debug or --debug=false always wins, even over a
+		// config-file/env value of true.
+		cfg.Server.Debug = *ov.Debug
 	}
 }
 
@@ -289,7 +538,7 @@ func (cfg *Config) Save() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	data, err := yaml.Marshal(cfg)
+	data, err := cfg.MarshalCommented()
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}

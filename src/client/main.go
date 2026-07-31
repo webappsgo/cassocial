@@ -11,7 +11,15 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/casapps/cassocial/src/common/shell"
 )
+
+// sharedFlags lists the top-level long flags offered to --shell completions.
+var sharedFlags = []string{
+	"--help", "--version", "--color", "--lang", "--shell", "--debug",
+	"--server", "--token", "--token-file", "--user",
+}
 
 // Build info - set via -ldflags at build time
 var (
@@ -43,8 +51,10 @@ func runCLI(args []string) int {
 		showVersionS = fs.Bool("v", false, "Show version information")
 
 		// Output control flags (PART 8 — NON-NEGOTIABLE)
-		colorMode = fs.String("color", "auto", "Color output mode (always|never|auto)")
+		colorMode = fs.String("color", "auto", "Color output mode (auto|yes|no)")
 		lang      = fs.String("lang", "", "Language code (e.g. en, es, fr); auto-detected from LANG env var")
+		debug     = fs.Bool("debug", false, "Enable debug output")
+		shellCmd  = fs.String("shell", "", "Shell integration command (completions|init) [SHELL]")
 
 		server    = fs.String("server", OfficialSite, "Server URL")
 		token     = fs.String("token", "", "API token for authentication")
@@ -56,9 +66,22 @@ func runCLI(args []string) int {
 		return 2
 	}
 
-	// Apply NO_COLOR / --color preference before any output
-	if os.Getenv("NO_COLOR") != "" || *colorMode == "never" {
+	// Apply NO_COLOR / --color preference before any output.
+	// Precedence (PART 8): the CLI flag wins over NO_COLOR.
+	//   --color=no  -> color disabled
+	//   --color=yes -> color forced on (overrides NO_COLOR)
+	//   --color=auto (or unset) -> honor NO_COLOR when it is set to a non-empty value
+	switch *colorMode {
+	case "no":
 		os.Setenv("NO_COLOR", "1")
+	case "yes":
+		os.Unsetenv("NO_COLOR")
+	default:
+		// auto — respect NO_COLOR as-is; nothing to change
+	}
+
+	if *debug {
+		os.Setenv("DEBUG", "1")
 	}
 
 	// Apply language preference (auto-detect from LANG env if not set)
@@ -67,11 +90,14 @@ func runCLI(args []string) int {
 			*lang = l
 		}
 	}
-	_ = *lang // Language handling deferred to i18n layer
 
 	if *showVersion || *showVersionS {
 		printVersion()
 		return 0
+	}
+
+	if *shellCmd != "" {
+		return shell.Handle(filepath.Base(os.Args[0]), *shellCmd, fs.Args(), sharedFlags, os.Stdout)
 	}
 
 	if *showHelp || *showHelpS || fs.NArg() == 0 {
@@ -100,6 +126,7 @@ func runCLI(args []string) int {
 		server: strings.TrimRight(serverURL, "/"),
 		token:  apiToken,
 		user:   *user,
+		lang:   *lang,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -116,6 +143,7 @@ type client struct {
 	server string
 	token  string
 	user   string
+	lang   string
 	http   *http.Client
 }
 
@@ -280,6 +308,10 @@ func (c *client) do(req *http.Request) ([]byte, error) {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
+	// Wire --lang/LANG through to the server's DetectLanguage (AI.md PART 8, PART 31).
+	if c.lang != "" {
+		req.Header.Set("Accept-Language", c.lang)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -355,8 +387,10 @@ func printHelp() {
 	fmt.Println("Options:")
 	fmt.Println("  -h, --help                     Show this help message")
 	fmt.Println("  -v, --version                  Show version information")
-	fmt.Println("  --color {always|never|auto}    Color output (default: auto; respects NO_COLOR)")
+	fmt.Println("  --color {auto|yes|no}          Color output (default: auto; respects NO_COLOR)")
 	fmt.Println("  --lang CODE                    Language code (default: auto from LANG env)")
+	fmt.Println("  --debug                        Enable debug output")
+	fmt.Println("  --shell {completions|init} [SHELL]  Shell integration (auto-detect if SHELL omitted)")
 	fmt.Println("  --server URL                   Cassocial server URL")
 	fmt.Println("  --token TOKEN                  API token for authentication")
 	fmt.Println("  --token-file FILE              Read token from file")

@@ -26,7 +26,7 @@ func newTestRouter(t *testing.T) *Router {
 	}
 
 	authSvc := server.NewAuth(db, "test-jwt-secret-router")
-	return NewRouter(db, authSvc, &config.Config{})
+	return NewRouter(db, authSvc, &config.Config{}, "")
 }
 
 func TestNewRouter_NotNil(t *testing.T) {

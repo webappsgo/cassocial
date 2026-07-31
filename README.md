@@ -61,6 +61,34 @@ chmod +x cassocial-linux-amd64
 
 The server will start and display a one-time setup token for admin panel access.
 
+## Client
+
+A companion `cassocial-cli` client is available for interacting with the server API.
+
+### Install
+
+```bash
+# Download latest release
+curl -LO https://github.com/casapps/cassocial/releases/latest/download/cassocial-cli-linux-amd64
+chmod +x cassocial-cli-linux-amd64
+sudo mv cassocial-cli-linux-amd64 /usr/local/bin/cassocial-cli
+```
+
+### Configure
+
+```bash
+# Connect to the official server
+cassocial-cli --server https://cassocial.casapps.us --token YOUR_API_TOKEN
+```
+
+### Usage
+
+```bash
+cassocial-cli --help
+cassocial-cli profile alice
+cassocial-cli shortlink create --url https://example.com
+```
+
 ## Configuration
 
 Configuration is auto-generated on first run. Edit via admin panel at `http://localhost:64580/admin`.
@@ -178,7 +206,7 @@ src/           # Source code
   swagger/     # OpenAPI/Swagger
   graphql/     # GraphQL API
   mode/        # Application mode detection
-  paths/       # Path resolution
+  path/        # Path resolution
   ssl/         # SSL/TLS handling
   scheduler/   # Background tasks
   admin/       # Admin panel
@@ -197,6 +225,18 @@ make build
 # Test in container
 docker run --rm -v $(pwd)/binaries:/app alpine:latest /app/cassocial --help
 ```
+
+## Disclaimer
+
+This software is provided "as is" without warranty of any kind. Use at your own risk.
+
+- **No Warranty**: The authors are not responsible for any damages, data loss, or issues arising from use of this software
+- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice
+- **Third-Party Services**: If this software connects to external APIs or services, their terms of service apply separately
+- **Security**: While we strive to follow security best practices, no software is guaranteed to be free of vulnerabilities
+- **Production Use**: Evaluate thoroughly before deploying in production environments
+
+By using this software, you acknowledge that you have read and understood this disclaimer.
 
 ## License
 

@@ -28,12 +28,30 @@ type Router struct {
 	publicHandlers    *PublicHandlers
 	setupHandler      *SetupHandler
 	shortlinkHandler  *ShortlinkHandler
+	i18n              *server.I18N
 	startTime         time.Time
+	routes            []string
 }
 
-// NewRouter creates a new Router instance with all handlers wired up.
+// hf registers a pattern+handler function on the mux and records the pattern
+// for introspection via the /debug/routes endpoint (AI.md PART 6).
+func (rt *Router) hf(pattern string, handler http.HandlerFunc) {
+	rt.routes = append(rt.routes, pattern)
+	rt.mux.HandleFunc(pattern, handler)
+}
+
+// h registers a pattern+http.Handler on the mux and records the pattern for
+// introspection via the /debug/routes endpoint (AI.md PART 6).
+func (rt *Router) h(pattern string, handler http.Handler) {
+	rt.routes = append(rt.routes, pattern)
+	rt.mux.Handle(pattern, handler)
+}
+
+// NewRouter creates a new Router instance with all handlers wired up. lang
+// is the resolved --lang/LANG preference (AI.md PART 8, PART 31); pass ""
+// to fall back to the server's configured default language.
 // Templates are parsed at startup; any failure is fatal.
-func NewRouter(db *store.DB, authService *Auth, cfg *config.Config) *Router {
+func NewRouter(db *store.DB, authService *Auth, cfg *config.Config, lang string) *Router {
 	mux := http.NewServeMux()
 	middleware := server.NewMiddleware(authService)
 
@@ -51,6 +69,7 @@ func NewRouter(db *store.DB, authService *Auth, cfg *config.Config) *Router {
 		publicHandlers:    NewPublicHandlers(db),
 		setupHandler:      NewSetupHandler(cfg, db),
 		shortlinkHandler:  NewShortlinkHandler(cfg, db),
+		i18n:              server.NewI18N(cfg.ConfigDir, lang),
 		startTime:         time.Now(),
 	}
 
@@ -64,65 +83,65 @@ func NewRouter(db *store.DB, authService *Auth, cfg *config.Config) *Router {
 // SetupRoutes configures all routes and returns the final http.Handler.
 func (rt *Router) SetupRoutes() http.Handler {
 	// ── Static assets ──────────────────────────────────────────────────────────
-	rt.mux.Handle("GET /static/", staticHandler())
+	rt.h("GET /static/", staticHandler())
 
 	// ── Infrastructure endpoints ───────────────────────────────────────────────
 	// Health checks (spec: /server/healthz HTML, /api/v1/server/healthz JSON)
-	rt.mux.HandleFunc("GET /server/healthz", rt.healthzHTML)
-	rt.mux.HandleFunc("GET /api/v1/server/healthz", rt.healthzJSON)
+	rt.hf("GET /server/healthz", rt.healthzHTML)
+	rt.hf("GET /api/v1/server/healthz", rt.healthzJSON)
 	// Legacy aliases kept for backward compatibility
-	rt.mux.HandleFunc("GET /health", rt.healthzJSON)
-	rt.mux.HandleFunc("GET /health/ready", rt.readinessCheck)
-	rt.mux.HandleFunc("GET /health/live", rt.livenessCheck)
+	rt.hf("GET /health", rt.healthzJSON)
+	rt.hf("GET /health/ready", rt.readinessCheck)
+	rt.hf("GET /health/live", rt.livenessCheck)
 
 	// Prometheus metrics (internal only — no public exposure)
-	rt.mux.HandleFunc("GET /metrics", rt.metrics)
+	rt.hf("GET /metrics", rt.metrics)
 
 	// PWA
-	rt.mux.HandleFunc("GET /manifest.json", func(w http.ResponseWriter, r *http.Request) {
+	rt.hf("GET /manifest.json", func(w http.ResponseWriter, r *http.Request) {
 		rt.pwaInstance().ServeManifest(w, r)
 	})
-	rt.mux.HandleFunc("GET /service-worker.js", func(w http.ResponseWriter, r *http.Request) {
+	rt.hf("GET /service-worker.js", func(w http.ResponseWriter, r *http.Request) {
 		rt.pwaInstance().ServeServiceWorker(w, r)
 	})
 
 	// Crawlers / discovery
-	rt.mux.HandleFunc("GET /robots.txt", rt.robotsTxt)
-	rt.mux.HandleFunc("GET /sitemap.xml", rt.sitemapXML)
-	rt.mux.HandleFunc("GET /.well-known/security.txt", rt.securityTxt)
+	rt.hf("GET /robots.txt", rt.robotsTxt)
+	rt.hf("GET /sitemap.xml", rt.sitemapXML)
+	rt.hf("GET /.well-known/security.txt", rt.securityTxt)
 
 	// ── Setup wizard API ───────────────────────────────────────────────────────
-	rt.mux.HandleFunc("GET /api/setup/status", rt.setupHandler.HandleSetupStatus)
-	rt.mux.HandleFunc("GET /api/setup/welcome", rt.setupHandler.HandleSetupWelcome)
-	rt.mux.HandleFunc("GET /api/setup/basic", rt.setupHandler.HandleSetupBasic)
-	rt.mux.HandleFunc("POST /api/setup/basic", rt.setupHandler.HandleSetupBasic)
-	rt.mux.HandleFunc("GET /api/setup/domain", rt.setupHandler.HandleSetupDomain)
-	rt.mux.HandleFunc("POST /api/setup/domain", rt.setupHandler.HandleSetupDomain)
-	rt.mux.HandleFunc("GET /api/setup/email", rt.setupHandler.HandleSetupEmail)
-	rt.mux.HandleFunc("POST /api/setup/email", rt.setupHandler.HandleSetupEmail)
-	rt.mux.HandleFunc("GET /api/setup/features", rt.setupHandler.HandleSetupFeatures)
-	rt.mux.HandleFunc("POST /api/setup/features", rt.setupHandler.HandleSetupFeatures)
-	rt.mux.HandleFunc("GET /api/setup/database", rt.setupHandler.HandleSetupDatabase)
-	rt.mux.HandleFunc("POST /api/setup/database", rt.setupHandler.HandleSetupDatabase)
-	rt.mux.HandleFunc("POST /api/setup/complete", rt.setupHandler.HandleSetupComplete)
+	rt.hf("GET /api/setup/status", rt.setupHandler.HandleSetupStatus)
+	rt.hf("GET /api/setup/welcome", rt.setupHandler.HandleSetupWelcome)
+	rt.hf("GET /api/setup/basic", rt.setupHandler.HandleSetupBasic)
+	rt.hf("POST /api/setup/basic", rt.setupHandler.HandleSetupBasic)
+	rt.hf("GET /api/setup/domain", rt.setupHandler.HandleSetupDomain)
+	rt.hf("POST /api/setup/domain", rt.setupHandler.HandleSetupDomain)
+	rt.hf("GET /api/setup/email", rt.setupHandler.HandleSetupEmail)
+	rt.hf("POST /api/setup/email", rt.setupHandler.HandleSetupEmail)
+	rt.hf("GET /api/setup/features", rt.setupHandler.HandleSetupFeatures)
+	rt.hf("POST /api/setup/features", rt.setupHandler.HandleSetupFeatures)
+	rt.hf("GET /api/setup/database", rt.setupHandler.HandleSetupDatabase)
+	rt.hf("POST /api/setup/database", rt.setupHandler.HandleSetupDatabase)
+	rt.hf("POST /api/setup/complete", rt.setupHandler.HandleSetupComplete)
 
 	// ── Authentication (/api/auth/ AND /api/v1/auth/ — both accepted) ─────────
 	for _, prefix := range []string{"/api/auth", "/api/v1/auth"} {
-		rt.mux.HandleFunc("POST "+prefix+"/register", rt.authHandlers.Register)
-		rt.mux.HandleFunc("POST "+prefix+"/login", rt.authHandlers.Login)
-		rt.mux.HandleFunc("POST "+prefix+"/login/2fa", rt.authHandlers.LoginWith2FA)
-		rt.mux.HandleFunc("POST "+prefix+"/forgot-password", rt.authHandlers.ForgotPassword)
-		rt.mux.HandleFunc("POST "+prefix+"/reset-password", rt.authHandlers.ResetPassword)
-		rt.mux.HandleFunc("GET "+prefix+"/verify-email/{token}", rt.authHandlers.VerifyEmail)
-		rt.mux.Handle("POST "+prefix+"/logout",
+		rt.hf("POST "+prefix+"/register", rt.authHandlers.Register)
+		rt.hf("POST "+prefix+"/login", rt.authHandlers.Login)
+		rt.hf("POST "+prefix+"/login/2fa", rt.authHandlers.LoginWith2FA)
+		rt.hf("POST "+prefix+"/forgot-password", rt.authHandlers.ForgotPassword)
+		rt.hf("POST "+prefix+"/reset-password", rt.authHandlers.ResetPassword)
+		rt.hf("GET "+prefix+"/verify-email/{token}", rt.authHandlers.VerifyEmail)
+		rt.h("POST "+prefix+"/logout",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.authHandlers.Logout)))
-		rt.mux.Handle("POST "+prefix+"/refresh",
+		rt.h("POST "+prefix+"/refresh",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.authHandlers.RefreshToken)))
-		rt.mux.Handle("POST "+prefix+"/2fa/enable",
+		rt.h("POST "+prefix+"/2fa/enable",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.authHandlers.Enable2FA)))
-		rt.mux.Handle("POST "+prefix+"/2fa/verify",
+		rt.h("POST "+prefix+"/2fa/verify",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.authHandlers.Verify2FA)))
-		rt.mux.Handle("POST "+prefix+"/2fa/disable",
+		rt.h("POST "+prefix+"/2fa/disable",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.authHandlers.Disable2FA)))
 	}
 
@@ -131,125 +150,128 @@ func (rt *Router) SetupRoutes() http.Handler {
 	// Registering /{id} wildcard under /api/v1/profiles too would conflict with
 	// the public /api/v1/profiles/{username} pattern.
 	for _, prefix := range []string{"/api/profiles"} {
-		rt.mux.Handle("GET "+prefix,
+		rt.h("GET "+prefix,
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.ListProfiles)))
-		rt.mux.Handle("POST "+prefix,
+		rt.h("POST "+prefix,
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.CreateProfile)))
-		rt.mux.Handle("GET "+prefix+"/{id}",
+		rt.h("GET "+prefix+"/{id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.GetProfile)))
-		rt.mux.Handle("PUT "+prefix+"/{id}",
+		rt.h("PUT "+prefix+"/{id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.UpdateProfile)))
-		rt.mux.Handle("DELETE "+prefix+"/{id}",
+		rt.h("DELETE "+prefix+"/{id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.DeleteProfile)))
-		rt.mux.Handle("POST "+prefix+"/{id}/duplicate",
+		rt.h("POST "+prefix+"/{id}/duplicate",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.DuplicateProfile)))
-		rt.mux.Handle("GET "+prefix+"/{id}/qr",
+		rt.h("GET "+prefix+"/{id}/qr",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.GenerateQRCode)))
-		rt.mux.Handle("POST "+prefix+"/{id}/verify-domain",
+		rt.h("POST "+prefix+"/{id}/verify-domain",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.profileHandlers.VerifyDomain)))
-		rt.mux.Handle("GET "+prefix+"/{id}/links",
+		rt.h("GET "+prefix+"/{id}/links",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.ListLinks)))
-		rt.mux.Handle("POST "+prefix+"/{id}/links",
+		rt.h("POST "+prefix+"/{id}/links",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.CreateLink)))
 	}
 
 	// ── Links (/api/links AND /api/v1/links) ──────────────────────────────────
 	for _, prefix := range []string{"/api/links", "/api/v1/links"} {
-		rt.mux.Handle("PUT "+prefix+"/{id}",
+		rt.h("PUT "+prefix+"/{id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.UpdateLink)))
-		rt.mux.Handle("DELETE "+prefix+"/{id}",
+		rt.h("DELETE "+prefix+"/{id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.DeleteLink)))
-		rt.mux.Handle("POST "+prefix+"/reorder",
+		rt.h("POST "+prefix+"/reorder",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.ReorderLinks)))
-		rt.mux.Handle("POST "+prefix+"/{id}/toggle",
+		rt.h("POST "+prefix+"/{id}/toggle",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.ToggleLink)))
 	}
 
 	// ── Services (public read, /api/services AND /api/v1/services) ────────────
 	for _, prefix := range []string{"/api/services", "/api/v1/services"} {
-		rt.mux.HandleFunc("GET "+prefix, rt.serviceHandlers.ListServices)
-		rt.mux.HandleFunc("GET "+prefix+"/search", rt.serviceHandlers.SearchServices)
-		rt.mux.HandleFunc("GET "+prefix+"/categories", rt.serviceHandlers.ListCategories)
-		rt.mux.HandleFunc("GET "+prefix+"/popular", rt.serviceHandlers.ListPopularServices)
-		rt.mux.HandleFunc("GET "+prefix+"/{id}", rt.serviceHandlers.GetService)
+		rt.hf("GET "+prefix, rt.serviceHandlers.ListServices)
+		rt.hf("GET "+prefix+"/search", rt.serviceHandlers.SearchServices)
+		rt.hf("GET "+prefix+"/categories", rt.serviceHandlers.ListCategories)
+		rt.hf("GET "+prefix+"/popular", rt.serviceHandlers.ListPopularServices)
+		rt.hf("GET "+prefix+"/{id}", rt.serviceHandlers.GetService)
 	}
 
 	// ── Analytics (/api/analytics AND /api/v1/analytics) ─────────────────────
 	for _, prefix := range []string{"/api/analytics", "/api/v1/analytics"} {
-		rt.mux.Handle("GET "+prefix+"/profile/{id}",
+		rt.h("GET "+prefix+"/profile/{id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.analyticsHandlers.GetProfileAnalytics)))
-		rt.mux.Handle("GET "+prefix+"/links/{profile_id}",
+		rt.h("GET "+prefix+"/links/{profile_id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.analyticsHandlers.GetLinkAnalytics)))
-		rt.mux.Handle("GET "+prefix+"/export/{profile_id}",
+		rt.h("GET "+prefix+"/export/{profile_id}",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.analyticsHandlers.ExportAnalytics)))
 	}
 
 	// ── Shortlinks (/api/v1/shortlinks) ───────────────────────────────────────
-	rt.mux.Handle("GET /api/v1/shortlinks",
+	rt.h("GET /api/v1/shortlinks",
 		rt.middleware.RequireAuth(http.HandlerFunc(rt.shortlinkHandler.HandleListShortlinks)))
-	rt.mux.Handle("POST /api/v1/shortlinks",
+	rt.h("POST /api/v1/shortlinks",
 		rt.middleware.RequireAuth(http.HandlerFunc(rt.shortlinkHandler.HandleCreateShortlink)))
-	rt.mux.Handle("DELETE /api/v1/shortlinks",
+	rt.h("DELETE /api/v1/shortlinks",
 		rt.middleware.RequireAuth(http.HandlerFunc(rt.shortlinkHandler.HandleDeleteShortlink)))
-	rt.mux.HandleFunc("GET /api/v1/shortlinks/{code}", rt.shortlinkHandler.HandleGetShortlink)
+	rt.hf("GET /api/v1/shortlinks/{code}", rt.shortlinkHandler.HandleGetShortlink)
 
 	// Shortlink public redirect: /s/{code}
-	rt.mux.HandleFunc("GET /s/", rt.shortlinkHandler.HandleRedirectShortlink)
+	rt.hf("GET /s/", rt.shortlinkHandler.HandleRedirectShortlink)
 
 	// ── Public API v1 ─────────────────────────────────────────────────────────
-	rt.mux.HandleFunc("GET /api/v1/profiles/{username}", rt.publicHandlers.GetPublicProfile)
-	rt.mux.HandleFunc("GET /api/v1/profiles/{username}/links", rt.publicHandlers.GetPublicProfileLinks)
-	rt.mux.HandleFunc("GET /api/v1/profiles/{username}/qr", rt.publicHandlers.GetPublicProfileQR)
-	rt.mux.HandleFunc("GET /api/v1/link/{id}/click", rt.publicHandlers.TrackLinkClick)
+	rt.hf("GET /api/v1/profiles/{username}", rt.publicHandlers.GetPublicProfile)
+	rt.hf("GET /api/v1/profiles/{username}/links", rt.publicHandlers.GetPublicProfileLinks)
+	rt.hf("GET /api/v1/profiles/{username}/qr", rt.publicHandlers.GetPublicProfileQR)
+	rt.hf("GET /api/v1/link/{id}/click", rt.publicHandlers.TrackLinkClick)
 
 	// ── Admin API (/api/admin AND /api/v1/admin) ──────────────────────────────
 	for _, prefix := range []string{"/api/admin", "/api/v1/admin"} {
-		rt.mux.Handle("GET "+prefix+"/users",
+		rt.h("GET "+prefix+"/users",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.ListUsers)))
-		rt.mux.Handle("GET "+prefix+"/users/{id}",
+		rt.h("GET "+prefix+"/users/{id}",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.GetUser)))
-		rt.mux.Handle("PUT "+prefix+"/users/{id}",
+		rt.h("PUT "+prefix+"/users/{id}",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.UpdateUser)))
-		rt.mux.Handle("DELETE "+prefix+"/users/{id}",
+		rt.h("DELETE "+prefix+"/users/{id}",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.DeleteUser)))
-		rt.mux.Handle("GET "+prefix+"/stats",
+		rt.h("GET "+prefix+"/stats",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.GetSystemStats)))
-		rt.mux.Handle("POST "+prefix+"/backup",
+		rt.h("POST "+prefix+"/backup",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.TriggerBackup)))
-		rt.mux.Handle("GET "+prefix+"/settings",
+		rt.h("GET "+prefix+"/settings",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.GetSettings)))
-		rt.mux.Handle("PUT "+prefix+"/settings",
+		rt.h("PUT "+prefix+"/settings",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.UpdateSettings)))
-		rt.mux.Handle("POST "+prefix+"/services/import",
+		rt.h("POST "+prefix+"/services/import",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.ImportServices)))
-		rt.mux.Handle("POST "+prefix+"/cache/clear",
+		rt.h("POST "+prefix+"/cache/clear",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.ClearCache)))
-		rt.mux.Handle("GET "+prefix+"/smtp/config",
+		rt.h("GET "+prefix+"/smtp/config",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.GetSMTPConfig)))
-		rt.mux.Handle("PUT "+prefix+"/smtp/config",
+		rt.h("PUT "+prefix+"/smtp/config",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.UpdateSMTPConfig)))
-		rt.mux.Handle("POST "+prefix+"/smtp/test",
+		rt.h("POST "+prefix+"/smtp/test",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.TestSMTPConnection)))
-		rt.mux.Handle("GET "+prefix+"/notifications/preferences",
+		rt.h("GET "+prefix+"/notifications/preferences",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.GetNotificationPreferences)))
-		rt.mux.Handle("PUT "+prefix+"/notifications/preferences",
+		rt.h("PUT "+prefix+"/notifications/preferences",
 			rt.middleware.RequireAdmin(http.HandlerFunc(rt.adminHandlers.UpdateNotificationPreferences)))
 	}
 
 	// ── Link click redirect: /l/{id} (used by profile link cards) ────────────
-	rt.mux.HandleFunc("GET /l/{id}", rt.publicHandlers.TrackLinkClick)
+	rt.hf("GET /l/{id}", rt.publicHandlers.TrackLinkClick)
 
 	// ── HTML pages (server-side rendered templates) ────────────────────────────
-	rt.mux.HandleFunc("GET /setup", rt.serveSetupPage)
-	rt.mux.HandleFunc("GET /auth/login", rt.serveLoginPage)
-	rt.mux.HandleFunc("GET /auth/register", rt.serveRegisterPage)
-	rt.mux.Handle("GET /dashboard",
+	rt.hf("GET /setup", rt.serveSetupPage)
+	rt.hf("GET /auth/login", rt.serveLoginPage)
+	rt.hf("GET /auth/register", rt.serveRegisterPage)
+	rt.h("GET /dashboard",
 		rt.middleware.RequireAuth(http.HandlerFunc(rt.serveDashboardPage)))
-	rt.mux.Handle("GET /admin",
+	rt.h("GET /admin",
 		rt.middleware.RequireAdmin(http.HandlerFunc(rt.serveAdminPage)))
 
 	// Home page — must be last fixed path so /{slug} can catch everything else
-	rt.mux.HandleFunc("GET /", rt.serveHomePage)
+	rt.hf("GET /", rt.serveHomePage)
+
+	// ── Debug endpoints (--debug/DEBUG=true only; 404 otherwise) ──────────────
+	rt.registerDebugRoutes()
 
 	// Apply security headers to all routes
 	return rt.middleware.SecurityHeaders(rt.mux)
@@ -555,4 +577,3 @@ func formatUptime(d time.Duration) string {
 	}
 	return fmt.Sprintf("%dm", minutes)
 }
-
