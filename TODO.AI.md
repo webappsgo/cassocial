@@ -6,7 +6,12 @@ Read: AI.md PART 5
 `src/config/config.go`'s `Config` struct is far short of AI.md PART 5's full
 example structure. Missing fields/sections: `admin_path`, `api_version`,
 `healthz.root`, `branding`, `seo`, `user`/`group`, `pidfile`, `daemonize`,
-`admin.email`, `ssl.letsencrypt`, `scheduler`, `rate_limit`, `web`.
+`admin.email`, `scheduler`, `rate_limit`, `web`.
+(`ssl.letsencrypt` is now present as `SSLConfig.LetsEncrypt` — removed from
+the list on 2026-07-31.)
+
+Also unhandled in `loadFromEnv`: PART 5 runtime env vars `SMTP_FROM_NAME`,
+`SMTP_TLS`, and `DOMAIN` (no corresponding struct fields yet).
 
 ## [ ] server.yml comments
 Read: AI.md PART 5
@@ -62,3 +67,23 @@ Read: AI.md PART 8
 `src/client/main.go` line 46: `--color` accepts `always|never|auto` but
 PART 8 (line ~10679, ~10713) requires `auto|yes|no`. `src/client/main.go`
 is also missing the `--debug` flag entirely (server has it, client does not).
+
+## [ ] `--lang` flag parsed but discarded (server and client)
+Read: AI.md PART 8, PART 31
+
+Both `src/main.go` (`_ = *lang`) and `src/client/main.go` (line 70,
+`_ = *lang`) parse `--lang`/`LANG` into a variable and then throw it away
+instead of passing it to the i18n layer (`src/common/i18n`). The flag has no
+effect on output language yet.
+
+## [ ] `src/paths` package dir is plural (Go singular convention)
+Read: AI.md PART 3
+
+`src/paths/` (package `paths`) is the only plural source package dir; Go
+convention (CLAUDE.md directory-naming rule) wants singular `src/path/`.
+Low priority — pure churn, no behavior change. This is the sole surviving
+item from the 2026-07-30 go-lint findings batch; the other six
+(`Makefile` image `golang:alpine`→`casjaysdev/go:latest`, missing
+`GOFLAGS=-buildvcs=false`, inline `-buildvcs=false`, `-trimpath`,
+server `--color auto|yes|no`, and the `robfig/cron` external-cron
+dependency) were all resolved and verified fixed on 2026-07-31.
