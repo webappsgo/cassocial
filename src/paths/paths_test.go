@@ -19,6 +19,7 @@ func TestResolve_AllFieldsNonEmpty(t *testing.T) {
 	fields := map[string]string{
 		"Config":   p.Config,
 		"Data":     p.Data,
+		"Cache":    p.Cache,
 		"Log":      p.Log,
 		"Backup":   p.Backup,
 		"PID":      p.PID,
@@ -67,6 +68,13 @@ func TestGetDataDir(t *testing.T) {
 	dir := GetDataDir()
 	if dir == "" {
 		t.Error("GetDataDir() returned empty string")
+	}
+}
+
+func TestGetCacheDir(t *testing.T) {
+	dir := GetCacheDir()
+	if dir == "" {
+		t.Error("GetCacheDir() returned empty string")
 	}
 }
 
@@ -144,11 +152,11 @@ func TestLinuxPaths_User(t *testing.T) {
 
 func TestDockerPaths(t *testing.T) {
 	p := dockerPaths()
-	if p.Config != "/config" {
-		t.Errorf("dockerPaths().Config = %q, want /config", p.Config)
+	if p.Config != "/config/cassocial" {
+		t.Errorf("dockerPaths().Config = %q, want /config/cassocial", p.Config)
 	}
-	if p.Data != "/data" {
-		t.Errorf("dockerPaths().Data = %q, want /data", p.Data)
+	if p.Data != "/data/cassocial" {
+		t.Errorf("dockerPaths().Data = %q, want /data/cassocial", p.Data)
 	}
 }
 
@@ -201,6 +209,7 @@ func TestDarwinPaths_AllFieldsNonEmpty(t *testing.T) {
 		fields := map[string]string{
 			"Config":   p.Config,
 			"Data":     p.Data,
+			"Cache":    p.Cache,
 			"Log":      p.Log,
 			"Backup":   p.Backup,
 			"PID":      p.PID,
@@ -248,6 +257,7 @@ func TestBSDPaths_AllFieldsNonEmpty(t *testing.T) {
 		fields := map[string]string{
 			"Config":   p.Config,
 			"Data":     p.Data,
+			"Cache":    p.Cache,
 			"Log":      p.Log,
 			"Backup":   p.Backup,
 			"PID":      p.PID,
@@ -353,6 +363,7 @@ func TestLinuxPaths_RootAllFieldsNonEmpty(t *testing.T) {
 	fields := map[string]string{
 		"Config":   p.Config,
 		"Data":     p.Data,
+		"Cache":    p.Cache,
 		"Log":      p.Log,
 		"Backup":   p.Backup,
 		"PID":      p.PID,
@@ -375,6 +386,7 @@ func TestLinuxPaths_UserAllFieldsNonEmpty(t *testing.T) {
 	fields := map[string]string{
 		"Config":   p.Config,
 		"Data":     p.Data,
+		"Cache":    p.Cache,
 		"Log":      p.Log,
 		"Backup":   p.Backup,
 		"PID":      p.PID,
@@ -429,11 +441,11 @@ func TestResolve_DockerBranch_ViaEnvVar(t *testing.T) {
 		t.Fatal("Resolve() in docker mode returned nil")
 	}
 	// Docker paths are fixed values — verify the known ones.
-	if p.Config != "/config" {
-		t.Errorf("Resolve docker Config = %q, want /config", p.Config)
+	if p.Config != "/config/cassocial" {
+		t.Errorf("Resolve docker Config = %q, want /config/cassocial", p.Config)
 	}
-	if p.Data != "/data" {
-		t.Errorf("Resolve docker Data = %q, want /data", p.Data)
+	if p.Data != "/data/cassocial" {
+		t.Errorf("Resolve docker Data = %q, want /data/cassocial", p.Data)
 	}
 }
 
@@ -487,6 +499,7 @@ func TestWindowsPaths_AllFieldsNonEmpty(t *testing.T) {
 		fields := map[string]string{
 			"Config":   p.Config,
 			"Data":     p.Data,
+			"Cache":    p.Cache,
 			"Log":      p.Log,
 			"Backup":   p.Backup,
 			"PID":      p.PID,

@@ -25,12 +25,13 @@ var getPpid = os.Getppid
 
 // Paths holds all application paths
 type Paths struct {
-	Config string
-	Data   string
-	Log    string
-	Backup string
-	PID    string
-	SSL    string
+	Config   string
+	Data     string
+	Cache    string
+	Log      string
+	Backup   string
+	PID      string
+	SSL      string
 	Security string
 	Database string
 }
@@ -93,14 +94,15 @@ func isRunningInDocker() bool {
 // dockerPaths returns container paths
 func dockerPaths() *Paths {
 	return &Paths{
-		Config:   "/config",
-		Data:     "/data",
-		Log:      "/data/logs",
-		Backup:   "/data/backup",
-		PID:      "/data/cassocial.pid",
-		SSL:      "/config/ssl",
-		Security: "/config/security",
-		Database: "/data/db",
+		Config:   "/config/" + projectName,
+		Data:     "/data/" + projectName,
+		Cache:    "/data/" + projectName + "/cache",
+		Log:      "/data/log/" + projectName,
+		Backup:   "/data/backups/" + projectName,
+		PID:      "/data/" + projectName + "/" + projectName + ".pid",
+		SSL:      "/config/" + projectName + "/ssl",
+		Security: "/data/" + projectName + "/security",
+		Database: "/data/db/sqlite",
 	}
 }
 
@@ -110,11 +112,12 @@ func linuxPaths(isRoot bool) *Paths {
 		return &Paths{
 			Config:   "/etc/" + projectOrg + "/" + projectName,
 			Data:     "/var/lib/" + projectOrg + "/" + projectName,
+			Cache:    "/var/cache/" + projectOrg + "/" + projectName,
 			Log:      "/var/log/" + projectOrg + "/" + projectName,
 			Backup:   "/mnt/Backups/" + projectOrg + "/" + projectName,
 			PID:      "/var/run/" + projectOrg + "/" + projectName + ".pid",
 			SSL:      "/etc/" + projectOrg + "/" + projectName + "/ssl",
-			Security: "/etc/" + projectOrg + "/" + projectName + "/security",
+			Security: "/var/lib/" + projectOrg + "/" + projectName + "/security",
 			Database: "/var/lib/" + projectOrg + "/" + projectName + "/db",
 		}
 	}
@@ -123,11 +126,12 @@ func linuxPaths(isRoot bool) *Paths {
 	return &Paths{
 		Config:   filepath.Join(homeDir, ".config", projectOrg, projectName),
 		Data:     filepath.Join(homeDir, ".local", "share", projectOrg, projectName),
-		Log:      filepath.Join(homeDir, ".local", "share", projectOrg, projectName, "logs"),
-		Backup:   filepath.Join(homeDir, ".local", "backups", projectOrg, projectName),
+		Cache:    filepath.Join(homeDir, ".cache", projectOrg, projectName),
+		Log:      filepath.Join(homeDir, ".local", "log", projectOrg, projectName),
+		Backup:   filepath.Join(homeDir, ".local", "share", "Backups", projectOrg, projectName),
 		PID:      filepath.Join(homeDir, ".local", "share", projectOrg, projectName, projectName+".pid"),
 		SSL:      filepath.Join(homeDir, ".config", projectOrg, projectName, "ssl"),
-		Security: filepath.Join(homeDir, ".config", projectOrg, projectName, "security"),
+		Security: filepath.Join(homeDir, ".local", "share", projectOrg, projectName, "security"),
 		Database: filepath.Join(homeDir, ".local", "share", projectOrg, projectName, "db"),
 	}
 }
@@ -138,11 +142,12 @@ func darwinPaths(isRoot bool) *Paths {
 		return &Paths{
 			Config:   "/Library/Application Support/" + projectOrg + "/" + projectName,
 			Data:     "/Library/Application Support/" + projectOrg + "/" + projectName + "/data",
+			Cache:    "/Library/Caches/" + projectOrg + "/" + projectName,
 			Log:      "/Library/Logs/" + projectOrg + "/" + projectName,
 			Backup:   "/Library/Backups/" + projectOrg + "/" + projectName,
 			PID:      "/var/run/" + projectOrg + "/" + projectName + ".pid",
 			SSL:      "/Library/Application Support/" + projectOrg + "/" + projectName + "/ssl",
-			Security: "/Library/Application Support/" + projectOrg + "/" + projectName + "/security",
+			Security: "/Library/Application Support/" + projectOrg + "/" + projectName + "/data/security",
 			Database: "/Library/Application Support/" + projectOrg + "/" + projectName + "/db",
 		}
 	}
@@ -151,11 +156,12 @@ func darwinPaths(isRoot bool) *Paths {
 	return &Paths{
 		Config:   filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName),
 		Data:     filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName),
+		Cache:    filepath.Join(homeDir, "Library", "Caches", projectOrg, projectName),
 		Log:      filepath.Join(homeDir, "Library", "Logs", projectOrg, projectName),
 		Backup:   filepath.Join(homeDir, "Library", "Backups", projectOrg, projectName),
 		PID:      filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName, projectName+".pid"),
 		SSL:      filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName, "ssl"),
-		Security: filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName, "security"),
+		Security: filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName, "data", "security"),
 		Database: filepath.Join(homeDir, "Library", "Application Support", projectOrg, projectName, "db"),
 	}
 }
@@ -166,11 +172,12 @@ func bsdPaths(isRoot bool) *Paths {
 		return &Paths{
 			Config:   "/usr/local/etc/" + projectOrg + "/" + projectName,
 			Data:     "/var/db/" + projectOrg + "/" + projectName,
+			Cache:    "/var/cache/" + projectOrg + "/" + projectName,
 			Log:      "/var/log/" + projectOrg + "/" + projectName,
 			Backup:   "/var/backups/" + projectOrg + "/" + projectName,
 			PID:      "/var/run/" + projectOrg + "/" + projectName + ".pid",
 			SSL:      "/usr/local/etc/" + projectOrg + "/" + projectName + "/ssl",
-			Security: "/usr/local/etc/" + projectOrg + "/" + projectName + "/security",
+			Security: "/var/db/" + projectOrg + "/" + projectName + "/security",
 			Database: "/var/db/" + projectOrg + "/" + projectName + "/db",
 		}
 	}
@@ -179,11 +186,12 @@ func bsdPaths(isRoot bool) *Paths {
 	return &Paths{
 		Config:   filepath.Join(homeDir, ".config", projectOrg, projectName),
 		Data:     filepath.Join(homeDir, ".local", "share", projectOrg, projectName),
-		Log:      filepath.Join(homeDir, ".local", "share", projectOrg, projectName, "logs"),
-		Backup:   filepath.Join(homeDir, ".local", "backups", projectOrg, projectName),
+		Cache:    filepath.Join(homeDir, ".cache", projectOrg, projectName),
+		Log:      filepath.Join(homeDir, ".local", "log", projectOrg, projectName),
+		Backup:   filepath.Join(homeDir, ".local", "share", "Backups", projectOrg, projectName),
 		PID:      filepath.Join(homeDir, ".local", "share", projectOrg, projectName, projectName+".pid"),
 		SSL:      filepath.Join(homeDir, ".config", projectOrg, projectName, "ssl"),
-		Security: filepath.Join(homeDir, ".config", projectOrg, projectName, "security"),
+		Security: filepath.Join(homeDir, ".local", "share", projectOrg, projectName, "security"),
 		Database: filepath.Join(homeDir, ".local", "share", projectOrg, projectName, "db"),
 	}
 }
@@ -199,11 +207,12 @@ func windowsPaths(isRoot bool) *Paths {
 		return &Paths{
 			Config:   filepath.Join(programData, projectOrg, projectName),
 			Data:     filepath.Join(programData, projectOrg, projectName, "data"),
+			Cache:    filepath.Join(programData, projectOrg, projectName, "cache"),
 			Log:      filepath.Join(programData, projectOrg, projectName, "logs"),
 			Backup:   filepath.Join(programData, "Backups", projectOrg, projectName),
 			PID:      filepath.Join(programData, projectOrg, projectName, projectName+".pid"),
 			SSL:      filepath.Join(programData, projectOrg, projectName, "ssl"),
-			Security: filepath.Join(programData, projectOrg, projectName, "security"),
+			Security: filepath.Join(programData, projectOrg, projectName, "data", "security"),
 			Database: filepath.Join(programData, projectOrg, projectName, "db"),
 		}
 	}
@@ -222,11 +231,12 @@ func windowsPaths(isRoot bool) *Paths {
 	return &Paths{
 		Config:   filepath.Join(appData, projectOrg, projectName),
 		Data:     filepath.Join(localAppData, projectOrg, projectName),
+		Cache:    filepath.Join(localAppData, projectOrg, projectName, "cache"),
 		Log:      filepath.Join(localAppData, projectOrg, projectName, "logs"),
 		Backup:   filepath.Join(localAppData, "Backups", projectOrg, projectName),
 		PID:      filepath.Join(localAppData, projectOrg, projectName, projectName+".pid"),
 		SSL:      filepath.Join(appData, projectOrg, projectName, "ssl"),
-		Security: filepath.Join(appData, projectOrg, projectName, "security"),
+		Security: filepath.Join(localAppData, projectOrg, projectName, "security"),
 		Database: filepath.Join(localAppData, projectOrg, projectName, "db"),
 	}
 }
@@ -239,6 +249,11 @@ func GetConfigDir() string {
 // GetDataDir returns the data directory
 func GetDataDir() string {
 	return Resolve().Data
+}
+
+// GetCacheDir returns the cache directory
+func GetCacheDir() string {
+	return Resolve().Cache
 }
 
 // GetLogDir returns the log directory

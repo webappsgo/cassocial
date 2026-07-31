@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,6 +36,7 @@ type ServerConfig struct {
 
 type DatabaseConfig struct {
 	Driver      string `yaml:"driver"`       // sqlite, postgres, mysql
+	URL         string `yaml:"url"`          // connection string (overrides host/port/name/user/password when set)
 	Host        string `yaml:"host"`
 	Port        int    `yaml:"port"`
 	Name        string `yaml:"name"`
@@ -98,8 +100,18 @@ func Load(configDir, dataDir, logDir string) (*Config, error) {
 		return nil, fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	// Load from file if exists
+	// Migrate legacy server.yaml to server.yml if present
 	configFile := filepath.Join(cfg.ConfigDir, "server.yml")
+	legacyConfigFile := filepath.Join(cfg.ConfigDir, "server.yaml")
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		if _, legacyErr := os.Stat(legacyConfigFile); legacyErr == nil {
+			if err := os.Rename(legacyConfigFile, configFile); err != nil {
+				return nil, fmt.Errorf("failed to migrate server.yaml to server.yml: %w", err)
+			}
+		}
+	}
+
+	// Load from file if exists
 	if _, err := os.Stat(configFile); err == nil {
 		if err := loadFromFile(configFile, cfg); err != nil {
 			return nil, fmt.Errorf("failed to load config file: %w", err)
@@ -217,42 +229,56 @@ func (cfg *Config) setDefaults() error {
 }
 
 func (cfg *Config) loadFromEnv() {
-	// Server settings
-	if addr := os.Getenv("CASSOCIAL_ADDRESS"); addr != "" {
-		cfg.Server.Address = addr
-	}
-	if port := os.Getenv("CASSOCIAL_PORT"); port != "" {
+	// Runtime variables (always checked) — see AI.md PART 5 Environment Variables
+	if port := os.Getenv("PORT"); port != "" {
 		if p, err := strconv.Atoi(port); err == nil {
 			cfg.Server.Port = p
 		}
 	}
-	if mode := os.Getenv("CASSOCIAL_MODE"); mode != "" {
-		cfg.Server.Mode = mode
+	if listen := os.Getenv("LISTEN"); listen != "" {
+		cfg.Server.Address = listen
 	}
-	if debug := os.Getenv("CASSOCIAL_DEBUG"); debug != "" {
-		cfg.Server.Debug = ParseBool(debug)
+	if modeVal := os.Getenv("MODE"); modeVal != "" {
+		if strings.EqualFold(modeVal, "debug") {
+			cfg.Server.Mode = "development"
+		} else {
+			cfg.Server.Mode = modeVal
+		}
+	}
+	// Debug: explicit DEBUG env var wins; otherwise MODE=debug expands to debug on.
+	if debug := os.Getenv("DEBUG"); debug != "" {
+		if val, err := ParseBool(debug, cfg.Server.Debug); err == nil {
+			cfg.Server.Debug = val
+		}
+	} else if strings.EqualFold(os.Getenv("MODE"), "debug") {
+		cfg.Server.Debug = true
 	}
 
 	// Database settings
-	if driver := os.Getenv("CASSOCIAL_DB_DRIVER"); driver != "" {
+	if driver := os.Getenv("DATABASE_DRIVER"); driver != "" {
 		cfg.Database.Driver = driver
 	}
-	if host := os.Getenv("CASSOCIAL_DB_HOST"); host != "" {
-		cfg.Database.Host = host
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		cfg.Database.URL = dsn
 	}
-	if port := os.Getenv("CASSOCIAL_DB_PORT"); port != "" {
+
+	// Email/SMTP settings
+	if host := os.Getenv("SMTP_HOST"); host != "" {
+		cfg.Email.Host = host
+	}
+	if port := os.Getenv("SMTP_PORT"); port != "" {
 		if p, err := strconv.Atoi(port); err == nil {
-			cfg.Database.Port = p
+			cfg.Email.Port = p
 		}
 	}
-	if name := os.Getenv("CASSOCIAL_DB_NAME"); name != "" {
-		cfg.Database.Name = name
+	if user := os.Getenv("SMTP_USERNAME"); user != "" {
+		cfg.Email.Username = user
 	}
-	if user := os.Getenv("CASSOCIAL_DB_USER"); user != "" {
-		cfg.Database.User = user
+	if password := os.Getenv("SMTP_PASSWORD"); password != "" {
+		cfg.Email.Password = password
 	}
-	if password := os.Getenv("CASSOCIAL_DB_PASSWORD"); password != "" {
-		cfg.Database.Password = password
+	if from := os.Getenv("SMTP_FROM_EMAIL"); from != "" {
+		cfg.Email.From = from
 	}
 }
 
@@ -282,7 +308,7 @@ func determineConfigDir(flagValue string) string {
 		return flagValue
 	}
 
-	if dir := os.Getenv("CASSOCIAL_CONFIG"); dir != "" {
+	if dir := os.Getenv("CONFIG_DIR"); dir != "" {
 		return dir
 	}
 
@@ -306,7 +332,7 @@ func determineDataDir(flagValue string) string {
 		return flagValue
 	}
 
-	if dir := os.Getenv("CASSOCIAL_DATA"); dir != "" {
+	if dir := os.Getenv("DATA_DIR"); dir != "" {
 		return dir
 	}
 
@@ -330,7 +356,7 @@ func determineLogDir(flagValue string) string {
 		return flagValue
 	}
 
-	if dir := os.Getenv("CASSOCIAL_LOG"); dir != "" {
+	if dir := os.Getenv("LOG_DIR"); dir != "" {
 		return dir
 	}
 

@@ -33,7 +33,7 @@ func (s *Setting) GetInt() (int, error) {
 
 // GetBool returns the value as a boolean
 func (s *Setting) GetBool() (bool, error) {
-	return config.ParseBool(s.Value), nil
+	return config.ParseBool(s.Value, false)
 }
 
 // GetFloat returns the value as a float64

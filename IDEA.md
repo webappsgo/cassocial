@@ -8,6 +8,7 @@ Cassocial is a self-hosted, open-source link aggregator and social profile platf
 project_name:        cassocial
 project_org:         casapps
 internal_name:       cassocial
+internal_org:        casapps
 app_name:            Cassocial
 official_site:       cassocial.example.com
 maintainer_email:    casjay@yahoo.com

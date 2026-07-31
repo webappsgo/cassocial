@@ -160,10 +160,10 @@ func TestRun_UnknownFlag(t *testing.T) {
 // which then falls through to server startup (fails → exit 1).
 func TestRun_Daemon(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	// Inject guard so handleDaemon returns -1 (already-daemonized path)
 	// and execution continues to server startup which fails → exit 1.
 	t.Setenv("CASSOCIAL_DAEMONIZED", "1")
@@ -176,10 +176,10 @@ func TestRun_Daemon(t *testing.T) {
 // TestRun_Service verifies that --service start exits 1 when systemctl is unavailable.
 func TestRun_Service(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--service", "start"}); code != 1 {
 		t.Errorf("run(--service start) = %d, want 1", code)
 	}
@@ -187,10 +187,10 @@ func TestRun_Service(t *testing.T) {
 
 // TestRun_Maintenance verifies that --maintenance backup exits 1 when the data dir is unwritable.
 func TestRun_Maintenance(t *testing.T) {
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	// /proc/cassocial-test-maint cannot be created → config.Load fails → exit 1.
 	if code := run([]string{"--config", "/proc/cassocial-test-maint", "--data", "/proc/cassocial-test-maint-data", "--log", "/proc/cassocial-test-maint-log", "--maintenance", "backup"}); code != 1 {
 		t.Errorf("run(--maintenance backup) = %d, want 1", code)
@@ -200,10 +200,10 @@ func TestRun_Maintenance(t *testing.T) {
 // TestRun_Update verifies that --update check completes gracefully (0 or 1 depending on network).
 func TestRun_Update(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--update", "check"})
 	if code != 0 && code != 1 {
 		t.Errorf("run(--update check) = %d, want 0 or 1", code)
@@ -221,10 +221,10 @@ func TestRun_ConfigLoadFails(t *testing.T) {
 // TestRun_Status verifies that --status exits 0 after loading config.
 func TestRun_Status(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	if code := run([]string{"--config", tmp + "/cfg", "--data", tmp + "/data", "--log", tmp + "/log", "--status"}); code != 0 {
 		t.Errorf("run(--status) = %d, want 0", code)
 	}
@@ -234,10 +234,10 @@ func TestRun_Status(t *testing.T) {
 // and that --status causes an early exit 0 after applying them.
 func TestRun_ConfigOverrides(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	code := run([]string{
 		"--config", tmp + "/cfg",
 		"--data", tmp + "/data",
@@ -256,10 +256,10 @@ func TestRun_ConfigOverrides(t *testing.T) {
 // TestRun_PIDWriteFails verifies run() returns 1 when WritePIDFile fails.
 func TestRun_PIDWriteFails(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	// /proc is not writable even as root — WritePIDFile must fail.
 	code := run([]string{
 		"--config", tmp + "/cfg",
@@ -275,11 +275,11 @@ func TestRun_PIDWriteFails(t *testing.T) {
 // TestRun_DBConnectFails verifies run() returns 1 when the database cannot be reached.
 func TestRun_DBConnectFails(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
 	// MySQL driver with no server → Ping fails → store.Connect returns error.
-	t.Setenv("CASSOCIAL_DB_DRIVER", "mysql")
+	t.Setenv("DATABASE_DRIVER", "mysql")
 	code := run([]string{
 		"--config", tmp + "/cfg",
 		"--data", tmp + "/data",
@@ -294,10 +294,10 @@ func TestRun_DBConnectFails(t *testing.T) {
 // TestRun_ServerStartFails verifies run() returns 1 when server.Start fails (invalid listen address).
 func TestRun_ServerStartFails(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	// 256.x.x.x is an invalid IP; ListenAndServe fails immediately → errChan fires.
 	code := run([]string{
 		"--config", tmp + "/cfg",
@@ -316,10 +316,10 @@ func TestRun_ServerStartFails(t *testing.T) {
 func TestRun_LangAutoDetect(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("LANG", "es_ES.UTF-8")
-	t.Setenv("CASSOCIAL_PORT", "")
-	t.Setenv("CASSOCIAL_MODE", "")
-	t.Setenv("CASSOCIAL_ADDRESS", "")
-	t.Setenv("CASSOCIAL_DB_DRIVER", "")
+	t.Setenv("PORT", "")
+	t.Setenv("MODE", "")
+	t.Setenv("LISTEN", "")
+	t.Setenv("DATABASE_DRIVER", "")
 	// --status exits early; we just verify no panic.
 	code := run([]string{
 		"--config", tmp + "/cfg",

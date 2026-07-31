@@ -17,6 +17,7 @@ func TestParseBool(t *testing.T) {
 		{"yes lowercase", "yes", true},
 		{"true lowercase", "true", true},
 		{"on lowercase", "on", true},
+		{"ok lowercase", "ok", true},
 		{"enable lowercase", "enable", true},
 		{"enabled lowercase", "enabled", true},
 		{"y", "y", true},
@@ -32,6 +33,8 @@ func TestParseBool(t *testing.T) {
 		{"affirmative", "affirmative", true},
 		{"accept", "accept", true},
 		{"allow", "allow", true},
+		{"grant", "grant", true},
+		{"sure", "sure", true},
 		{"totally", "totally", true},
 
 		// Truthy — uppercase variants (ToLower normalization)
@@ -51,7 +54,7 @@ func TestParseBool(t *testing.T) {
 		{"tab before", "\tyes", true},
 		{"newline before", "\nyes", true},
 
-		// Falsy — not in the truthy map
+		// Falsy — exact matches
 		{"false", "false", false},
 		{"zero", "0", false},
 		{"no", "no", false},
@@ -68,21 +71,87 @@ func TestParseBool(t *testing.T) {
 		{"DISABLE uppercase", "DISABLE", false},
 		{"DISABLED uppercase", "DISABLED", false},
 
-		// Edge cases
+		// Edge case — empty string returns the default value (false here)
 		{"empty string", "", false},
-		{"whitespace only", "   ", false},
-		{"random word", "maybe", false},
-		{"number two", "2", false},
-		{"negative", "-1", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseBool(tt.input)
+			got, err := ParseBool(tt.input, false)
+			if err != nil {
+				t.Fatalf("ParseBool(%q, false) returned unexpected error: %v", tt.input, err)
+			}
 			if got != tt.want {
-				t.Errorf("ParseBool(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("ParseBool(%q, false) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseBool_EmptyUsesDefault(t *testing.T) {
+	got, err := ParseBool("", true)
+	if err != nil {
+		t.Fatalf("ParseBool(\"\", true) returned unexpected error: %v", err)
+	}
+	if !got {
+		t.Error("ParseBool(\"\", true) = false, want true (default)")
+	}
+	got, err = ParseBool("   ", true)
+	if err != nil {
+		t.Fatalf("ParseBool(\"   \", true) returned unexpected error: %v", err)
+	}
+	if !got {
+		t.Error("ParseBool(\"   \", true) = false, want true (default)")
+	}
+}
+
+func TestParseBool_InvalidValueReturnsError(t *testing.T) {
+	for _, invalid := range []string{"maybe", "2", "-1", "random word"} {
+		if _, err := ParseBool(invalid, false); err == nil {
+			t.Errorf("ParseBool(%q, false) should return an error for an invalid value", invalid)
+		}
+	}
+}
+
+func TestMustParseBool(t *testing.T) {
+	if !MustParseBool("yes", false) {
+		t.Error("MustParseBool(\"yes\", false) = false, want true")
+	}
+	if MustParseBool("", false) {
+		t.Error("MustParseBool(\"\", false) = true, want false (default)")
+	}
+}
+
+func TestMustParseBool_PanicsOnInvalid(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseBool() with invalid value should panic")
+		}
+	}()
+	MustParseBool("maybe", false)
+}
+
+func TestIsTruthy(t *testing.T) {
+	if !IsTruthy("yes") {
+		t.Error("IsTruthy(\"yes\") = false, want true")
+	}
+	if IsTruthy("no") {
+		t.Error("IsTruthy(\"no\") = true, want false")
+	}
+	if IsTruthy("maybe") {
+		t.Error("IsTruthy(\"maybe\") = true, want false")
+	}
+}
+
+func TestIsFalsy(t *testing.T) {
+	if !IsFalsy("no") {
+		t.Error("IsFalsy(\"no\") = false, want true")
+	}
+	if IsFalsy("yes") {
+		t.Error("IsFalsy(\"yes\") = true, want false")
+	}
+	if IsFalsy("maybe") {
+		t.Error("IsFalsy(\"maybe\") = true, want false")
 	}
 }
 
@@ -162,10 +231,10 @@ func TestLoadFromEnv_ServerSettings(t *testing.T) {
 		t.Fatalf("setDefaults() failed: %v", err)
 	}
 
-	t.Setenv("CASSOCIAL_ADDRESS", "192.168.1.1")
-	t.Setenv("CASSOCIAL_PORT", "7777")
-	t.Setenv("CASSOCIAL_MODE", "development")
-	t.Setenv("CASSOCIAL_DEBUG", "true")
+	t.Setenv("LISTEN", "192.168.1.1")
+	t.Setenv("PORT", "7777")
+	t.Setenv("MODE", "development")
+	t.Setenv("DEBUG", "true")
 
 	cfg.loadFromEnv()
 
@@ -183,38 +252,57 @@ func TestLoadFromEnv_ServerSettings(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnv_ModeDebugAlias(t *testing.T) {
+	cfg := &Config{}
+	if err := cfg.setDefaults(); err != nil {
+		t.Fatalf("setDefaults() failed: %v", err)
+	}
+
+	t.Setenv("MODE", "debug")
+	cfg.loadFromEnv()
+
+	if cfg.Server.Mode != "development" {
+		t.Errorf("Server.Mode = %q, want development (MODE=debug alias)", cfg.Server.Mode)
+	}
+	if !cfg.Server.Debug {
+		t.Error("Server.Debug should be true via MODE=debug alias")
+	}
+}
+
+func TestLoadFromEnv_ExplicitDebugOverridesModeAlias(t *testing.T) {
+	cfg := &Config{}
+	if err := cfg.setDefaults(); err != nil {
+		t.Fatalf("setDefaults() failed: %v", err)
+	}
+
+	t.Setenv("MODE", "debug")
+	t.Setenv("DEBUG", "false")
+	cfg.loadFromEnv()
+
+	if cfg.Server.Mode != "development" {
+		t.Errorf("Server.Mode = %q, want development (MODE=debug alias)", cfg.Server.Mode)
+	}
+	if cfg.Server.Debug {
+		t.Error("Server.Debug should be false — explicit DEBUG=false wins over MODE=debug alias")
+	}
+}
+
 func TestLoadFromEnv_DatabaseSettings(t *testing.T) {
 	cfg := &Config{}
 	if err := cfg.setDefaults(); err != nil {
 		t.Fatalf("setDefaults() failed: %v", err)
 	}
 
-	t.Setenv("CASSOCIAL_DB_DRIVER", "pgx")
-	t.Setenv("CASSOCIAL_DB_HOST", "db.example.com")
-	t.Setenv("CASSOCIAL_DB_PORT", "5432")
-	t.Setenv("CASSOCIAL_DB_NAME", "mydb")
-	t.Setenv("CASSOCIAL_DB_USER", "myuser")
-	t.Setenv("CASSOCIAL_DB_PASSWORD", "secret")
+	t.Setenv("DATABASE_DRIVER", "pgx")
+	t.Setenv("DATABASE_URL", "postgres://user:secret@db.example.com:5432/mydb")
 
 	cfg.loadFromEnv()
 
 	if cfg.Database.Driver != "pgx" {
 		t.Errorf("Database.Driver = %q, want pgx", cfg.Database.Driver)
 	}
-	if cfg.Database.Host != "db.example.com" {
-		t.Errorf("Database.Host = %q, want db.example.com", cfg.Database.Host)
-	}
-	if cfg.Database.Port != 5432 {
-		t.Errorf("Database.Port = %d, want 5432", cfg.Database.Port)
-	}
-	if cfg.Database.Name != "mydb" {
-		t.Errorf("Database.Name = %q, want mydb", cfg.Database.Name)
-	}
-	if cfg.Database.User != "myuser" {
-		t.Errorf("Database.User = %q, want myuser", cfg.Database.User)
-	}
-	if cfg.Database.Password != "secret" {
-		t.Errorf("Database.Password not set correctly")
+	if cfg.Database.URL != "postgres://user:secret@db.example.com:5432/mydb" {
+		t.Errorf("Database.URL not set correctly, got %q", cfg.Database.URL)
 	}
 }
 
@@ -225,26 +313,11 @@ func TestLoadFromEnv_InvalidPort_Ignored(t *testing.T) {
 	}
 
 	originalPort := cfg.Server.Port
-	t.Setenv("CASSOCIAL_PORT", "not-a-number")
+	t.Setenv("PORT", "not-a-number")
 	cfg.loadFromEnv()
 
 	if cfg.Server.Port != originalPort {
 		t.Errorf("Server.Port = %d, want %d (invalid env should be ignored)", cfg.Server.Port, originalPort)
-	}
-}
-
-func TestLoadFromEnv_InvalidDBPort_Ignored(t *testing.T) {
-	cfg := &Config{}
-	if err := cfg.setDefaults(); err != nil {
-		t.Fatalf("setDefaults() failed: %v", err)
-	}
-
-	originalPort := cfg.Database.Port
-	t.Setenv("CASSOCIAL_DB_PORT", "not-a-number")
-	cfg.loadFromEnv()
-
-	if cfg.Database.Port != originalPort {
-		t.Errorf("Database.Port = %d, want %d (invalid env should be ignored)", cfg.Database.Port, originalPort)
 	}
 }
 
@@ -409,8 +482,8 @@ func TestDetermineConfigDir_FlagValue(t *testing.T) {
 }
 
 func TestDetermineConfigDir_EnvVar(t *testing.T) {
-	t.Setenv("CASSOCIAL_CONFIG", "/env/config/dir")
-	t.Setenv("CASSOCIAL_DATA", "")
+	t.Setenv("CONFIG_DIR", "/env/config/dir")
+	t.Setenv("DATA_DIR", "")
 	got := determineConfigDir("")
 	if got != "/env/config/dir" {
 		t.Errorf("determineConfigDir from env = %q, want /env/config/dir", got)
@@ -418,7 +491,7 @@ func TestDetermineConfigDir_EnvVar(t *testing.T) {
 }
 
 func TestDetermineConfigDir_Fallback(t *testing.T) {
-	t.Setenv("CASSOCIAL_CONFIG", "")
+	t.Setenv("CONFIG_DIR", "")
 	got := determineConfigDir("")
 	// Must be non-empty regardless of how the fallback resolves
 	if got == "" {
@@ -434,7 +507,7 @@ func TestDetermineDataDir_FlagValue(t *testing.T) {
 }
 
 func TestDetermineDataDir_EnvVar(t *testing.T) {
-	t.Setenv("CASSOCIAL_DATA", "/env/data/dir")
+	t.Setenv("DATA_DIR", "/env/data/dir")
 	got := determineDataDir("")
 	if got != "/env/data/dir" {
 		t.Errorf("determineDataDir from env = %q, want /env/data/dir", got)
@@ -442,7 +515,7 @@ func TestDetermineDataDir_EnvVar(t *testing.T) {
 }
 
 func TestDetermineDataDir_Fallback(t *testing.T) {
-	t.Setenv("CASSOCIAL_DATA", "")
+	t.Setenv("DATA_DIR", "")
 	got := determineDataDir("")
 	if got == "" {
 		t.Error("determineDataDir() fallback returned empty string")
@@ -457,7 +530,7 @@ func TestDetermineLogDir_FlagValue(t *testing.T) {
 }
 
 func TestDetermineLogDir_EnvVar(t *testing.T) {
-	t.Setenv("CASSOCIAL_LOG", "/env/log/dir")
+	t.Setenv("LOG_DIR", "/env/log/dir")
 	got := determineLogDir("")
 	if got != "/env/log/dir" {
 		t.Errorf("determineLogDir from env = %q, want /env/log/dir", got)
@@ -465,7 +538,7 @@ func TestDetermineLogDir_EnvVar(t *testing.T) {
 }
 
 func TestDetermineLogDir_Fallback(t *testing.T) {
-	t.Setenv("CASSOCIAL_LOG", "")
+	t.Setenv("LOG_DIR", "")
 	got := determineLogDir("")
 	if got == "" {
 		t.Error("determineLogDir() fallback returned empty string")
@@ -509,7 +582,7 @@ func withNonRootEUID(t *testing.T) {
 }
 
 func TestDetermineConfigDir_NonRootFallback(t *testing.T) {
-	t.Setenv("CASSOCIAL_CONFIG", "")
+	t.Setenv("CONFIG_DIR", "")
 	withNonRootEUID(t)
 	got := determineConfigDir("")
 	if got == "" {
@@ -527,7 +600,7 @@ func TestDetermineConfigDir_NonRootFallback(t *testing.T) {
 }
 
 func TestDetermineDataDir_NonRootFallback(t *testing.T) {
-	t.Setenv("CASSOCIAL_DATA", "")
+	t.Setenv("DATA_DIR", "")
 	withNonRootEUID(t)
 	got := determineDataDir("")
 	if got == "" {
@@ -543,7 +616,7 @@ func TestDetermineDataDir_NonRootFallback(t *testing.T) {
 }
 
 func TestDetermineLogDir_NonRootFallback(t *testing.T) {
-	t.Setenv("CASSOCIAL_LOG", "")
+	t.Setenv("LOG_DIR", "")
 	withNonRootEUID(t)
 	got := determineLogDir("")
 	if got == "" {
@@ -601,7 +674,7 @@ logging:
 	}
 
 	// Clear env overrides
-	for _, env := range []string{"CASSOCIAL_ADDRESS", "CASSOCIAL_PORT", "CASSOCIAL_MODE", "CASSOCIAL_DEBUG", "CASSOCIAL_DB_DRIVER", "CASSOCIAL_DB_HOST", "CASSOCIAL_DB_PORT", "CASSOCIAL_DB_NAME", "CASSOCIAL_DB_USER", "CASSOCIAL_DB_PASSWORD"} {
+	for _, env := range []string{"LISTEN", "PORT", "MODE", "DEBUG", "DATABASE_DRIVER", "DATABASE_URL"} {
 		t.Setenv(env, "")
 	}
 
@@ -623,7 +696,7 @@ func TestLoad_EnvOverridesFile(t *testing.T) {
 	dataDir := filepath.Join(tmp, "data")
 	logDir := filepath.Join(tmp, "logs")
 
-	for _, env := range []string{"CASSOCIAL_ADDRESS", "CASSOCIAL_PORT", "CASSOCIAL_MODE", "CASSOCIAL_DEBUG", "CASSOCIAL_DB_DRIVER", "CASSOCIAL_DB_HOST", "CASSOCIAL_DB_PORT", "CASSOCIAL_DB_NAME", "CASSOCIAL_DB_USER", "CASSOCIAL_DB_PASSWORD"} {
+	for _, env := range []string{"LISTEN", "PORT", "MODE", "DEBUG", "DATABASE_DRIVER", "DATABASE_URL"} {
 		t.Setenv(env, "")
 	}
 
@@ -634,8 +707,8 @@ func TestLoad_EnvOverridesFile(t *testing.T) {
 	}
 
 	// Now set env override and reload
-	t.Setenv("CASSOCIAL_ADDRESS", "10.1.2.3")
-	t.Setenv("CASSOCIAL_PORT", "9999")
+	t.Setenv("LISTEN", "10.1.2.3")
+	t.Setenv("PORT", "9999")
 
 	cfg, err := Load(configDir, dataDir, logDir)
 	if err != nil {
@@ -680,7 +753,7 @@ func TestDetermineConfigDir_PortableMode(t *testing.T) {
 	if err := os.Mkdir(tmp+"/config", 0755); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	t.Setenv("CASSOCIAL_CONFIG", "")
+	t.Setenv("CONFIG_DIR", "")
 	got := determineConfigDir("")
 	if got != "./config" {
 		t.Errorf("determineConfigDir portable mode = %q, want ./config", got)
@@ -692,7 +765,7 @@ func TestDetermineDataDir_PortableMode(t *testing.T) {
 	if err := os.Mkdir(tmp+"/data", 0755); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	t.Setenv("CASSOCIAL_DATA", "")
+	t.Setenv("DATA_DIR", "")
 	got := determineDataDir("")
 	if got != "./data" {
 		t.Errorf("determineDataDir portable mode = %q, want ./data", got)
@@ -704,7 +777,7 @@ func TestDetermineLogDir_PortableMode(t *testing.T) {
 	if err := os.Mkdir(tmp+"/logs", 0755); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	t.Setenv("CASSOCIAL_LOG", "")
+	t.Setenv("LOG_DIR", "")
 	got := determineLogDir("")
 	if got != "./logs" {
 		t.Errorf("determineLogDir portable mode = %q, want ./logs", got)
@@ -851,13 +924,12 @@ func TestLoad_ValidateFails_ReturnsError(t *testing.T) {
 
 	// Clear all env overrides first, then set an invalid port.
 	for _, env := range []string{
-		"CASSOCIAL_ADDRESS", "CASSOCIAL_MODE", "CASSOCIAL_DEBUG",
-		"CASSOCIAL_DB_DRIVER", "CASSOCIAL_DB_HOST", "CASSOCIAL_DB_PORT",
-		"CASSOCIAL_DB_NAME", "CASSOCIAL_DB_USER", "CASSOCIAL_DB_PASSWORD",
+		"LISTEN", "MODE", "DEBUG",
+		"DATABASE_DRIVER", "DATABASE_URL",
 	} {
 		t.Setenv(env, "")
 	}
-	t.Setenv("CASSOCIAL_PORT", "99999") // invalid port — triggers Validate error
+	t.Setenv("PORT", "99999") // invalid port — triggers Validate error
 
 	_, err := Load(configDir, dataDir, logDir)
 	if err == nil {
@@ -873,9 +945,9 @@ func TestLoadDefaults(t *testing.T) {
 
 	// Clear any environment overrides that could interfere
 	for _, env := range []string{
-		"CASSOCIAL_CONFIG", "CASSOCIAL_DATA", "CASSOCIAL_LOG",
-		"CASSOCIAL_ADDRESS", "CASSOCIAL_PORT", "CASSOCIAL_MODE",
-		"CASSOCIAL_DB_DRIVER",
+		"CONFIG_DIR", "DATA_DIR", "LOG_DIR",
+		"LISTEN", "PORT", "MODE",
+		"DATABASE_DRIVER",
 	} {
 		t.Setenv(env, "")
 	}
