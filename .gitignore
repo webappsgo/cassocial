@@ -105,6 +105,11 @@ $RECYCLE.BIN/
 # Build output
 binaries/
 releases/
+# Stray dev binaries built into the repo root (must never be committed)
+/client
+/cassocial
+/cassocial-cli
+/cassocial-agent
 
 # Runtime volume data (NEVER commit; docker/rootfs/ is the build-time overlay — tracked)
 rootfs/
