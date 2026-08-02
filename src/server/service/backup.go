@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/casapps/cassocial/src/config"
@@ -134,8 +135,20 @@ func (s *BackupService) RestoreBackup(backupFilename string) error {
 			return fmt.Errorf("failed to read tar: %w", err)
 		}
 
-		// Determine target path
+		// Reject symlinks/hardlinks outright - they can point outside DataDir
+		// regardless of what the target path check below allows.
+		if header.Typeflag == tar.TypeSymlink || header.Typeflag == tar.TypeLink {
+			return fmt.Errorf("refusing to restore backup: %q is a link entry", header.Name)
+		}
+
+		// Determine target path and verify it stays within DataDir - reject
+		// any entry whose cleaned path escapes via ".." or an absolute path
+		// (Zip-Slip / path traversal).
 		target := filepath.Join(s.config.DataDir, header.Name)
+		rel, err := filepath.Rel(s.config.DataDir, target)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("refusing to restore backup: %q escapes data directory", header.Name)
+		}
 
 		// Ensure parent directory exists
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
