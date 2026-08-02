@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/casapps/cassocial/src/config"
+	"github.com/casapps/cassocial/src/scheduler"
 	"github.com/casapps/cassocial/src/server/store"
 )
 
@@ -23,6 +24,8 @@ type Server struct {
 	httpServer     *http.Server
 	isShuttingDown bool
 	startTime      time.Time
+	scheduler      *scheduler.Scheduler
+	tor            *TorService
 }
 
 // New creates a new server instance. The caller is responsible for building the
@@ -32,6 +35,8 @@ func New(cfg *config.Config, db *store.DB, h http.Handler) (*Server, error) {
 		config:    cfg,
 		db:        db,
 		startTime: time.Now(),
+		scheduler: scheduler.New(),
+		tor:       NewTorService(cfg.DataDir),
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.Port)
@@ -49,6 +54,20 @@ func New(cfg *config.Config, db *store.DB, h http.Handler) (*Server, error) {
 // Start starts the HTTP server with graceful shutdown
 func (s *Server) Start() error {
 	log.Printf("Starting Cassocial on %s", s.httpServer.Addr)
+
+	// Register and start the built-in scheduler (AI.md PART 19 - the ONLY
+	// mechanism for background tasks; no external cron under any circumstance).
+	tasks := scheduler.NewTasks(s.config, s.db)
+	if err := tasks.RegisterAllTasks(s.scheduler); err != nil {
+		return fmt.Errorf("failed to register scheduled tasks: %w", err)
+	}
+	s.scheduler.Start()
+
+	// Auto-enable the Tor hidden service if the tor binary is present
+	// (AI.md PART 32 - no enable/disable toggle, app owns the process lifecycle).
+	if err := s.tor.Start(); err != nil {
+		log.Printf("Warning: failed to start Tor hidden service: %v", err)
+	}
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -77,6 +96,13 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
 	s.isShuttingDown = true
+
+	// Stop background services before the HTTP server so in-flight scheduled
+	// work and the Tor process wind down cleanly ahead of the listener.
+	s.scheduler.Stop()
+	if err := s.tor.Stop(); err != nil {
+		log.Printf("Warning: error stopping Tor hidden service: %v", err)
+	}
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
