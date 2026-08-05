@@ -53,17 +53,29 @@ to it).
 
 ## 4. ImportService (Linktree/Linkstack/Carrd/CSV/JSON import) unreachable
 
-`src/server/service/import_service.go` implements `ImportService` with
-`ImportData`, `GetImportJob`, and per-source importers (Linktree,
-Linkstack, Carrd, about.me, CSV, JSON) but `NewImportService` is never
-called and no route in `src/server/handler/router.go` reaches it. The
-`AdminHandlers.ImportServices` handler is an unrelated admin-config-import
-feature, not this one.
+Backend wiring done: `ImportExportHandler.HandleImport`/`HandleImportStatus`
+now delegate to `service.ImportService` (`ImportData`, `GetImportJob`) and
+are registered in `router.go` under `/api/profiles/import` (POST to submit,
+GET with `?job_id=` to poll status — a path-segment job ID conflicts with
+the existing `GET /api/profiles/{id}/qr` pattern under Go 1.22 ServeMux
+route-conflict detection, so status polling uses a query param instead,
+matching `HandleExport`'s `?profile_id=` convention). Covered by
+`import_export_test.go` (`TestHandleImport` per-source subtests,
+`TestHandleImportStatus`).
 
-Needs deciding: the route path under PART 14's `/users/*` scope (e.g.
-`/api/{api_version}/users/import`) plus a matching frontend route/page
-(PART 16 CRUD-parity rule), and how job status polling
-(`GetImportJob`) should be exposed.
+Still open: no frontend page for import exists yet. `DashboardHandler`
+(`dashboard.go`) is itself still all hardcoded/stub JSON responses with no
+routes registered in `router.go` for any of its methods (`HandleDashboard`,
+`HandleProfileList`, `HandleProfileCreate`, `HandleProfileEdit`,
+`HandleAnalyticsOverview`, `HandleAccountSettings`, `HandleNotifications`,
+`HandleRecentActivity`) — a real import UI belongs in that same dashboard
+surface once it's backed by real data, not bolted on ahead of it. Needs
+deciding: whether to wire the dashboard's real routes/data first (separate,
+larger task) before adding an import form, or add a minimal standalone
+import form now; and the no-JS-required submission target given the API is
+JSON-body-only (a plain HTML form posts urlencoded/multipart, so either the
+API needs to accept form-encoded bodies too, or a frontend-owned handler
+translates form fields to the `ImportRequest` JSON shape server-side).
 
 ## 5. `docker/Dockerfile` builder stage violates PART 27 (found by go-lint)
 

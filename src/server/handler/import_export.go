@@ -32,7 +32,20 @@ type ImportRequest struct {
 	Data   json.RawMessage `json:"data"`
 }
 
-// HandleImport handles importing from various sources
+// newImportService builds an ImportService wired to the same DB-backed
+// profile/link services HandleExport already uses.
+func (h *ImportExportHandler) newImportService() *service.ImportService {
+	return service.NewImportService(
+		h.db,
+		service.NewProfileService(h.db),
+		service.NewLinkService(h.db),
+	)
+}
+
+// HandleImport handles importing from various sources, delegating the actual
+// parsing/profile-creation work to service.ImportService so every supported
+// source (linktree, linkstack, carrd, aboutme, csv, json) genuinely creates a
+// profile and links rather than reporting a fake success count.
 func (h *ImportExportHandler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -51,38 +64,73 @@ func (h *ImportExportHandler) HandleImport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var imported int
-	var err error
-
-	switch req.Source {
-	case "linktree":
-		imported, err = h.importFromLinktree(userID, req.Data)
-	case "linkstack":
-		imported, err = h.importFromLinkstack(userID, req.Data)
-	case "carrd":
-		imported, err = h.importFromCarrd(userID, req.Data)
-	case "aboutme":
-		imported, err = h.importFromAboutMe(userID, req.Data)
-	case "csv":
-		imported, err = h.importFromCSV(userID, req.Data)
-	case "json":
-		imported, err = h.importFromJSON(userID, req.Data)
-	default:
-		h.renderError(w, http.StatusBadRequest, "Unsupported import source")
-		return
+	// CSV import is plain text, not a JSON object. The client sends it as a
+	// JSON string in the "data" field; every other source's data is already
+	// a well-formed JSON object/array and passes through unchanged.
+	importData := []byte(req.Data)
+	if req.Source == "csv" {
+		var csvText string
+		if err := json.Unmarshal(req.Data, &csvText); err != nil {
+			h.renderError(w, http.StatusBadRequest, "CSV data must be a JSON string")
+			return
+		}
+		importData = []byte(csvText)
 	}
 
+	importService := h.newImportService()
+
+	jobID, err := importService.ImportData(userID, req.Source, importData)
 	if err != nil {
+		if errors.Is(err, service.ErrUnsupportedImportSource) {
+			h.renderError(w, http.StatusBadRequest, "Unsupported import source")
+			return
+		}
 		h.renderError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	job, err := importService.GetImportJob(jobID)
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, "Failed to load import result")
+		return
+	}
+
 	h.renderJSON(w, http.StatusOK, map[string]interface{}{
-		"status":   "success",
-		"message":  "Import completed successfully",
-		"imported": imported,
-		"source":   req.Source,
+		"status":  "success",
+		"message": "Import completed successfully",
+		"job_id":  jobID,
+		"source":  req.Source,
+		"result":  job["result"],
 	})
+}
+
+// HandleImportStatus returns the status/result of a previously submitted
+// import job, scoped to the requesting user.
+func (h *ImportExportHandler) HandleImportStatus(w http.ResponseWriter, r *http.Request) {
+	userID, ok := server.GetUserIDFromContext(r.Context())
+	if !ok {
+		h.renderError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	jobID := r.URL.Query().Get("job_id")
+	if jobID == "" {
+		h.renderError(w, http.StatusBadRequest, "Job ID required")
+		return
+	}
+
+	job, err := h.newImportService().GetImportJob(jobID)
+	if err != nil {
+		h.renderError(w, http.StatusNotFound, "Import job not found")
+		return
+	}
+
+	if job["user_id"] != userID {
+		h.renderError(w, http.StatusForbidden, "Access denied")
+		return
+	}
+
+	h.renderJSON(w, http.StatusOK, job)
 }
 
 // HandleExport handles exporting profile data. It delegates to ExportService,
@@ -143,59 +191,6 @@ func exportContentType(format string) string {
 	default:
 		return "application/octet-stream"
 	}
-}
-
-// Import implementations
-
-func (h *ImportExportHandler) importFromLinktree(userID string, data json.RawMessage) (int, error) {
-	_ = userID
-	_ = data
-	return 0, nil
-}
-
-func (h *ImportExportHandler) importFromLinkstack(userID string, data json.RawMessage) (int, error) {
-	_ = userID
-	_ = data
-	return 0, nil
-}
-
-func (h *ImportExportHandler) importFromCarrd(userID string, data json.RawMessage) (int, error) {
-	_ = userID
-	_ = data
-	return 0, nil
-}
-
-func (h *ImportExportHandler) importFromAboutMe(userID string, data json.RawMessage) (int, error) {
-	_ = userID
-	_ = data
-	return 0, nil
-}
-
-func (h *ImportExportHandler) importFromCSV(userID string, data json.RawMessage) (int, error) {
-	_ = userID
-	_ = data
-	return 0, nil
-}
-
-func (h *ImportExportHandler) importFromJSON(userID string, data json.RawMessage) (int, error) {
-	_ = userID
-	var importData struct {
-		Profile struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-		} `json:"profile"`
-		Links []struct {
-			Service string `json:"service"`
-			URL     string `json:"url"`
-			Title   string `json:"title"`
-		} `json:"links"`
-	}
-
-	if err := json.Unmarshal(data, &importData); err != nil {
-		return 0, err
-	}
-
-	return len(importData.Links), nil
 }
 
 // generateGraphiQLHTML generates a self-contained GraphQL playground without CDN dependencies

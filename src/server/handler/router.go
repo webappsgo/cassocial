@@ -15,22 +15,23 @@ import (
 
 // Router handles HTTP routing for the application
 type Router struct {
-	mux               *http.ServeMux
-	middleware        *Middleware
-	db                *store.DB
-	cfg               *config.Config
-	authHandlers      *AuthHandlers
-	profileHandlers   *ProfileHandlers
-	linkHandlers      *LinkHandlers
-	serviceHandlers   *ServiceHandlers
-	analyticsHandlers *AnalyticsHandlers
-	adminHandlers     *AdminHandlers
-	publicHandlers    *PublicHandlers
-	setupHandler      *SetupHandler
-	shortlinkHandler  *ShortlinkHandler
-	i18n              *server.I18N
-	startTime         time.Time
-	routes            []string
+	mux                  *http.ServeMux
+	middleware           *Middleware
+	db                   *store.DB
+	cfg                  *config.Config
+	authHandlers         *AuthHandlers
+	profileHandlers      *ProfileHandlers
+	linkHandlers         *LinkHandlers
+	importExportHandlers *ImportExportHandler
+	serviceHandlers      *ServiceHandlers
+	analyticsHandlers    *AnalyticsHandlers
+	adminHandlers        *AdminHandlers
+	publicHandlers       *PublicHandlers
+	setupHandler         *SetupHandler
+	shortlinkHandler     *ShortlinkHandler
+	i18n                 *server.I18N
+	startTime            time.Time
+	routes               []string
 }
 
 // hf registers a pattern+handler function on the mux and records the pattern
@@ -63,21 +64,22 @@ func NewRouter(db *store.DB, authService *Auth, cfg *config.Config, lang string)
 	mailer := server.NewMailerFromSettings(db, cfg.Cassocial.SiteName, siteURL)
 
 	rt := &Router{
-		mux:               mux,
-		middleware:        middleware,
-		db:                db,
-		cfg:               cfg,
-		authHandlers:      NewAuthHandlers(authService, db, mailer, siteURL),
-		profileHandlers:   NewProfileHandlers(db),
-		linkHandlers:      NewLinkHandlers(db),
-		serviceHandlers:   NewServiceHandlers(db),
-		analyticsHandlers: NewAnalyticsHandlers(db),
-		adminHandlers:     NewAdminHandlers(db, authService),
-		publicHandlers:    NewPublicHandlers(db),
-		setupHandler:      NewSetupHandler(cfg, db),
-		shortlinkHandler:  NewShortlinkHandler(cfg, db),
-		i18n:              server.NewI18N(cfg.ConfigDir, lang),
-		startTime:         time.Now(),
+		mux:                  mux,
+		middleware:           middleware,
+		db:                   db,
+		cfg:                  cfg,
+		authHandlers:         NewAuthHandlers(authService, db, mailer, siteURL),
+		profileHandlers:      NewProfileHandlers(db),
+		linkHandlers:         NewLinkHandlers(db),
+		importExportHandlers: NewImportExportHandler(cfg, db),
+		serviceHandlers:      NewServiceHandlers(db),
+		analyticsHandlers:    NewAnalyticsHandlers(db),
+		adminHandlers:        NewAdminHandlers(db, authService),
+		publicHandlers:       NewPublicHandlers(db),
+		setupHandler:         NewSetupHandler(cfg, db),
+		shortlinkHandler:     NewShortlinkHandler(cfg, db),
+		i18n:                 server.NewI18N(cfg.ConfigDir, lang),
+		startTime:            time.Now(),
 	}
 
 	if err := initTemplates(); err != nil {
@@ -177,6 +179,17 @@ func (rt *Router) SetupRoutes() http.Handler {
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.ListLinks)))
 		rt.h("POST "+prefix+"/{id}/links",
 			rt.middleware.RequireAuth(http.HandlerFunc(rt.linkHandlers.CreateLink)))
+		rt.h("POST "+prefix+"/import",
+			rt.middleware.RequireAuth(http.HandlerFunc(rt.importExportHandlers.HandleImport)))
+		// Job status uses a query param (?job_id=) rather than a path segment:
+		// a path-segment pattern here (e.g. "/import/{job_id}") is ambiguous
+		// with the existing "/{id}/qr" pattern under Go 1.22 ServeMux, since
+		// both are literal/wildcard pairs at the same depth that can match the
+		// same concrete path (e.g. "/import/qr").
+		rt.h("GET "+prefix+"/import",
+			rt.middleware.RequireAuth(http.HandlerFunc(rt.importExportHandlers.HandleImportStatus)))
+		rt.h("GET "+prefix+"/export",
+			rt.middleware.RequireAuth(http.HandlerFunc(rt.importExportHandlers.HandleExport)))
 	}
 
 	// ── Links (/api/links AND /api/v1/links) ──────────────────────────────────

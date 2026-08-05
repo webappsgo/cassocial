@@ -81,29 +81,70 @@ func TestHandleImport(t *testing.T) {
 		}
 	})
 
+	// mustJSONString wraps a plain string (used for the CSV source, which is
+	// plain text rather than a JSON object) as a JSON string literal so it
+	// round-trips correctly through the ImportRequest.Data json.RawMessage field.
+	mustJSONString := func(s string) json.RawMessage {
+		b, err := json.Marshal(s)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		return json.RawMessage(b)
+	}
+
 	sources := []struct {
-		source string
-		data   json.RawMessage
+		source       string
+		data         json.RawMessage
+		wantMinLinks int
 	}{
-		{"linktree", json.RawMessage(`{}`)},
-		{"linkstack", json.RawMessage(`{}`)},
-		{"carrd", json.RawMessage(`{}`)},
-		{"aboutme", json.RawMessage(`{}`)},
-		{"csv", json.RawMessage(`{}`)},
-		{"json", json.RawMessage(`{"profile":{"title":"T","description":"D"},"links":[]}`)},
+		{
+			source: "linktree",
+			data: json.RawMessage(`{"accountData":{"username":"linktreeuser","displayName":"LT User","bio":"bio"},` +
+				`"links":[{"title":"GH","url":"https://github.com/linktreeuser"}]}`),
+			wantMinLinks: 1,
+		},
+		{
+			source: "linkstack",
+			data: json.RawMessage(`{"profile":{"username":"linkstackuser","name":"LS User","bio":"bio"},` +
+				`"links":[{"title":"GH","url":"https://github.com/linkstackuser","order":1}]}`),
+			wantMinLinks: 1,
+		},
+		{
+			source:       "carrd",
+			data:         json.RawMessage(`{"title":"Carrd User","bio":"bio","links":["https://github.com/carrduser"]}`),
+			wantMinLinks: 1,
+		},
+		{
+			source: "aboutme",
+			data: json.RawMessage(`{"username":"aboutmeuser","name":"AM User","headline":"bio",` +
+				`"links":[{"label":"GH","url":"https://github.com/aboutmeuser"}]}`),
+			wantMinLinks: 1,
+		},
+		{
+			source:       "csv",
+			data:         mustJSONString("title,url\nGitHub,https://github.com/csvuser\n"),
+			wantMinLinks: 1,
+		},
+		{
+			source: "json",
+			data: json.RawMessage(`{"profile":{"slug":"jsonimportuser","display_name":"JSON User"},` +
+				`"links":[{"title":"GH","url":"https://github.com/jsonuser"}]}`),
+			wantMinLinks: 1,
+		},
 	}
 
 	for _, s := range sources {
 		s := s
 		t.Run("source="+s.source+" returns 200", func(t *testing.T) {
+			sourceUserID := createTestUser(t, db, "importuser-"+s.source, s.source+"@example.com")
 			body, _ := json.Marshal(ImportRequest{Source: s.source, Data: s.data})
 			req := httptest.NewRequest(http.MethodPost, "/api/import", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			req = withUserID(req, userID)
+			req = withUserID(req, sourceUserID)
 			rr := httptest.NewRecorder()
 			h.HandleImport(rr, req)
 			if rr.Code != http.StatusOK {
-				t.Errorf("source=%s got %d, want %d; body: %s", s.source, rr.Code, http.StatusOK, rr.Body.String())
+				t.Fatalf("source=%s got %d, want %d; body: %s", s.source, rr.Code, http.StatusOK, rr.Body.String())
 			}
 			var resp map[string]interface{}
 			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
@@ -112,85 +153,105 @@ func TestHandleImport(t *testing.T) {
 			if resp["status"] != "success" {
 				t.Errorf("source=%s status = %q, want success", s.source, resp["status"])
 			}
+			if resp["job_id"] == "" || resp["job_id"] == nil {
+				t.Errorf("source=%s: missing job_id in response", s.source)
+			}
+			result, ok := resp["result"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("source=%s: missing result object; got %v", s.source, resp)
+			}
+			if _, ok := result["profile_id"]; !ok {
+				t.Errorf("source=%s: result missing profile_id", s.source)
+			}
+			linksImported, _ := result["links_imported"].(float64)
+			if int(linksImported) < s.wantMinLinks {
+				t.Errorf("source=%s: links_imported = %v, want >= %d", s.source, result["links_imported"], s.wantMinLinks)
+			}
 		})
 	}
 }
 
-// TestImportFromJSON verifies link count is returned correctly.
-func TestImportFromJSON(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
+// TestHandleImportStatus covers job-status polling: missing job ID, missing
+// auth, unknown job, non-owner access, and a successful owner lookup.
+func TestHandleImportStatus(t *testing.T) {
+	h, db := newTestImportExportHandler(t)
+	userID := createTestUser(t, db, "importstatususer", "importstatus@example.com")
+	otherID := createTestUser(t, db, "importstatusother", "importstatusother@example.com")
 
-	t.Run("valid JSON with links counts them", func(t *testing.T) {
-		data := json.RawMessage(`{
-			"profile":{"title":"T","description":"D"},
-			"links":[
-				{"service":"github","url":"https://github.com/u","title":"GitHub"},
-				{"service":"twitter","url":"https://twitter.com/u","title":"Twitter"}
-			]
-		}`)
-		n, err := h.importFromJSON("user-1", data)
-		if err != nil {
-			t.Fatalf("importFromJSON returned error: %v", err)
-		}
-		if n != 2 {
-			t.Errorf("imported = %d, want 2", n)
+	body, _ := json.Marshal(ImportRequest{
+		Source: "json",
+		Data: json.RawMessage(`{"profile":{"slug":"statususer","display_name":"Status User"},` +
+			`"links":[]}`),
+	})
+	importReq := httptest.NewRequest(http.MethodPost, "/api/import", bytes.NewReader(body))
+	importReq.Header.Set("Content-Type", "application/json")
+	importReq = withUserID(importReq, userID)
+	importRR := httptest.NewRecorder()
+	h.HandleImport(importRR, importReq)
+	if importRR.Code != http.StatusOK {
+		t.Fatalf("setup HandleImport returned %d, want %d; body: %s",
+			importRR.Code, http.StatusOK, importRR.Body.String())
+	}
+	var importResp map[string]interface{}
+	if err := json.NewDecoder(importRR.Body).Decode(&importResp); err != nil {
+		t.Fatalf("failed to decode setup import response: %v", err)
+	}
+	jobID, _ := importResp["job_id"].(string)
+	if jobID == "" {
+		t.Fatal("setup import response missing job_id")
+	}
+
+	t.Run("missing job_id returns 400", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/api/import", nil), userID)
+		rr := httptest.NewRecorder()
+		h.HandleImportStatus(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusBadRequest)
 		}
 	})
 
-	t.Run("empty links returns 0", func(t *testing.T) {
-		data := json.RawMessage(`{"profile":{},"links":[]}`)
-		n, err := h.importFromJSON("user-1", data)
-		if err != nil {
-			t.Fatalf("importFromJSON returned error: %v", err)
-		}
-		if n != 0 {
-			t.Errorf("imported = %d, want 0", n)
+	t.Run("missing auth returns 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/import?job_id="+jobID, nil)
+		rr := httptest.NewRecorder()
+		h.HandleImportStatus(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusUnauthorized)
 		}
 	})
 
-	t.Run("invalid JSON returns error", func(t *testing.T) {
-		data := json.RawMessage(`{bad json}`)
-		_, err := h.importFromJSON("user-1", data)
-		if err == nil {
-			t.Error("expected error for invalid JSON, got nil")
+	t.Run("unknown job returns 404", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/api/import?job_id=nope", nil), userID)
+		rr := httptest.NewRecorder()
+		h.HandleImportStatus(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusNotFound)
 		}
 	})
-}
 
-// TestImportFromLinktree verifies it accepts any data without error.
-func TestImportFromLinktree(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-	n, err := h.importFromLinktree("user-1", json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("importFromLinktree returned error: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("imported = %d, want 0", n)
-	}
-}
+	t.Run("non-owner returns 403", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/api/import?job_id="+jobID, nil), otherID)
+		rr := httptest.NewRecorder()
+		h.HandleImportStatus(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("got %d, want %d", rr.Code, http.StatusForbidden)
+		}
+	})
 
-// TestImportFromLinkstack verifies it accepts any data without error.
-func TestImportFromLinkstack(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-	n, err := h.importFromLinkstack("user-1", json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("importFromLinkstack returned error: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("imported = %d, want 0", n)
-	}
-}
-
-// TestImportFromCSV verifies it accepts any data without error.
-func TestImportFromCSV(t *testing.T) {
-	h, _ := newTestImportExportHandler(t)
-	n, err := h.importFromCSV("user-1", json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("importFromCSV returned error: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("imported = %d, want 0", n)
-	}
+	t.Run("owner sees completed job", func(t *testing.T) {
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/api/import?job_id="+jobID, nil), userID)
+		rr := httptest.NewRecorder()
+		h.HandleImportStatus(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("got %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var job map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&job); err != nil {
+			t.Fatalf("job response not valid JSON: %v", err)
+		}
+		if job["status"] != "completed" {
+			t.Errorf("job status = %v, want completed", job["status"])
+		}
+	})
 }
 
 // TestHandleExport covers input validation, auth, ownership, and every real
