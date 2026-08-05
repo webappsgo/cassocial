@@ -55,12 +55,19 @@ func NewRouter(db *store.DB, authService *Auth, cfg *config.Config, lang string)
 	mux := http.NewServeMux()
 	middleware := server.NewMiddleware(authService)
 
+	siteURL, err := db.GetSetting("site_url")
+	if err != nil || siteURL == "" {
+		siteURL = "https://" + cfg.Server.FQDN
+	}
+	siteURL = strings.TrimRight(siteURL, "/")
+	mailer := server.NewMailerFromSettings(db, cfg.Cassocial.SiteName, siteURL)
+
 	rt := &Router{
 		mux:               mux,
 		middleware:        middleware,
 		db:                db,
 		cfg:               cfg,
-		authHandlers:      NewAuthHandlers(authService, db),
+		authHandlers:      NewAuthHandlers(authService, db, mailer, siteURL),
 		profileHandlers:   NewProfileHandlers(db),
 		linkHandlers:      NewLinkHandlers(db),
 		serviceHandlers:   NewServiceHandlers(db),

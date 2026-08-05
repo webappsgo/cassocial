@@ -2,23 +2,32 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
+	"github.com/casapps/cassocial/src/service"
 )
 
 // AuthHandlers handles authentication-related HTTP requests
 type AuthHandlers struct {
-	auth *Auth
-	db   *store.DB
+	auth    *Auth
+	db      *store.DB
+	mailer  *service.Mailer
+	siteURL string
 }
 
-// NewAuthHandlers creates a new AuthHandlers instance
-func NewAuthHandlers(authService *Auth, db *store.DB) *AuthHandlers {
+// NewAuthHandlers creates a new AuthHandlers instance. mailer may be a
+// disabled Mailer (IsEnabled() == false) when SMTP is not configured — per
+// AI.md PART 18, callers must never attempt to send in that case; every
+// send call below is already guarded by mailer.IsEnabled().
+func NewAuthHandlers(authService *Auth, db *store.DB, mailer *service.Mailer, siteURL string) *AuthHandlers {
 	return &AuthHandlers{
-		auth: authService,
-		db:   db,
+		auth:    authService,
+		db:      db,
+		mailer:  mailer,
+		siteURL: siteURL,
 	}
 }
 
@@ -100,6 +109,24 @@ func (h *AuthHandlers) Register(w http.ResponseWriter, r *http.Request) {
 	var token string
 	if user.CanLogin() {
 		token, _ = h.auth.GenerateToken(user)
+	}
+
+	// Send the welcome email (with an email-verification link when the new
+	// user isn't already auto-verified). Per AI.md PART 18, no SMTP means no
+	// email is attempted at all — mailer.IsEnabled() already reflects a live
+	// connection test performed once at startup.
+	if h.mailer.IsEnabled() {
+		verificationURL := ""
+		if !user.EmailVerified {
+			if vToken, terr := h.auth.GenerateEmailVerificationToken(user.ID); terr == nil {
+				verificationURL = h.siteURL + "/api/v1/auth/verify-email/" + vToken
+			} else {
+				log.Printf("failed to generate email verification token for %s: %v", user.Email, terr)
+			}
+		}
+		if err := h.mailer.SendWelcome(user.Email, user.Username, verificationURL); err != nil {
+			log.Printf("failed to send welcome email to %s: %v", user.Email, err)
+		}
 	}
 
 	respondJSON(w, http.StatusCreated, map[string]interface{}{
@@ -212,9 +239,16 @@ func (h *AuthHandlers) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per AI.md PART 18: with no working SMTP, password reset is a hidden/
+	// disabled feature — never attempt to generate or send a reset link.
+	if !h.mailer.IsEnabled() {
+		respondError(w, http.StatusServiceUnavailable, "password reset is unavailable: contact the administrator")
+		return
+	}
+
 	// Generate password reset token
 	token, err := h.auth.RequestPasswordReset(req.Email)
-	if err != nil {
+	if err != nil || token == "" {
 		// Don't reveal if email exists or not
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"message": "if the email exists, a password reset link has been sent",
@@ -222,7 +256,12 @@ func (h *AuthHandlers) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = token
+	if user, uerr := h.auth.GetUserByEmail(req.Email); uerr == nil {
+		resetURL := h.siteURL + "/reset-password?token=" + token
+		if serr := h.mailer.SendPasswordReset(user.Email, user.Username, resetURL); serr != nil {
+			log.Printf("failed to send password reset email to %s: %v", user.Email, serr)
+		}
+	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "password reset link has been sent to your email",
@@ -238,6 +277,10 @@ func (h *AuthHandlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the user before the token is consumed, so a confirmation email
+	// can be sent after a successful reset.
+	userID, _ := h.auth.ValidatePasswordResetToken(req.Token)
+
 	// Reset password
 	err := h.auth.ResetPassword(req.Token, req.Password)
 	if err != nil {
@@ -250,6 +293,16 @@ func (h *AuthHandlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "failed to reset password")
 		}
 		return
+	}
+
+	if h.mailer.IsEnabled() && userID != "" {
+		if user, uerr := h.auth.GetUserByID(userID); uerr == nil {
+			if serr := h.mailer.SendNotification(user.Email, user.Username,
+				"Your Password Was Changed", "Your password was just changed. If this wasn't you, contact the administrator immediately.",
+				"warning", 1); serr != nil {
+				log.Printf("failed to send password-changed email to %s: %v", user.Email, serr)
+			}
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -281,6 +334,21 @@ func (h *AuthHandlers) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "email verified successfully",
 	})
+}
+
+// sendTwoFactorStateEmail notifies the user of a 2FA state change. Errors are
+// logged, never returned — 2FA enable/disable must not fail on email issues.
+func (h *AuthHandlers) sendTwoFactorStateEmail(userID, title, message string) {
+	if !h.mailer.IsEnabled() {
+		return
+	}
+	user, err := h.auth.GetUserByID(userID)
+	if err != nil {
+		return
+	}
+	if err := h.mailer.SendNotification(user.Email, user.Username, title, message, "warning", 1); err != nil {
+		log.Printf("failed to send 2FA state-change email to %s: %v", user.Email, err)
+	}
 }
 
 // Enable2FA handles enabling 2FA for the authenticated user
@@ -340,6 +408,9 @@ func (h *AuthHandlers) Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.sendTwoFactorStateEmail(userID, "Two-Factor Authentication Enabled",
+		"Two-factor authentication was just enabled on your account. If this wasn't you, contact the administrator immediately.")
+
 	// backup_codes are shown to the user exactly once
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message":      "2FA enabled successfully",
@@ -382,6 +453,9 @@ func (h *AuthHandlers) Disable2FA(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "failed to disable 2FA")
 		return
 	}
+
+	h.sendTwoFactorStateEmail(userID, "Two-Factor Authentication Disabled",
+		"Two-factor authentication was just removed from your account. If this wasn't you, contact the administrator immediately.")
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "2FA disabled successfully",

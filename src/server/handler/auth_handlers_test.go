@@ -9,6 +9,7 @@ import (
 
 	"github.com/casapps/cassocial/src/server"
 	"github.com/casapps/cassocial/src/server/store"
+	"github.com/casapps/cassocial/src/service"
 )
 
 // newTestAuthHandlers creates an AuthHandlers backed by an in-memory SQLite database.
@@ -26,7 +27,31 @@ func newTestAuthHandlers(t *testing.T) *AuthHandlers {
 	}
 
 	authService := server.NewAuth(db, "test-jwt-secret-for-tests")
-	return NewAuthHandlers(authService, db)
+	mailer, err := service.NewMailer(nil, "Test App", "https://test.example")
+	if err != nil {
+		t.Fatalf("service.NewMailer returned error: %v", err)
+	}
+	return NewAuthHandlers(authService, db, mailer, "https://test.example")
+}
+
+// newTestAuthHandlersEnabled creates an AuthHandlers backed by an in-memory
+// SQLite database, with a Mailer that reports IsEnabled() == true — for
+// tests exercising the SMTP-configured code path (see newEnabledTestMailer).
+func newTestAuthHandlersEnabled(t *testing.T) *AuthHandlers {
+	t.Helper()
+
+	db, err := store.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("store.Connect returned error: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	if err := db.RunMigrations(); err != nil {
+		t.Fatalf("RunMigrations returned error: %v", err)
+	}
+
+	authService := server.NewAuth(db, "test-jwt-secret-for-tests")
+	return NewAuthHandlers(authService, db, newEnabledTestMailer(t), "https://test.example")
 }
 
 // postJSON fires a POST request with a JSON body and returns the recorder.

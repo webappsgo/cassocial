@@ -51,11 +51,6 @@ func (t *Tasks) RegisterAllTasks(scheduler TaskRegistrar) error {
 		return err
 	}
 
-	// Email queue processing - every 5 minutes
-	if err := scheduler.RegisterTask("email_queue", "0 */5 * * * *", t.ProcessEmailQueue); err != nil {
-		return err
-	}
-
 	// Session cleanup - hourly
 	if err := scheduler.RegisterTask("session_cleanup", "0 0 * * * *", t.CleanupSessions); err != nil {
 		return err
@@ -99,11 +94,6 @@ func (t *Tasks) CleanupDatabase() error {
 // CreateBackup creates an automated backup
 func (t *Tasks) CreateBackup() error {
 	log.Println("Creating automated backup...")
-	return nil
-}
-
-// ProcessEmailQueue processes queued emails
-func (t *Tasks) ProcessEmailQueue() error {
 	return nil
 }
 

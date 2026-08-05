@@ -15,8 +15,44 @@ import (
 	"testing"
 
 	"github.com/casapps/cassocial/src/server"
+	"github.com/casapps/cassocial/src/server/model"
 	"github.com/casapps/cassocial/src/server/store"
+	"github.com/casapps/cassocial/src/service"
 )
+
+// newTestMailer returns a disabled Mailer suitable for tests that don't
+// exercise SMTP behavior directly.
+func newTestMailer(t *testing.T) *service.Mailer {
+	t.Helper()
+	mailer, err := service.NewMailer(nil, "Test App", "https://test.example")
+	if err != nil {
+		t.Fatalf("service.NewMailer returned error: %v", err)
+	}
+	return mailer
+}
+
+// newEnabledTestMailer returns a Mailer with a syntactically-valid SMTP
+// config so IsEnabled() reports true — used by tests that exercise the
+// SMTP-configured code path (e.g. ForgotPassword enumeration-safety
+// behavior) without requiring a live SMTP server; SendPasswordReset send
+// errors are logged and swallowed by the handler, never asserted here.
+func newEnabledTestMailer(t *testing.T) *service.Mailer {
+	t.Helper()
+	cfg := &model.SMTPConfig{
+		Host:        "smtp.test.example",
+		Port:        587,
+		FromAddress: "no-reply@test.example",
+		Enabled:     true,
+	}
+	mailer, err := service.NewMailer(cfg, "Test App", "https://test.example")
+	if err != nil {
+		t.Fatalf("service.NewMailer returned error: %v", err)
+	}
+	if !mailer.IsEnabled() {
+		t.Fatal("expected test mailer to report IsEnabled() == true")
+	}
+	return mailer
+}
 
 // hashTestToken returns the SHA-256 hex of a raw token string for test injection.
 func hashTestToken(raw string) string {
@@ -132,7 +168,7 @@ func TestForgotPassword_InvalidBody(t *testing.T) {
 
 func TestForgotPassword_UnknownEmail(t *testing.T) {
 	// Unknown email must still return 200 (enumeration mitigation).
-	h := newTestAuthHandlers(t)
+	h := newTestAuthHandlersEnabled(t)
 
 	rr := postJSON(t, h.ForgotPassword, "/api/auth/forgot-password", map[string]string{
 		"email": "nobody@nowhere.example",
@@ -145,7 +181,7 @@ func TestForgotPassword_UnknownEmail(t *testing.T) {
 }
 
 func TestForgotPassword_KnownEmail(t *testing.T) {
-	h := newTestAuthHandlers(t)
+	h := newTestAuthHandlersEnabled(t)
 
 	// Register a user so the email is known.
 	rr := postJSON(t, h.Register, "/api/auth/register", map[string]string{
@@ -785,7 +821,7 @@ func TestForgotPassword_DBError(t *testing.T) {
 	}
 	_ = user
 
-	h := NewAuthHandlers(authSvc, db)
+	h := NewAuthHandlers(authSvc, db, newEnabledTestMailer(t), "https://test.example")
 
 	// Close the DB — GetUserByEmail will now return a DB error (not ErrUserNotFound),
 	// causing RequestPasswordReset to propagate a non-nil error.
@@ -827,7 +863,7 @@ func TestResetPassword_DBError(t *testing.T) {
 		t.Fatalf("RequestPasswordReset: err=%v token=%q", err, token)
 	}
 
-	h := NewAuthHandlers(authSvc, db)
+	h := NewAuthHandlers(authSvc, db, newTestMailer(t), "https://test.example")
 
 	// Close the DB so that the UPDATE inside auth.ResetPassword fails.
 	db.Close()

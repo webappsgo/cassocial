@@ -58,7 +58,6 @@ func (m *Mailer) IsEnabled() bool {
 // SendWelcome sends a welcome email to a new user
 func (m *Mailer) SendWelcome(to, username, verificationURL string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent welcome email to %s", to)
 		return nil
 	}
 
@@ -77,7 +76,6 @@ func (m *Mailer) SendWelcome(to, username, verificationURL string) error {
 // SendPasswordReset sends a password reset email
 func (m *Mailer) SendPasswordReset(to, username, resetURL string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent password reset email to %s", to)
 		return nil
 	}
 
@@ -96,7 +94,6 @@ func (m *Mailer) SendPasswordReset(to, username, resetURL string) error {
 // SendEmailVerification sends an email verification link
 func (m *Mailer) SendEmailVerification(to, username, verificationURL string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent verification email to %s", to)
 		return nil
 	}
 
@@ -115,7 +112,6 @@ func (m *Mailer) SendEmailVerification(to, username, verificationURL string) err
 // SendTwoFactorCode sends a 2FA code email
 func (m *Mailer) SendTwoFactorCode(to, username, code string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent 2FA code to %s", to)
 		return nil
 	}
 
@@ -134,7 +130,6 @@ func (m *Mailer) SendTwoFactorCode(to, username, code string) error {
 // SendTeamInvite sends a team invitation email
 func (m *Mailer) SendTeamInvite(to, recipientName, orgName, role, inviteURL string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent team invite to %s", to)
 		return nil
 	}
 
@@ -153,7 +148,6 @@ func (m *Mailer) SendTeamInvite(to, recipientName, orgName, role, inviteURL stri
 // SendNotification sends a generic notification email
 func (m *Mailer) SendNotification(to, recipientName, title, message, severity string, retries int) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent notification to %s: %s", to, title)
 		return nil
 	}
 
@@ -172,7 +166,6 @@ func (m *Mailer) SendNotification(to, recipientName, title, message, severity st
 // SendPlainText sends a plain text email
 func (m *Mailer) SendPlainText(to []string, subject, body string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent email to %v: %s", to, subject)
 		return nil
 	}
 
@@ -186,7 +179,6 @@ func (m *Mailer) SendPlainText(to []string, subject, body string) error {
 // SendHTML sends an HTML email
 func (m *Mailer) SendHTML(to []string, subject, body string) error {
 	if !m.IsEnabled() {
-		log.Printf("Mailer disabled: would have sent HTML email to %v: %s", to, subject)
 		return nil
 	}
 

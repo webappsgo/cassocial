@@ -48,7 +48,7 @@ func TestNewTasks_ReturnsNonNil(t *testing.T) {
 
 // ---- RegisterAllTasks ----
 
-func TestRegisterAllTasks_RegistersSevenTasks(t *testing.T) {
+func TestRegisterAllTasks_RegistersSixTasks(t *testing.T) {
 	db := newTestDB(t)
 	cfg := newTestConfig()
 	tasks := NewTasks(cfg, db)
@@ -59,8 +59,8 @@ func TestRegisterAllTasks_RegistersSevenTasks(t *testing.T) {
 	}
 
 	listed := s.ListTasks()
-	if len(listed) != 7 {
-		t.Errorf("RegisterAllTasks() registered %d tasks, want 7", len(listed))
+	if len(listed) != 6 {
+		t.Errorf("RegisterAllTasks() registered %d tasks, want 6", len(listed))
 	}
 }
 
@@ -79,7 +79,6 @@ func TestRegisterAllTasks_TaskNamesPresent(t *testing.T) {
 		"cert_renewal_check",
 		"database_cleanup",
 		"automated_backup",
-		"email_queue",
 		"session_cleanup",
 		"geoip_update",
 	}
@@ -147,18 +146,6 @@ func TestCreateBackup_NoError(t *testing.T) {
 
 	if err := tasks.CreateBackup(); err != nil {
 		t.Errorf("CreateBackup() returned error: %v", err)
-	}
-}
-
-// ---- ProcessEmailQueue ----
-
-func TestProcessEmailQueue_NoError(t *testing.T) {
-	db := newTestDB(t)
-	cfg := newTestConfig()
-	tasks := NewTasks(cfg, db)
-
-	if err := tasks.ProcessEmailQueue(); err != nil {
-		t.Errorf("ProcessEmailQueue() returned error: %v", err)
 	}
 }
 
@@ -310,19 +297,6 @@ func TestRegisterAllTasks_ErrorOnSixthTask(t *testing.T) {
 	}
 }
 
-// TestRegisterAllTasks_ErrorOnSeventhTask verifies error propagation on call 7.
-func TestRegisterAllTasks_ErrorOnSeventhTask(t *testing.T) {
-	db := newTestDB(t)
-	cfg := newTestConfig()
-	tasks := NewTasks(cfg, db)
-
-	mock := &errAfterN{n: 6, realSch: New()}
-	err := tasks.RegisterAllTasks(mock)
-	if err == nil {
-		t.Error("RegisterAllTasks should return error when seventh RegisterTask fails")
-	}
-}
-
 // ---- CleanupSessions — error path ----
 
 func TestCleanupSessions_ErrorPath(t *testing.T) {
@@ -400,8 +374,8 @@ func TestGetTaskStatistics_WithTasks(t *testing.T) {
 	if !ok {
 		t.Fatal("GetTaskStatistics() missing 'total_tasks' key")
 	}
-	if total.(int) != 7 {
-		t.Errorf("total_tasks = %v, want 7", total)
+	if total.(int) != 6 {
+		t.Errorf("total_tasks = %v, want 6", total)
 	}
 
 	taskList, ok := stats["tasks"]
@@ -412,8 +386,8 @@ func TestGetTaskStatistics_WithTasks(t *testing.T) {
 	if !ok {
 		t.Fatal("GetTaskStatistics() 'tasks' value is not []map[string]interface{}")
 	}
-	if len(taskSlice) != 7 {
-		t.Errorf("tasks slice length = %d, want 7", len(taskSlice))
+	if len(taskSlice) != 6 {
+		t.Errorf("tasks slice length = %d, want 6", len(taskSlice))
 	}
 
 	// Verify required fields are present in each task stat

@@ -650,7 +650,7 @@ func TestAuthHandlers_Register_EmailExists(t *testing.T) {
 func TestAuthHandlers_Login_DefaultError(t *testing.T) {
 	db := newClosedDB(t)
 	authSvc := server.NewAuth(db, "test-secret")
-	h := NewAuthHandlers(authSvc, db)
+	h := NewAuthHandlers(authSvc, db, newTestMailer(t), "https://test.example")
 
 	body, _ := json.Marshal(map[string]string{
 		"username": "anyuser",
@@ -704,7 +704,7 @@ func TestAuthHandlers_ResetPassword_WeakPassword(t *testing.T) {
 func TestAuthHandlers_VerifyEmail_DefaultError(t *testing.T) {
 	db := newClosedDB(t)
 	authSvc := server.NewAuth(db, "test-secret")
-	h := NewAuthHandlers(authSvc, db)
+	h := NewAuthHandlers(authSvc, db, newTestMailer(t), "https://test.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/verify-email/sometoken", nil)
 	req.SetPathValue("token", "sometoken")
@@ -1365,7 +1365,7 @@ func TestAuthHandlers_Disable2FA_DBExecError(t *testing.T) {
 	user, _ := authSvc.Register("disable2faexecuser", "disable2faexec@example.com", "ValidPass1")
 	db.Close()
 
-	h := NewAuthHandlers(authSvc, db)
+	h := NewAuthHandlers(authSvc, db, newTestMailer(t), "https://test.example")
 	body, _ := json.Marshal(map[string]string{"code": "000000"})
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/2fa/disable", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1395,7 +1395,7 @@ func TestAuthHandlers_Verify2FA_DBError(t *testing.T) {
 	user, _ := authSvc.Register("verify2fadbuser", "verify2fadb@example.com", "ValidPass1")
 	db.Close()
 
-	h := NewAuthHandlers(authSvc, db)
+	h := NewAuthHandlers(authSvc, db, newTestMailer(t), "https://test.example")
 	body, _ := json.Marshal(map[string]string{"code": "123456"})
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/2fa/verify", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
