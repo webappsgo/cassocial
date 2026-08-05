@@ -195,7 +195,7 @@ func run(args []string) int {
 	router := handler.NewRouter(db, authSvc, cfg, *lang)
 	h := router.SetupRoutes()
 
-	srv, err := server.New(cfg, db, h)
+	srv, err := server.New(cfg, db, h, Version)
 	if err != nil {
 		log.Printf("Failed to create server: %v", err)
 		return 1

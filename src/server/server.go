@@ -26,17 +26,21 @@ type Server struct {
 	startTime      time.Time
 	scheduler      *scheduler.Scheduler
 	tor            *TorService
+	version        string
 }
 
 // New creates a new server instance. The caller is responsible for building the
-// http.Handler (e.g. via handler.NewRouter) and passing it in.
-func New(cfg *config.Config, db *store.DB, h http.Handler) (*Server, error) {
+// http.Handler (e.g. via handler.NewRouter) and passing it in. version is the
+// canonical build-info Version declared once in src/main.go (AI.md PART 26 —
+// build info is embedded via -ldflags in main.go, never redeclared elsewhere).
+func New(cfg *config.Config, db *store.DB, h http.Handler, version string) (*Server, error) {
 	s := &Server{
 		config:    cfg,
 		db:        db,
 		startTime: time.Now(),
 		scheduler: scheduler.New(),
 		tor:       NewTorService(cfg.DataDir),
+		version:   version,
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.Port)
@@ -261,7 +265,7 @@ func (s *Server) getHealthStatus() HealthResponse {
 	// Build response
 	return HealthResponse{
 		Status:    status,
-		Version:   getVersion(),
+		Version:   s.getVersion(),
 		Mode:      s.config.Server.Mode,
 		Uptime:    uptime,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -301,9 +305,11 @@ func isDiskHealthy(dataDir string) bool {
 	return true
 }
 
-// getVersion returns the version string. Set via -ldflags at build time.
-var appVersion = "dev"
-
-func getVersion() string {
-	return appVersion
+// getVersion returns the version string embedded in main.Version at build
+// time and threaded through New() — never redeclared here (AI.md PART 26).
+func (s *Server) getVersion() string {
+	if s.version == "" {
+		return "dev"
+	}
+	return s.version
 }

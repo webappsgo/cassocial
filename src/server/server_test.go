@@ -174,9 +174,18 @@ func TestIsDiskHealthy_InvalidDir(t *testing.T) {
 }
 
 func TestGetVersion(t *testing.T) {
-	v := getVersion()
-	if v == "" {
-		t.Error("getVersion returned empty string")
+	s := newTestServer(t)
+	s.version = "1.2.3"
+	if v := s.getVersion(); v != "1.2.3" {
+		t.Errorf("getVersion() = %q, want 1.2.3", v)
+	}
+}
+
+func TestGetVersion_DefaultsToDev(t *testing.T) {
+	s := newTestServer(t)
+	s.version = ""
+	if v := s.getVersion(); v != "dev" {
+		t.Errorf("getVersion() = %q, want dev", v)
 	}
 }
 
@@ -199,7 +208,7 @@ func TestNew(t *testing.T) {
 		},
 	}
 
-	s, err := New(cfg, db, nil)
+	s, err := New(cfg, db, nil, "1.2.3-test")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -236,7 +245,7 @@ func TestShutdown(t *testing.T) {
 		},
 	}
 
-	s, err := New(cfg, db, nil)
+	s, err := New(cfg, db, nil, "1.2.3-test")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -293,7 +302,7 @@ func TestStart_InvalidAddress(t *testing.T) {
 		},
 	}
 
-	s, err := New(cfg, db, nil)
+	s, err := New(cfg, db, nil, "1.2.3-test")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
