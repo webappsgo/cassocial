@@ -156,7 +156,7 @@ func run(args []string) int {
 
 	if *maintenance != "" {
 		// Pass any trailing positional args (e.g. filename for restore, enable/disable for mode)
-		return handleMaintenance(*maintenance, cfg, fs.Args())
+		return handleMaintenance(*maintenance, cfg, Version, fs.Args())
 	}
 
 	if *update != "" {

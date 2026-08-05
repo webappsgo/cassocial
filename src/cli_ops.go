@@ -222,25 +222,33 @@ func runSystemctl(args ...string) int {
 
 // handleMaintenance dispatches maintenance sub-commands.
 // Connects to the DB when required.
-func handleMaintenance(subcmd string, cfg *config.Config, remainingArgs []string) int {
+func handleMaintenance(subcmd string, cfg *config.Config, appVersion string, remainingArgs []string) int {
 	switch subcmd {
 	case "--help":
 		fmt.Println("Maintenance commands: backup, restore, update, mode, setup, --help")
-		fmt.Println("  backup            Create a backup now")
-		fmt.Println("  restore {file}    Restore from backup file")
+		fmt.Println("  backup [--password PASS]   Create a backup now (encrypted if --password given)")
+		fmt.Println("  restore {file} [--password PASS]  Restore from backup file (required for .tar.gz.enc)")
 		fmt.Println("  mode enable|disable  Toggle maintenance mode")
 		fmt.Println("  setup             Re-run first-run setup wizard")
 		return 0
 
 	case "backup":
-		return runMaintenanceBackup(cfg)
+		password := extractPasswordFlag(remainingArgs)
+		return runMaintenanceBackup(cfg, appVersion, password)
 
 	case "restore":
-		if len(remainingArgs) == 0 {
+		filename, password := "", extractPasswordFlag(remainingArgs)
+		for _, a := range remainingArgs {
+			if !strings.HasPrefix(a, "--password") {
+				filename = a
+				break
+			}
+		}
+		if filename == "" {
 			fmt.Fprintln(os.Stderr, "error: --maintenance restore requires a backup filename argument")
 			return 1
 		}
-		return runMaintenanceRestore(cfg, remainingArgs[0])
+		return runMaintenanceRestore(cfg, appVersion, filename, password)
 
 	case "mode":
 		if len(remainingArgs) == 0 {
@@ -264,8 +272,24 @@ func handleMaintenance(subcmd string, cfg *config.Config, remainingArgs []string
 	}
 }
 
+// extractPasswordFlag pulls a "--password VALUE" or "--password=VALUE" pair
+// out of remainingArgs, returning "" if not present.
+func extractPasswordFlag(remainingArgs []string) string {
+	for i, a := range remainingArgs {
+		if val, ok := strings.CutPrefix(a, "--password="); ok {
+			return val
+		}
+		if a == "--password" && i+1 < len(remainingArgs) {
+			return remainingArgs[i+1]
+		}
+	}
+	return ""
+}
+
 // runMaintenanceBackup creates a backup of the database and uploaded files.
-func runMaintenanceBackup(cfg *config.Config) int {
+// When password is non-empty the backup is AES-256-GCM encrypted
+// (AI.md PART 22 "Backup Encryption").
+func runMaintenanceBackup(cfg *config.Config, appVersion, password string) int {
 	db, err := store.Connect(cfg.Database.Driver, cfg.Database.Name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot connect to database: %v\n", err)
@@ -274,7 +298,14 @@ func runMaintenanceBackup(cfg *config.Config) int {
 	defer db.Close()
 
 	svc := service.NewBackupService(cfg, db)
-	backup, err := svc.CreateBackup("manual")
+	svc.AppVersion = appVersion
+
+	var backup *service.Backup
+	if password != "" {
+		backup, err = svc.CreateBackupEncrypted("manual", password)
+	} else {
+		backup, err = svc.CreateBackup("manual")
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: backup failed: %v\n", err)
 		return 1
@@ -284,8 +315,12 @@ func runMaintenanceBackup(cfg *config.Config) int {
 	return 0
 }
 
-// runMaintenanceRestore restores from a named backup file.
-func runMaintenanceRestore(cfg *config.Config, filename string) int {
+// runMaintenanceRestore restores from a named backup file. password is
+// required when filename ends in .enc (AI.md PART 22 "Backup Encryption");
+// omitting it for an encrypted backup surfaces a clear CLI error instructing
+// the operator to pass --password (AI.md PART 22 "Compliance Mode
+// Enforcement" documents the same clear-error pattern for backups).
+func runMaintenanceRestore(cfg *config.Config, appVersion, filename, password string) int {
 	db, err := store.Connect(cfg.Database.Driver, cfg.Database.Name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot connect to database: %v\n", err)
@@ -294,7 +329,8 @@ func runMaintenanceRestore(cfg *config.Config, filename string) int {
 	defer db.Close()
 
 	svc := service.NewBackupService(cfg, db)
-	if err := svc.RestoreBackup(filename); err != nil {
+	svc.AppVersion = appVersion
+	if err := svc.RestoreBackupWithPassword(filename, password); err != nil {
 		fmt.Fprintf(os.Stderr, "error: restore failed: %v\n", err)
 		return 1
 	}
