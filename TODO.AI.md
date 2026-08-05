@@ -58,19 +58,3 @@ Needs deciding: manifest/checksum implementation shared between
 (CLI prompt / `--password` flag / WebUI dialog / API 400
 `password_required`) is threaded through `handleMaintenance` in
 `src/main.go`.
-
-## 4. `appVersion` redeclared in server.go (AI.md PART 8)
-
-`src/server/server.go` line 305 declares its own `var appVersion = "dev"`
-and a `getVersion()` reading it, set only via -ldflags at build time (never
-wired to `main.go`'s `Version` build-info variable). PART 8 requires build
-info (`Version`, `CommitID`, `BuildDate`) declared only in the entry point
-(`src/main.go`) and threaded through from there — not redeclared as a
-second, separately-ldflags-set variable elsewhere. Found by the go-lint
-agent while reviewing an unrelated change to the same file; pre-existing,
-not introduced by the scheduler/Tor wiring fix.
-
-Needs deciding: whether `getVersion()` in `server.go` should take
-`main.Version` as a constructor parameter (e.g. `server.New(cfg, db, h,
-Version)`) or whether `Server` should import a shared `buildinfo` package
-that both `main.go` and `server.go` set/read from.
