@@ -79,13 +79,25 @@ translates form fields to the `ImportRequest` JSON shape server-side).
 
 ## 5. `docker/Dockerfile` builder stage violates PART 27 (found by go-lint)
 
-Builder stage uses `FROM golang:alpine` instead of the required
-`casjaysdev/go:latest` (PART 27, Dockerfile Requirements). The `go build`
-invocation is also missing the `-buildvcs=false -trimpath` flags required
-for Docker builds against a mounted `.git` directory.
+FIXED: builder stage now uses `FROM casjaysdev/go:latest`; the `go build`
+invocation now sets `GOFLAGS=-buildvcs=false` and passes `-trimpath`.
+Verified via a full `docker build` of `docker/Dockerfile` — builds cleanly.
 
-Needs deciding: nothing — this is a mechanical fix (swap the builder base
-image, add the two missing build flags), no design decision required. Not
-fixed inline when found because it was outside the scope of the task in
-progress at the time (RestoreBackup verification pipeline).
+## 6. `docker/Dockerfile` bakes `LABEL` blocks in at build time (PART 27)
+
+Found while fixing item 5. `docker/Dockerfile` has two static `LABEL`
+blocks (maintainer/vendor/authors/title/base.name/description/url/source/
+documentation/vcs-type/toolbox, plus licenses/created/version/
+schema-version/revision) baked directly into the file. PART 27 "NEVER
+DO" is explicit: never bake `LABEL` blocks into the Dockerfile — all OCI
+metadata must be applied at build time by CI via `labels:`/`annotations:`
+build flags, not `LABEL` instructions in the file.
+
+Needs deciding: nothing — mechanical fix (delete both `LABEL` blocks from
+`docker/Dockerfile`; move the same key/value pairs into the CI workflow's
+`docker build`/`buildx build` step as `--label`/`--annotation` flags, or a
+`docker/metadata-action`-style step, so they're supplied at build time
+instead). Not fixed inline here because it's outside item 5's scope
+(builder image + build flags only) and touches `.github/workflows/*.yml`,
+which is a separate file this task didn't otherwise need to change.
 
