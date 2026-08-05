@@ -8,10 +8,12 @@ import (
 )
 
 const (
-	// PasswordResetTokenExpiry is the duration a password reset token is valid
-	PasswordResetTokenExpiry = 1 * time.Hour
-	// EmailVerificationTokenExpiry is the duration an email verification token is valid
-	EmailVerificationTokenExpiry = 24 * time.Hour
+	// PasswordResetTokenExpiry is the duration a password reset token is valid.
+	// Default per AI.md PART 18 "Default Expiry Times" (configurable).
+	PasswordResetTokenExpiry = 24 * time.Hour
+	// EmailVerificationTokenExpiry is the duration an email verification token is valid.
+	// Default per AI.md PART 18 "Default Expiry Times" (configurable).
+	EmailVerificationTokenExpiry = 48 * time.Hour
 )
 
 // PasswordResetRequest represents a password reset request
@@ -301,13 +303,13 @@ func (a *Auth) InvalidateAllPasswordResetTokens(userID string) error {
 // CheckPasswordStrength provides feedback on password strength
 func (a *Auth) CheckPasswordStrength(password string) map[string]interface{} {
 	strength := map[string]interface{}{
-		"score":        0,
-		"length":       len(password),
-		"has_upper":    strings.ContainsAny(password, "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-		"has_lower":    strings.ContainsAny(password, "abcdefghijklmnopqrstuvwxyz"),
-		"has_number":   strings.ContainsAny(password, "0123456789"),
-		"has_special":  strings.ContainsAny(password, "!@#$%^&*()_+-=[]{}|;:,.<>?"),
-		"feedback":     []string{},
+		"score":       0,
+		"length":      len(password),
+		"has_upper":   strings.ContainsAny(password, "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+		"has_lower":   strings.ContainsAny(password, "abcdefghijklmnopqrstuvwxyz"),
+		"has_number":  strings.ContainsAny(password, "0123456789"),
+		"has_special": strings.ContainsAny(password, "!@#$%^&*()_+-=[]{}|;:,.<>?"),
+		"feedback":    []string{},
 	}
 
 	score := 0
