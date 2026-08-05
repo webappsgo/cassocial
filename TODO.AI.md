@@ -38,23 +38,3 @@ Needs deciding: the route path under PART 14's `/users/*` scope (e.g.
 (PART 16 CRUD-parity rule), and how job status polling
 (`GetImportJob`) should be exposed.
 
-## 3. `RestoreBackup` restore-verification pipeline incomplete (AI.md PART 22)
-
-The Zip-Slip/path-traversal vulnerability in `src/server/service/backup.go`
-`RestoreBackup` has been fixed (reject symlink/hardlink tar entries; reject
-any entry whose cleaned path escapes `DataDir`). Still missing per PART 22
-"Restore Verification": file-readable check, tar.gz/tar.gz.enc format
-validation, decrypt test against a supplied password, SHA-256 checksum
-match against `manifest.json`, manifest parse, and app-version-compat
-check — restore must not proceed unless ALL of these pass. None of this
-verification exists yet; `RestoreBackup` extracts unconditionally.
-
-Also missing from `CreateBackup`: no `manifest.json` is written into the
-archive at all, so there is nothing yet for a future `RestoreBackup` to
-verify against.
-
-Needs deciding: manifest/checksum implementation shared between
-`CreateBackup` and `RestoreBackup`, and how the backup-password flow
-(CLI prompt / `--password` flag / WebUI dialog / API 400
-`password_required`) is threaded through `handleMaintenance` in
-`src/main.go`.
