@@ -38,3 +38,15 @@ Needs deciding: the route path under PART 14's `/users/*` scope (e.g.
 (PART 16 CRUD-parity rule), and how job status polling
 (`GetImportJob`) should be exposed.
 
+## 3. `docker/Dockerfile` builder stage violates PART 27 (found by go-lint)
+
+Builder stage uses `FROM golang:alpine` instead of the required
+`casjaysdev/go:latest` (PART 27, Dockerfile Requirements). The `go build`
+invocation is also missing the `-buildvcs=false -trimpath` flags required
+for Docker builds against a mounted `.git` directory.
+
+Needs deciding: nothing — this is a mechanical fix (swap the builder base
+image, add the two missing build flags), no design decision required. Not
+fixed inline when found because it was outside the scope of the task in
+progress at the time (RestoreBackup verification pipeline).
+
