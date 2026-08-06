@@ -85,19 +85,27 @@ Verified via a full `docker build` of `docker/Dockerfile` — builds cleanly.
 
 ## 6. `docker/Dockerfile` bakes `LABEL` blocks in at build time (PART 27)
 
-Found while fixing item 5. `docker/Dockerfile` has two static `LABEL`
-blocks (maintainer/vendor/authors/title/base.name/description/url/source/
-documentation/vcs-type/toolbox, plus licenses/created/version/
-schema-version/revision) baked directly into the file. PART 27 "NEVER
-DO" is explicit: never bake `LABEL` blocks into the Dockerfile — all OCI
-metadata must be applied at build time by CI via `labels:`/`annotations:`
-build flags, not `LABEL` instructions in the file.
+FIXED: both `LABEL` blocks removed from `docker/Dockerfile`, along with
+the now-unused `VERSION`/`BUILD_DATE`/`COMMIT_ID`/`LICENSE` runtime-stage
+`ARG`s that only existed to feed them. The same key/value pairs are now
+supplied as `labels:`/`annotations:` on the new `docker.yml` workflow's
+`docker/build-push-action` step (see item 7). Verified with a full
+`docker build` — still builds and runs cleanly with no labels baked in.
 
-Needs deciding: nothing — mechanical fix (delete both `LABEL` blocks from
-`docker/Dockerfile`; move the same key/value pairs into the CI workflow's
-`docker build`/`buildx build` step as `--label`/`--annotation` flags, or a
-`docker/metadata-action`-style step, so they're supplied at build time
-instead). Not fixed inline here because it's outside item 5's scope
-(builder image + build flags only) and touches `.github/workflows/*.yml`,
-which is a separate file this task didn't otherwise need to change.
+## 7. `docker.yml` (and `beta.yml`, `daily.yml`) workflows missing (AI.md PART 28)
+
+`docker.yml` FIXED: created `.github/workflows/docker.yml`, copied
+verbatim from AI.md PART 28's reference workflow (`build-standard` job
+only — cassocial has no `docker/Dockerfile.aio`, so the reference's
+`build-aio` job doesn't apply here). Registry is `ghcr.io` per AI.md
+PART 28 ("Registry: ghcr.io") and PART 2 line 5307, authenticated via
+`secrets.GITHUB_TOKEN` — no extra registry secret needed, matching the
+reference spec exactly. Validated with `act --list -W
+.github/workflows/docker.yml`; triggered CI build confirmed green.
+
+Still open: `beta.yml` (push to `beta` branch) and `daily.yml` (3am UTC
+cron + push to main) are still missing per `cicd-rules.md`'s required
+workflow list. Smaller, separate follow-up — same reference-spec pattern
+as `docker.yml`/`ci.yml`/`release.yml`, no new decisions needed, just not
+done in this pass since it wasn't part of what item 6 required.
 

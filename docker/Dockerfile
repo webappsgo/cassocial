@@ -30,31 +30,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOFLAGS=-buildvcs=false go bui
 # =============================================================================
 FROM alpine:latest
 
-# ARGs for build-time values (set by docker build --build-arg)
-ARG VERSION=dev
-ARG BUILD_DATE
-ARG COMMIT_ID
-ARG LICENSE=MIT
-
-# Static Labels
-LABEL maintainer="casapps <noreply@casapps.com>" \
-      org.opencontainers.image.vendor="casapps" \
-      org.opencontainers.image.authors="casapps" \
-      org.opencontainers.image.title="cassocial" \
-      org.opencontainers.image.base.name="cassocial" \
-      org.opencontainers.image.description="Containerized version of cassocial" \
-      org.opencontainers.image.url="https://github.com/casapps/cassocial" \
-      org.opencontainers.image.source="https://github.com/casapps/cassocial" \
-      org.opencontainers.image.documentation="https://github.com/casapps/cassocial" \
-      org.opencontainers.image.vcs-type="Git" \
-      com.github.containers.toolbox="false"
-
-# Dynamic Labels (from ARGs)
-LABEL org.opencontainers.image.licenses="${LICENSE}" \
-      org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.schema-version="${VERSION}" \
-      org.opencontainers.image.revision="${COMMIT_ID}"
+# OCI metadata labels are applied at build time by .github/workflows/docker.yml
+# (labels:/annotations: on the docker/build-push-action step), never baked in here
 
 # Install required packages including Tor
 RUN apk add --no-cache \
