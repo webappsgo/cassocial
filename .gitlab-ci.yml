@@ -1,92 +1,323 @@
-stages:
-  - build
-  - test
-  - security
-  - release
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+default:
+  image: casjaysdev/go:latest
+  interruptible: true
+  cache:
+    key:
+      files:
+        - go.sum
+    paths:
+      - .cache/go-mod/
+      - .cache/go-build/
 
 variables:
   CGO_ENABLED: "0"
   GOFLAGS: "-buildvcs=false"
-  PROJECTNAME: cassocial
+  GIT_DEPTH: "0"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go-mod"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
+  PROJECT_NAME: "cassocial"
+  PROJECT_ORG: "casapps"
 
-build:
-  stage: build
-  image: casjaysdev/go:latest
-  cache:
-    key: go-${CI_COMMIT_REF_SLUG}
-    paths:
-      - .go-cache/
-  variables:
-    GOPATH: ${CI_PROJECT_DIR}/.go-cache
+stages:
+  - lint
+  - test
+  - build
+  - security
+  - release
+  - docker
+
+.linux_go_rules: &linux_go_rules
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "security"'
+      when: never
+    - when: on_success
+
+lint:
+  <<: *linux_go_rules
+  stage: lint
   script:
-    - |
-      VERSION=$(cat release.txt 2>/dev/null || echo "0.0.0-dev")
-      COMMIT_ID=$(git rev-parse --short HEAD)
-      BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
-      if [ -f site.txt ]; then OFFICIALSITE=$(cat site.txt); else OFFICIALSITE=${OFFICIALSITE:-${CI_ENVIRONMENT_URL:-}}; fi
-      LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
-      go build -ldflags "${LDFLAGS}" -o /tmp/cassocial ./src
-      go build -ldflags "${LDFLAGS}" -o /tmp/cassocial-cli ./src/client
+    - go vet ./...
+    - staticcheck ./...
 
 test:
+  <<: *linux_go_rules
   stage: test
-  image: casjaysdev/go:latest
-  cache:
-    key: go-${CI_COMMIT_REF_SLUG}
-    paths:
-      - .go-cache/
-  variables:
-    GOPATH: ${CI_PROJECT_DIR}/.go-cache
   script:
-    - go vet ./src/...
+    - mkdir -p "/tmp/${PROJECT_ORG}"
+    - COVDIR="$(mktemp -d "/tmp/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")"
+    - go test -cover -coverprofile="$COVDIR/coverage.out" ./...
+    - PCT="$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%", "", $3); print int($3)}')"
+    - 'if [ "$PCT" -lt 60 ]; then echo "ERROR: coverage ${PCT}% is below the required 60%"; exit 1; fi'
+  coverage: '/total:.*statements.*([0-9]+\.[0-9]+)%/'
+
+build:
+  <<: *linux_go_rules
+  stage: build
+  script:
+    - mkdir -p binaries
     - |
-      go test -v -coverprofile=coverage.out -covermode=atomic ./src/...
-      COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
-      echo "Total coverage: ${COVERAGE}%"
-      if awk "BEGIN{exit !(${COVERAGE} < 60)}"; then
-        echo "Coverage ${COVERAGE}% is below the required 60% threshold"
-        exit 1
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        VERSION="${CI_COMMIT_TAG#v}"
+      elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
+        VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+      else
+        VERSION="$(git rev-parse --short=7 HEAD)"
       fi
-
-secret-scan:
-  stage: security
-  image: trufflesecurity/trufflehog:latest
-  variables:
-    GIT_DEPTH: 0
-  script:
-    - trufflehog git file://. --since-commit "${CI_COMMIT_BEFORE_SHA}" --only-verified --fail
-
-vuln-scan:
-  stage: security
-  image: casjaysdev/go:latest
-  script:
-    - govulncheck ./src/...
-
-release:
-  stage: release
-  image: casjaysdev/go:latest
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v/ || $CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+/'
-  script:
-    - |
-      VERSION=$(cat release.txt 2>/dev/null || echo "${CI_COMMIT_TAG#v}")
-      COMMIT_ID=$(git rev-parse --short HEAD)
-      BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
-      if [ -f site.txt ]; then OFFICIALSITE=$(cat site.txt); else OFFICIALSITE=${OFFICIALSITE:-}; fi
-      LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
-      mkdir -p binaries
+      COMMIT_ID="$(git rev-parse --short=7 HEAD)"
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +"%Y-%m-%dT%H:%M:%SZ")"
+      if [ -f site.txt ]; then
+        OFFICIAL_SITE="$(cat site.txt)"
+      else
+        OFFICIAL_SITE="${OFFICIAL_SITE:-}"
+      fi
+      LDFLAGS="-s -w -X main.Version=${VERSION} -X main.CommitID=${COMMIT_ID} -X main.BuildEpoch=${BUILD_EPOCH} -X main.OfficialSite=${OFFICIAL_SITE}"
       for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64; do
-        OS=${platform%/*}
-        ARCH=${platform#*/}
-        OUTPUT=binaries/${PROJECTNAME}-${OS}-${ARCH}
-        [ "$OS" = "windows" ] && OUTPUT=${OUTPUT}.exe
-        GOOS=${OS} GOARCH=${ARCH} CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o "${OUTPUT}" ./src
-        CLI_OUTPUT="${OUTPUT/cassocial/cassocial-cli}"
-        GOOS=${OS} GOARCH=${ARCH} CGO_ENABLED=0 go build -buildvcs=false -ldflags "${LDFLAGS}" -o "${CLI_OUTPUT}" ./src/client
+        GOOS="${platform%/*}"
+        GOARCH="${platform#*/}"
+        suffix=""
+        if [ "$GOOS" = "windows" ]; then suffix=".exe"; fi
+        CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -buildvcs=false -trimpath -ldflags "$LDFLAGS" -o "binaries/${PROJECT_NAME}-${GOOS}-${GOARCH}${suffix}" ./src
+        CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -buildvcs=false -trimpath -ldflags "$LDFLAGS" -o "binaries/${PROJECT_NAME}-cli-${GOOS}-${GOARCH}${suffix}" ./src/client
       done
-      echo "${VERSION}" > binaries/version.txt
-      cd binaries && sha256sum * > sha256sums.txt && cd ..
+      cyclonedx-gomod mod -json -output "binaries/${PROJECT_NAME}-sbom.cdx.json"
+      find binaries -type f ! -name sha256sums.txt -print0 | sort -z | xargs -0 sha256sum > binaries/sha256sums.txt
+      echo "RELEASE_VERSION=${VERSION}" > release.env
   artifacts:
     paths:
       - binaries/
+      - release.env
+    reports:
+      dotenv: release.env
     expire_in: 30 days
+
+secret-scan:
+  stage: security
+  image:
+    name: trufflesecurity/trufflehog@sha256:9c7a8325d43a4af2960d3f21d61a08981d8a1bf0542e007efa2e47097e386452
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ] && [ -n "$CI_MERGE_REQUEST_DIFF_BASE_SHA" ]; then
+        trufflehog git file://. --since-commit "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+      elif [ "$CI_PIPELINE_SOURCE" = "push" ] && [ "$CI_COMMIT_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+        trufflehog git file://. --since-commit "$CI_COMMIT_BEFORE_SHA" --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+      else
+        trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+      fi
+
+workflow-policy:
+  stage: security
+  script:
+    - |
+      fail=0
+      for file in .github/workflows/*.yml .gitea/workflows/*.yml .forgejo/workflows/*.yml; do
+        [ -f "$file" ] || continue
+        action_lines=$(grep -E '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*[A-Za-z0-9_.-]+/' "$file" || true)
+        while IFS= read -r line; do
+          ref="${line##*@}"
+          ref="${ref%% *}"
+          if ! printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: ${file} has an action without a full SHA pin: ${line}"
+            fail=1
+          fi
+        done <<< "$action_lines"
+        if grep -qE '^[[:space:]]*(-[[:space:]]*)?pull_request_target[[:space:]]*:' "$file"; then
+          echo "ERROR: ${file} uses forbidden pull_request_target"
+          fail=1
+        fi
+      done
+      exit "$fail"
+
+vuln-scan:
+  stage: security
+  rules:
+    - exists:
+        - go.sum
+  script:
+    - govulncheck ./src/...
+
+license-scan:
+  stage: security
+  script:
+    - go-licenses csv ./... > /tmp/cassocial-licenses.csv
+    - 'if grep -qiE "GPL|AGPL|LGPL" /tmp/cassocial-licenses.csv; then echo "ERROR: copyleft license detected"; exit 1; fi'
+
+image-scan:
+  stage: security
+  image: docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+  services:
+    - name: docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build -t cassocial:ci -f docker/Dockerfile .
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e image --exit-code 1 --severity CRITICAL,HIGH cassocial:ci
+  rules:
+    - exists:
+        - docker/Dockerfile
+
+release:stable:
+  stage: release
+  interruptible: false
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - mkdir -p releases
+    - cp binaries/* releases/
+    - printf '%s\n' "$CI_COMMIT_TAG" > releases/version.txt
+    - git log -n 50 --format='* %s (%h)' "${CI_COMMIT_TAG}^..${CI_COMMIT_TAG}" > releases/release-notes.md
+    - tar -C binaries -czf releases/cassocial-binaries.tar.gz .
+    - cd releases
+    - find . -maxdepth 1 -type f ! -name sha256sums.txt -print0 | sort -z | xargs -0 sha256sum > sha256sums.txt
+  artifacts:
+    paths:
+      - releases/
+    expire_in: 30 days
+  release:
+    tag_name: "$CI_COMMIT_TAG"
+    name: "Cassocial $CI_COMMIT_TAG"
+    description: "Release artifacts, SHA-256 checksums, CycloneDX SBOM, and release-notes.md are attached to this pipeline."
+    assets:
+      links:
+        - name: "Cassocial release bundle"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/releases/cassocial-binaries.tar.gz?job=release:stable"
+        - name: "SHA-256 checksums"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/releases/sha256sums.txt?job=release:stable"
+        - name: "CycloneDX SBOM"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/releases/cassocial-sbom.cdx.json?job=release:stable"
+        - name: "Release notes"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/releases/release-notes.md?job=release:stable"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+
+release:beta:
+  stage: release
+  interruptible: false
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - mkdir -p releases
+    - cp binaries/* releases/
+    - printf '%s\n' "$RELEASE_VERSION" > releases/version.txt
+    - git log -n 50 --format='* %s (%h)' origin/main..HEAD > releases/release-notes.md
+    - tar -C binaries -czf releases/cassocial-binaries.tar.gz .
+    - cd releases
+    - find . -maxdepth 1 -type f ! -name sha256sums.txt -print0 | sort -z | xargs -0 sha256sum > sha256sums.txt
+  artifacts:
+    paths:
+      - releases/
+    expire_in: 30 days
+  release:
+    tag_name: "$RELEASE_VERSION"
+    name: "Cassocial Beta $RELEASE_VERSION"
+    description: "Beta release artifacts, SHA-256 checksums, CycloneDX SBOM, and release-notes.md are attached to this pipeline."
+    assets:
+      links:
+        - name: "Cassocial beta bundle"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/beta/raw/releases/cassocial-binaries.tar.gz?job=release:beta"
+        - name: "SHA-256 checksums"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/beta/raw/releases/sha256sums.txt?job=release:beta"
+        - name: "CycloneDX SBOM"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/beta/raw/releases/cassocial-sbom.cdx.json?job=release:beta"
+        - name: "Release notes"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/beta/raw/releases/release-notes.md?job=release:beta"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "beta"'
+
+release:devel:
+  stage: release
+  interruptible: false
+  needs:
+    - job: build
+      artifacts: true
+  before_script:
+    - 'if [ -z "$GITLAB_TOKEN" ]; then echo "ERROR: configure the masked GITLAB_TOKEN CI/CD variable to update the rolling devel release"; exit 1; fi'
+    - curl -q -LSsf --request DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases/devel" || true
+    - curl -q -LSsf --request DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags/devel" || true
+  script:
+    - mkdir -p releases
+    - cp binaries/* releases/
+    - printf '%s\n' "${CI_COMMIT_SHA:0:7}" > releases/version.txt
+    - git log -n 50 --format='* %s (%h)' origin/main..HEAD > releases/release-notes.md
+    - tar -C binaries -czf releases/cassocial-binaries.tar.gz .
+    - cd releases
+    - find . -maxdepth 1 -type f ! -name sha256sums.txt -print0 | sort -z | xargs -0 sha256sum > sha256sums.txt
+  artifacts:
+    paths:
+      - releases/
+    expire_in: 1 day
+  release:
+    tag_name: "devel"
+    name: "Cassocial Devel ${CI_COMMIT_SHA:0:7}"
+    description: "Rolling devel artifacts, SHA-256 checksums, CycloneDX SBOM, and release-notes.md are attached to this pipeline."
+    assets:
+      links:
+        - name: "Cassocial devel bundle"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_BRANCH/raw/releases/cassocial-binaries.tar.gz?job=release:devel"
+        - name: "SHA-256 checksums"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_BRANCH/raw/releases/sha256sums.txt?job=release:devel"
+        - name: "CycloneDX SBOM"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_BRANCH/raw/releases/cassocial-sbom.cdx.json?job=release:devel"
+        - name: "Release notes"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_BRANCH/raw/releases/release-notes.md?job=release:devel"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "devel"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"'
+
+# Dockerfile.dev is not present in this project, so its devel-image job is intentionally omitted.
+docker:standard:
+  stage: docker
+  image: docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+  services:
+    - name: docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+  script:
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        VERSION="${CI_COMMIT_TAG#v}"
+        yymm="$(date -u +%y%m)"
+        set -- -t "$CI_REGISTRY_IMAGE:$VERSION" -t "$CI_REGISTRY_IMAGE:latest" -t "$CI_REGISTRY_IMAGE:$yymm" -t "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+      elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
+        VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+        set -- -t "$CI_REGISTRY_IMAGE:beta" -t "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+      else
+        VERSION="${CI_COMMIT_SHA:0:7}"
+        set -- -t "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+      fi
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +"%Y-%m-%dT%H:%M:%SZ")"
+      if [ -f site.txt ]; then OFFICIAL_SITE="$(cat site.txt)"; else OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
+      docker buildx create --name cassocial-builder --use 2>/dev/null || docker buildx use cassocial-builder
+      docker buildx build -f docker/Dockerfile --platform linux/amd64,linux/arm64 --build-arg VERSION="$VERSION" --build-arg COMMIT_ID="${CI_COMMIT_SHA:0:7}" --build-arg BUILD_DATE="$BUILD_DATE" --build-arg BUILD_EPOCH="$BUILD_EPOCH" --build-arg OFFICIAL_SITE="$OFFICIAL_SITE" "$@" --push .
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH'
+
+
+# GitLab pipeline schedules are configured in the UI: weekly security on Monday 06:00 UTC,
+# devel artifacts daily at 03:00 UTC with SCHEDULE_TYPE=devel, and devel images at 04:00 UTC
+# with SCHEDULE_TYPE=devel-image. Dockerfile.dev must exist before that last schedule can publish.

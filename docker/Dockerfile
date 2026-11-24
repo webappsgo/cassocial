@@ -3,16 +3,16 @@
 # =============================================================================
 FROM casjaysdev/go:latest AS builder
 
+RUN apk upgrade --no-cache && apk add --no-cache git bash
+
 ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
+ARG BUILD_EPOCH=0
 ARG COMMIT_ID
 ARG OFFICIAL_SITE=
 
 WORKDIR /build
-
-# Install build dependencies (git for version info, bash for scripts)
-RUN apk add --no-cache git bash
 
 # Copy go.mod first for layer caching
 COPY go.mod go.sum ./
@@ -22,7 +22,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOFLAGS=-buildvcs=false go build \
     -trimpath \
-    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
+    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
     -o /build/binary/cassocial ./src
 
 # =============================================================================
@@ -33,12 +33,16 @@ FROM alpine:latest
 # OCI metadata labels are applied at build time by .github/workflows/docker.yml
 # (labels:/annotations: on the docker/build-push-action step), never baked in here
 
-# Install required packages including Tor
+# Install required packages including Tor and I2P.
 RUN apk add --no-cache \
+    git \
     curl \
     bash \
     tini \
-    tor
+    tor \
+    i2pd \
+    tzdata \
+    ca-certificates
 
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /build/binary/cassocial /usr/local/bin/cassocial

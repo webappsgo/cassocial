@@ -397,7 +397,7 @@ func (s *BackupService) ListBackups() ([]*Backup, error) {
 	backups := make([]*Backup, 0)
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !(strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.gz.enc")) {
+		if entry.IsDir() || (!strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.gz.enc")) {
 			continue
 		}
 

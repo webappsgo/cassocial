@@ -547,7 +547,7 @@ func TestGenerateSetupToken_Format(t *testing.T) {
 		t.Errorf("GenerateSetupToken token length = %d, want 32", len(token))
 	}
 	for _, ch := range token {
-		if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
 			t.Errorf("GenerateSetupToken token %q contains non-hex char %q", token, ch)
 			break
 		}

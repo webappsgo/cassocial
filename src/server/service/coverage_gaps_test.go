@@ -69,7 +69,7 @@ func TestAnalyticsService_GetSummary_DBError(t *testing.T) {
 	db, profileID := newTestAnalyticsDB(t)
 	svc := NewAnalyticsService(db)
 
-	db.DB.Close()
+	db.Close()
 
 	_, err := svc.GetSummary(profileID, time.Now().AddDate(0, -1, 0), time.Now())
 	if err == nil {
@@ -257,7 +257,7 @@ func TestImportService_ImportData_DBClosed(t *testing.T) {
 	ls := NewLinkService(db)
 	is := NewImportService(db, ps, ls)
 
-	db.DB.Close()
+	db.Close()
 
 	_, err := is.ImportData(userID, "json", []byte(`{"profile":{"slug":"x"},"links":[]}`))
 	if err == nil {
@@ -323,7 +323,7 @@ func TestImportService_CreateImportJob_DBError(t *testing.T) {
 	ls := NewLinkService(db)
 	is := NewImportService(db, ps, ls)
 
-	db.DB.Close()
+	db.Close()
 
 	_, err := is.createImportJob(userID, "json")
 	if err == nil {
@@ -341,7 +341,7 @@ func TestImportService_UpdateJobStatus_DBError(t *testing.T) {
 	ls := NewLinkService(db)
 	is := NewImportService(db, ps, ls)
 
-	db.DB.Close()
+	db.Close()
 
 	err := is.updateJobStatus("ghost-job-id", "completed", map[string]interface{}{"k": "v"})
 	if err == nil {
@@ -375,7 +375,7 @@ func TestImportService_ImportFromCSV_ProfileCreateError(t *testing.T) {
 	ls := NewLinkService(db)
 	is := NewImportService(db, ps, ls)
 
-	db.DB.Close()
+	db.Close()
 
 	_, err := is.importFromCSV(userID, []byte("title,url\nLink,https://example.com"))
 	if err == nil {
@@ -605,7 +605,7 @@ func TestLinkService_GetNextPosition_ClosedDB(t *testing.T) {
 	svc := NewLinkService(db)
 
 	// Close the DB so getNextPosition query fails.
-	db.DB.Close()
+	db.Close()
 
 	_, err := svc.getNextPosition(profileID)
 	if err == nil {
@@ -656,7 +656,7 @@ func TestProfileService_Create_SlugExistsError(t *testing.T) {
 	// SQLite doesn't support BEFORE SELECT triggers, but we can close the DB right
 	// before SlugExists would be called — except we can't interleave.
 	// Instead, test SlugExists directly with a closed DB.
-	db.DB.Close()
+	db.Close()
 
 	exists, err := svc.SlugExists("any-slug")
 	_ = exists
@@ -722,7 +722,7 @@ func TestProfileService_Update_NewSlugCheckFails(t *testing.T) {
 	// Close the DB so SlugExists query fails (GetByID has already set the slug
 	// in p1, and the slug was changed so the SlugExists path is entered).
 	p1.Slug = "slug-beta" // Changed slug → will trigger SlugExists check
-	db.DB.Close()
+	db.Close()
 
 	err := svc.Update(p1)
 	if err == nil {

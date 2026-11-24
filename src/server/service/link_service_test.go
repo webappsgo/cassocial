@@ -397,7 +397,7 @@ func TestLinkService_Toggle_NotFound(t *testing.T) {
 
 func TestLinkService_Toggle_DBError(t *testing.T) {
 	svc, _ := newTestLinkService(t)
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	err := svc.Toggle("any-id")
 	if err == nil {
@@ -605,7 +605,7 @@ func TestLinkService_Create_DBError_OnInsert(t *testing.T) {
 
 	link := validLink(profileID)
 	// Close the underlying connection so the INSERT fails.
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	err := svc.Create(link)
 	if err == nil {
@@ -619,7 +619,7 @@ func TestLinkService_Create_DBError_OnInsert(t *testing.T) {
 
 func TestLinkService_GetByID_DBError(t *testing.T) {
 	svc, _ := newTestLinkService(t)
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	_, err := svc.GetByID("any-id")
 	if err == nil {
@@ -636,7 +636,7 @@ func TestLinkService_GetByID_DBError(t *testing.T) {
 
 func TestLinkService_GetByProfileID_DBError(t *testing.T) {
 	svc, profileID := newTestLinkService(t)
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	_, err := svc.GetByProfileID(profileID)
 	if err == nil {
@@ -650,7 +650,7 @@ func TestLinkService_GetByProfileID_DBError(t *testing.T) {
 
 func TestLinkService_GetActiveByProfileID_DBError(t *testing.T) {
 	svc, profileID := newTestLinkService(t)
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	_, err := svc.GetActiveByProfileID(profileID)
 	if err == nil {
@@ -685,7 +685,7 @@ func TestLinkService_Update_DBError(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	link.URL = "https://updated.example.com"
 	err := svc.Update(link)
@@ -706,7 +706,7 @@ func TestLinkService_Delete_DBError(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	svc.db.DB.Close()
+	svc.db.Close()
 
 	err := svc.Delete(link.ID)
 	if err == nil {

@@ -43,6 +43,25 @@ func TestPrintVersion(t *testing.T) {
 	}
 }
 
+func TestBuildDateFromEpoch(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "valid epoch", value: "1", want: "1970-01-01T00:00:01Z"},
+		{name: "invalid epoch", value: "invalid", want: "unknown"},
+		{name: "zero epoch", value: "0", want: "unknown"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildDateFromEpoch(tt.value); got != tt.want {
+				t.Errorf("buildDateFromEpoch(%q) = %q, want %q", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPrintHelp(t *testing.T) {
 	out := captureStdout(t, printHelp)
 	if out == "" {

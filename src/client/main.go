@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,9 +26,22 @@ var sharedFlags = []string{
 var (
 	Version      = "dev"
 	CommitID     = "unknown"
+	BuildEpoch   = "0"
 	BuildDate    = "unknown"
 	OfficialSite = "" // Empty = users must use --server flag
 )
+
+func init() {
+	BuildDate = buildDateFromEpoch(BuildEpoch)
+}
+
+func buildDateFromEpoch(value string) string {
+	epoch, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || epoch <= 0 {
+		return "unknown"
+	}
+	return time.Unix(epoch, 0).UTC().Format(time.RFC3339)
+}
 
 // osExit is the function called to terminate the process. Overridable in tests.
 var osExit = os.Exit

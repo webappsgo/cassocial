@@ -172,10 +172,10 @@ func (s *ExportService) exportToHTML(profile *model.Profile, links []*model.Link
 	html.WriteString("<head>\n")
 	html.WriteString("  <meta charset=\"UTF-8\">\n")
 	html.WriteString("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
-	html.WriteString(fmt.Sprintf("  <title>%s</title>\n", escapeHTML(profile.DisplayName)))
+	fmt.Fprintf(&html, "  <title>%s</title>\n", escapeHTML(profile.DisplayName))
 
 	if profile.MetaDescription != "" {
-		html.WriteString(fmt.Sprintf("  <meta name=\"description\" content=\"%s\">\n", escapeHTML(profile.MetaDescription)))
+		fmt.Fprintf(&html, "  <meta name=\"description\" content=\"%s\">\n", escapeHTML(profile.MetaDescription))
 	}
 
 	// Add basic styles
@@ -200,11 +200,11 @@ func (s *ExportService) exportToHTML(profile *model.Profile, links []*model.Link
 	// Profile section
 	html.WriteString("    <div class=\"profile\">\n")
 	if profile.AvatarURL != "" {
-		html.WriteString(fmt.Sprintf("      <img src=\"%s\" alt=\"%s\" class=\"avatar\">\n", escapeHTML(profile.AvatarURL), escapeHTML(profile.DisplayName)))
+		fmt.Fprintf(&html, "      <img src=\"%s\" alt=\"%s\" class=\"avatar\">\n", escapeHTML(profile.AvatarURL), escapeHTML(profile.DisplayName))
 	}
-	html.WriteString(fmt.Sprintf("      <h1 class=\"display-name\">%s</h1>\n", escapeHTML(profile.DisplayName)))
+	fmt.Fprintf(&html, "      <h1 class=\"display-name\">%s</h1>\n", escapeHTML(profile.DisplayName))
 	if profile.Bio != "" {
-		html.WriteString(fmt.Sprintf("      <p class=\"bio\">%s</p>\n", escapeHTML(profile.Bio)))
+		fmt.Fprintf(&html, "      <p class=\"bio\">%s</p>\n", escapeHTML(profile.Bio))
 	}
 	html.WriteString("    </div>\n")
 
@@ -215,15 +215,15 @@ func (s *ExportService) exportToHTML(profile *model.Profile, links []*model.Link
 			continue
 		}
 
-		html.WriteString(fmt.Sprintf("      <a href=\"%s\" class=\"link\" target=\"_blank\" rel=\"noopener noreferrer\">\n", escapeHTML(link.URL)))
-		html.WriteString(fmt.Sprintf("        <div class=\"link-title\">%s</div>\n", escapeHTML(link.Title)))
+		fmt.Fprintf(&html, "      <a href=\"%s\" class=\"link\" target=\"_blank\" rel=\"noopener noreferrer\">\n", escapeHTML(link.URL))
+		fmt.Fprintf(&html, "        <div class=\"link-title\">%s</div>\n", escapeHTML(link.Title))
 		html.WriteString("      </a>\n")
 	}
 	html.WriteString("    </div>\n")
 
 	// Footer
 	html.WriteString("    <div class=\"footer\">\n")
-	html.WriteString(fmt.Sprintf("      <p>Exported from Cassocial on %s</p>\n", time.Now().Format("January 2, 2006")))
+	fmt.Fprintf(&html, "      <p>Exported from Cassocial on %s</p>\n", time.Now().Format("January 2, 2006"))
 	html.WriteString("    </div>\n")
 
 	html.WriteString("  </div>\n")
@@ -285,34 +285,34 @@ func (s *ExportService) exportToVCard(profile *model.Profile, links []*model.Lin
 	vcard.WriteString("VERSION:3.0\n")
 
 	// Full name
-	vcard.WriteString(fmt.Sprintf("FN:%s\n", profile.DisplayName))
+	fmt.Fprintf(&vcard, "FN:%s\n", profile.DisplayName)
 
 	// Structured name (simplified)
-	vcard.WriteString(fmt.Sprintf("N:%s;;;;\n", profile.DisplayName))
+	fmt.Fprintf(&vcard, "N:%s;;;;\n", profile.DisplayName)
 
 	// Nickname/username
-	vcard.WriteString(fmt.Sprintf("NICKNAME:%s\n", profile.Slug))
+	fmt.Fprintf(&vcard, "NICKNAME:%s\n", profile.Slug)
 
 	// Bio as note
 	if profile.Bio != "" {
-		vcard.WriteString(fmt.Sprintf("NOTE:%s\n", profile.Bio))
+		fmt.Fprintf(&vcard, "NOTE:%s\n", profile.Bio)
 	}
 
 	// Avatar photo
 	if profile.AvatarURL != "" {
-		vcard.WriteString(fmt.Sprintf("PHOTO;VALUE=URI:%s\n", profile.AvatarURL))
+		fmt.Fprintf(&vcard, "PHOTO;VALUE=URI:%s\n", profile.AvatarURL)
 	}
 
 	// Add URLs from links
 	for _, link := range links {
 		if link.IsActive {
 			// Add as URL with label
-			vcard.WriteString(fmt.Sprintf("URL;TYPE=%s:%s\n", link.Title, link.URL))
+			fmt.Fprintf(&vcard, "URL;TYPE=%s:%s\n", link.Title, link.URL)
 		}
 	}
 
 	// Profile URL
-	vcard.WriteString(fmt.Sprintf("URL;TYPE=PROFILE:https://casjay.link/%s\n", profile.Slug))
+	fmt.Fprintf(&vcard, "URL;TYPE=PROFILE:https://casjay.link/%s\n", profile.Slug)
 
 	// Timestamp
 	vcard.WriteString(fmt.Sprintf("REV:%s\n", time.Now().Format("2006-01-02T15:04:05Z")))

@@ -110,9 +110,10 @@ func (s *QRService) GenerateDataURI(profileURL string, settings *model.QRCodeSet
 	base64Data := base64.StdEncoding.EncodeToString(data)
 
 	mimeType := "image/png"
-	if settings.Format == "svg" {
+	switch settings.Format {
+	case "svg":
 		mimeType = "image/svg+xml"
-	} else if settings.Format == "pdf" {
+	case "pdf":
 		mimeType = "application/pdf"
 	}
 
@@ -143,10 +144,11 @@ func (s *QRService) generatePNG(url string, settings *model.QRCodeSettings, erro
 	qr.BackgroundColor = lightColor
 
 	// Apply style
-	if settings.Style == "rounded" {
+	switch settings.Style {
+	case "rounded":
 		// Set rounded corners (approximation with DisableBorder)
 		qr.DisableBorder = false
-	} else if settings.Style == "dots" {
+	case "dots":
 		// Use dots style (qrcode library doesn't support this natively)
 		// In production, use a library that supports different styles
 		qr.DisableBorder = true

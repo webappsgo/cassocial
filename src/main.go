@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"time"
 
 	"github.com/casapps/cassocial/src/common/shell"
 	"github.com/casapps/cassocial/src/config"
@@ -27,9 +29,22 @@ var sharedFlags = []string{
 var (
 	Version      = "dev"
 	CommitID     = "unknown"
+	BuildEpoch   = "0"
 	BuildDate    = "unknown"
 	OfficialSite = "" // Empty = users must use --server flag
 )
+
+func init() {
+	BuildDate = buildDateFromEpoch(BuildEpoch)
+}
+
+func buildDateFromEpoch(value string) string {
+	epoch, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || epoch <= 0 {
+		return "unknown"
+	}
+	return time.Unix(epoch, 0).UTC().Format(time.RFC3339)
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))
