@@ -91,6 +91,7 @@ jobs:
       image: casjaysdev/go:latest
       options: "--user 0:0"
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
