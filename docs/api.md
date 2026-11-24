@@ -1,194 +1,64 @@
 # API Reference
 
-Cassocial provides three APIs:
-- **REST API** at `/api/`
-- **GraphQL** at `/graphql`
-- **OpenAPI/Swagger** at `/openapi`
+Cassocial serves its JSON API at `/api/{api_version}/server/`; the default version is `v1`. Public API paths in this guide are relative because each operator runs their own server. Use your instance URL when making a request.
+
+```bash
+curl -q -LSsf https://YOUR_SERVER/api/v1/server/healthz
+```
+
+## API documentation
+
+The interactive OpenAPI explorer is available at `/server/docs/swagger`. The machine-readable OpenAPI document is served at `/api/{api_version}/server/swagger`; `/api/swagger` resolves directly to the configured version. The GraphQL interface is available at `/server/docs/graphql`, with its API at `/api/{api_version}/server/graphql`.
+
+## Health
+
+| Method | Path | Authentication | Description |
+|--------|------|----------------|-------------|
+| `GET` | `/server/healthz` | None | Server-rendered health status |
+| `GET` | `/api/v1/server/healthz` | None | JSON health status |
+| `GET` | `/api/healthz` | None | Direct alias for the configured API version |
 
 ## Authentication
 
-Authenticated endpoints require a Bearer token obtained from the login endpoint:
+Authentication endpoints live under `/server/auth/` and `/api/{api_version}/server/auth/`. Login is shared by account types; the server redirects a successful browser login to the appropriate account area. The API login response identifies the account type and may require a second-factor step.
+
+| Method | API path | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/v1/server/auth/register` | Register a Regular User when open registration is enabled |
+| `POST` | `/api/v1/server/auth/login` | Sign in a Regular User or Server Admin |
+| `POST` | `/api/v1/server/auth/logout` | End the current session |
+| `POST` | `/api/v1/server/auth/2fa` | Complete a second-factor challenge |
+| `POST` | `/api/v1/server/auth/password/forgot` | Request password recovery |
+| `POST` | `/api/v1/server/auth/password/reset` | Set a new password from a recovery token |
+| `POST` | `/api/v1/server/auth/verify` | Verify an email address |
+| `POST` | `/api/v1/server/auth/refresh` | Refresh an authenticated session |
+
+Additional passkey, invite, external identity, and recovery routes are documented by the OpenAPI document for the running API version.
+
+## Authorization
+
+Send an API token in the `Authorization` header:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  https://api.example.com/api/profiles
+curl -q -LSsf \
+  -H 'Authorization: Bearer YOUR_API_TOKEN' \
+  https://YOUR_SERVER/api/v1/server/auth/check
 ```
 
-## REST API Endpoints
+Server Admin tokens begin with `adm_`; Regular User tokens begin with `usr_`. Tokens are scoped to their account type. A Server Admin bearer token is required for `/api/{api_version}/server/{admin_path}/...`; browser session cookies do not authorize API calls.
 
-### Health
+## Server Admin API
 
-```
-GET /health        # Basic health check
-GET /health/ready  # Readiness check
-GET /health/live   # Liveness check
-```
+The API mirrors the administration pages under `/api/{api_version}/server/{admin_path}/...`. This family covers server settings, Regular User management, security, backups, logs, email, scheduler, updates, network, and other administration sections. Requests require a Server Admin token.
 
-Returns server health status as JSON.
+## Public profile data
 
-### Auth
+Public endpoints return only public profile data. Private Regular User profiles are excluded from lists and searches; requests that identify a private profile return 404. The profile owner can access their own profile with authentication. Server Admin access is through the authenticated administration panel only.
 
-```
-POST /api/auth/register                 # Register new account
-POST /api/auth/login                    # Login (returns JWT)
-POST /api/auth/login/2fa               # Login with 2FA code
-POST /api/auth/forgot-password          # Request password reset
-POST /api/auth/reset-password           # Reset password with token
-GET  /api/auth/verify-email/{token}     # Verify email address
+Profile link and shortlink destinations are validated by the server. Unsafe schemes and private or local destinations are rejected.
 
-POST /api/auth/logout        # Logout (auth required)
-POST /api/auth/refresh       # Refresh JWT token (auth required)
-POST /api/auth/2fa/enable    # Enable 2FA (auth required)
-POST /api/auth/2fa/verify    # Verify 2FA setup (auth required)
-POST /api/auth/2fa/disable   # Disable 2FA (auth required)
-```
+## Request and error behavior
 
-### Profiles
+The server validates request bodies and authorization before changing data. Responses use JSON for API routes and the negotiated HTML or JSON format for paired browser/API routes. A rate-limited request returns HTTP `429`; callers should respect any `Retry-After` header.
 
-```
-GET    /api/profiles              # List profiles (auth required)
-POST   /api/profiles              # Create profile (auth required)
-GET    /api/profiles/{id}         # Get profile (auth required)
-PUT    /api/profiles/{id}         # Update profile (auth required)
-DELETE /api/profiles/{id}         # Delete profile (auth required)
-POST   /api/profiles/{id}/duplicate      # Duplicate profile (auth required)
-GET    /api/profiles/{id}/qr             # Generate QR code (auth required)
-POST   /api/profiles/{id}/verify-domain  # Verify custom domain (auth required)
-```
-
-### Links
-
-```
-GET    /api/profiles/{id}/links   # List links for profile (auth required)
-POST   /api/profiles/{id}/links   # Create link on profile (auth required)
-PUT    /api/links/{id}            # Update link (auth required)
-DELETE /api/links/{id}            # Delete link (auth required)
-POST   /api/links/reorder         # Reorder links (auth required)
-POST   /api/links/{id}/toggle     # Toggle link enabled/disabled (auth required)
-```
-
-### Services
-
-```
-GET /api/services             # List all supported services
-GET /api/services/search      # Search services
-GET /api/services/categories  # List service categories
-GET /api/services/popular     # List popular services
-GET /api/services/{id}        # Get specific service
-```
-
-### Analytics
-
-```
-GET /api/analytics/profile/{id}          # Get profile analytics (auth required)
-GET /api/analytics/links/{profile_id}    # Get link analytics (auth required)
-GET /api/analytics/export/{profile_id}   # Export analytics (auth required)
-```
-
-### Admin
-
-```
-GET    /api/admin/users/{id}                  # Get user (admin required)
-GET    /api/admin/users                       # List users (admin required)
-PUT    /api/admin/users/{id}                  # Update user (admin required)
-DELETE /api/admin/users/{id}                  # Delete user (admin required)
-GET    /api/admin/stats                       # System statistics (admin required)
-POST   /api/admin/backup                      # Trigger backup (admin required)
-GET    /api/admin/settings                    # Get settings (admin required)
-PUT    /api/admin/settings                    # Update settings (admin required)
-POST   /api/admin/services/import             # Import services (admin required)
-POST   /api/admin/cache/clear                 # Clear cache (admin required)
-GET    /api/admin/smtp/config                 # Get SMTP config (admin required)
-PUT    /api/admin/smtp/config                 # Update SMTP config (admin required)
-POST   /api/admin/smtp/test                   # Test SMTP connection (admin required)
-GET    /api/admin/notifications/preferences   # Get notification prefs (admin required)
-PUT    /api/admin/notifications/preferences   # Update notification prefs (admin required)
-```
-
-### Public API
-
-No authentication required:
-
-```
-GET /api/v1/profiles/{username}        # Get public profile by username
-GET /api/v1/profiles/{username}/links  # Get public profile links
-GET /api/v1/profiles/{username}/qr     # Get public profile QR code
-GET /api/v1/link/{id}/click            # Track link click
-```
-
-## GraphQL API
-
-Access GraphiQL playground at `/graphql`
-
-### Example Query
-
-```graphql
-query {
-  profile(username: "myprofile") {
-    id
-    title
-    description
-    links {
-      service
-      url
-      title
-    }
-  }
-}
-```
-
-### Example Mutation
-
-```graphql
-mutation {
-  createProfile(input: {
-    username: "myprofile"
-    title: "My Profile"
-    description: "My awesome profile"
-  }) {
-    id
-    username
-  }
-}
-```
-
-## OpenAPI/Swagger
-
-Interactive API documentation available at `/openapi`
-
-The OpenAPI specification is available at `/openapi.json`
-
-## Rate Limiting
-
-| Endpoint Type | Limit | Window |
-|---------------|-------|--------|
-| Authenticated API | 100 requests | 1 minute |
-| Unauthenticated API | 20 requests | 1 minute |
-| Login attempts | 5 attempts | 15 minutes |
-| Registration | 5 attempts | 1 hour |
-
-Rate limit exceeded returns `429 Too Many Requests` with `Retry-After` header.
-
-## Error Responses
-
-All errors return JSON:
-
-```json
-{
-  "error": "Error message here",
-  "code": "ERROR_CODE",
-  "details": {}
-}
-```
-
-### HTTP Status Codes
-
-- `200` - Success
-- `201` - Created
-- `400` - Bad Request
-- `401` - Unauthorized
-- `403` - Forbidden
-- `404` - Not Found
-- `429` - Too Many Requests
-- `500` - Internal Server Error
-- `503` - Service Unavailable
+Use the OpenAPI document for exact request fields, response schemas, and status codes for the configured version. Do not put credentials in query parameters or report bodies.

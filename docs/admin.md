@@ -1,189 +1,38 @@
-# Admin Panel Guide
+# Server Administration
 
-The admin panel is available at `/admin` after completing the setup wizard.
+Server Admin accounts manage Cassocial itself. They are separate from Regular User accounts and use a separate session. The default admin path is `/server/administration`; operators can change it with `server.admin_path`.
 
-## Admin API Endpoints
+The public interface does not link to or advertise the administration path. Enter the configured path directly. Unauthenticated requests go to the shared sign-in page. A signed-in Regular User is returned to their own account area and cannot use Server Admin routes.
 
-All admin API endpoints require an authenticated session with the `admin` role. They are available under `/api/admin/`:
+## First Server Admin
 
-```
-GET    /api/admin/users                       # List all users
-GET    /api/admin/users/{id}                  # Get user details
-PUT    /api/admin/users/{id}                  # Update user (role/status)
-DELETE /api/admin/users/{id}                  # Delete user
-GET    /api/admin/stats                       # System statistics
-POST   /api/admin/backup                      # Trigger manual backup
-GET    /api/admin/settings                    # Get all settings
-PUT    /api/admin/settings                    # Update settings
-POST   /api/admin/services/import             # Import services database
-POST   /api/admin/cache/clear                 # Clear system cache
-GET    /api/admin/smtp/config                 # Get SMTP configuration
-PUT    /api/admin/smtp/config                 # Update SMTP configuration
-POST   /api/admin/smtp/test                   # Test SMTP connection
-GET    /api/admin/notifications/preferences   # Get notification preferences
-PUT    /api/admin/notifications/preferences   # Update notification preferences
-```
+On a new installation, the server prints a one-time setup token. Visit `/server/administration/setup` and use that token to create the primary Server Admin. The primary Server Admin cannot be deleted. Additional Server Admins are managed through the administration panel.
 
-## Dashboard
+## Pages
 
-The dashboard shows:
-- Total users, profiles, links
-- Total views and clicks
-- Recent activity
-- System information
+Administration routes use `/server/{admin_path}/...`. Common sections include:
 
-## User Management
+| Path | Purpose |
+|------|---------|
+| `/server/{admin_path}/` | Server dashboard |
+| `/server/{admin_path}/settings` | Server configuration |
+| `/server/{admin_path}/users` | Regular User management when PART 34 is enabled |
+| `/server/{admin_path}/security` | Security and authentication settings |
+| `/server/{admin_path}/email` | Email configuration |
+| `/server/{admin_path}/backup` | Backup and restore |
+| `/server/{admin_path}/logs` | Application and audit logs |
+| `/server/{admin_path}/scheduler` | Built-in scheduled tasks |
+| `/server/{admin_path}/updates` | Application updates |
+| `/server/{admin_path}/network` | Network and overlay settings |
 
-**Location**: `/admin/users`
+The admin's personal account is under `/server/{admin_path}/{admin_username}/profile`. Server-wide settings stay in their section; they do not belong under the personal account path.
 
-- View all users
-- Edit user details (role, status)
-- Suspend/activate users
-- Delete users
-- Assign roles (admin, user)
+## Web and API authentication
 
-## Settings
+Browser administration uses the Server Admin session and standard HTML forms. Core operations must work with JavaScript disabled. The JSON API uses the versioned route family `/api/{api_version}/server/{admin_path}/...` and Server Admin bearer tokens beginning with `adm_`; a browser session cookie does not replace API token authentication.
 
-**Location**: `/admin/settings`
+Never put passwords, one-time setup tokens, or API tokens in documentation, URLs, screenshots, or logs. Review [Security](security.md) before changing authentication settings.
 
-All `server.yml` settings are editable through the web UI:
+## Regular User separation
 
-### Server Settings
-- Listen address and port
-- Application mode (production/development)
-- Debug mode
-
-### Database Settings
-- Database driver (SQLite, PostgreSQL, MySQL)
-- Connection details
-- Connection pool settings
-
-### Email Settings
-- SMTP host, port, credentials
-- From address
-- TLS settings
-- Test email functionality
-
-### Features & Limits
-- Allow registration (enable/disable)
-- Max profiles per user (default: 5)
-- Max links per profile (default: 100)
-
-## Profile Management
-
-**Location**: `/admin/profiles`
-
-- View all profiles (public and private)
-- Search profiles by slug or user
-- View profile analytics
-- Moderate profiles
-
-## Analytics
-
-**Location**: `/admin/analytics`
-
-System-wide analytics:
-- Total views and clicks
-- Top profiles by views
-- Geographic data
-- Device/browser statistics
-
-Export analytics in CSV, JSON, or PDF format.
-
-## Services Database
-
-**Location**: `/admin/services`
-
-Manage the database of 5000+ supported services:
-- View all services
-- Add custom services
-- Edit service icons
-- Enable/disable services
-
-## Themes
-
-**Location**: `/admin/themes`
-
-- Manage global themes
-- Create custom themes
-- Set default theme
-
-## SMTP Configuration
-
-**Location**: `/admin/smtp`
-
-- Configure SMTP settings
-- Test email sending
-- View email queue status
-
-## Backup & Restore
-
-**Location**: `/admin/backup`
-
-### Automated Backups
-
-- Scheduled daily at 2:30am
-- Keeps last 4 backups automatically
-- Includes databases, config, and uploads
-
-### Manual Backup
-
-1. Click "Create Backup"
-2. Wait for backup to complete
-3. Download backup file if needed
-
-### Restore
-
-1. Select backup from list
-2. Click "Restore"
-3. Confirm restoration
-4. Server will restart with restored data
-
-**⚠️ Warning**: Restore will overwrite current data. Download a current backup first!
-
-## Maintenance Mode
-
-**Location**: `/admin/maintenance`
-
-Enable maintenance mode to:
-- Display maintenance message to visitors
-- Keep admin panel accessible
-- Bypass maintenance for specific IPs (localhost always bypassed)
-- Perform updates or maintenance safely
-
-### Custom Message
-
-Set a custom message shown to visitors during maintenance:
-
-```
-We're making improvements! Back online soon.
-```
-
-## Security Settings
-
-**Location**: `/admin/security`
-
-- SSL/TLS configuration
-- Rate limiting rules
-- Blocked patterns and domains
-- Security headers
-- IP whitelisting/blacklisting
-
-## Moderation Queue
-
-**Location**: `/admin/moderation`
-
-- Review reported content
-- Approve or remove profiles/links
-- Ban users
-- Manage blocked patterns
-- View moderation history
-
-## API Keys
-
-**Location**: `/admin/api-keys`
-
-- Generate API keys for external access
-- View existing keys
-- Revoke keys
-- Set key permissions and expiration
+When PART 34 is active, Regular Users manage their own profiles and account settings in the user area. They do not become Server Admins by receiving a role in the `users` table. Server Admin exceptions to private profile visibility are available only through the authenticated administration panel, never through a public profile route.

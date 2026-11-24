@@ -1,120 +1,31 @@
 # Security
 
-This page documents the security model of the shipped product: how credentials
-are stored, how sessions work, which endpoints are public, and how to report a
-vulnerability.
+Cassocial treats public requests, profile content, destination URLs, and uploaded configuration as untrusted input. Validation and authorization happen on the server. The product uses separate Server Admin and Regular User account boundaries.
 
-## Password Storage
+## Accounts and passwords
 
-Passwords are hashed with **Argon2id** (`golang.org/x/crypto/argon2`), using the
-OWASP 2023-recommended parameters:
+Passwords are stored as Argon2id hashes. Passwords, reset credentials, recovery codes, setup tokens, and API tokens must never appear in API responses or logs. Server Admins are stored separately from Regular Users. A Regular User role does not grant access to Server Admin routes.
 
-| Parameter | Value |
-|-----------|-------|
-| Iterations (time) | 3 |
-| Memory | 64 MB |
-| Parallelism | 4 |
-| Key length | 32 bytes |
-| Salt length | 16 bytes |
+## Tokens and sessions
 
-Hashes are stored in PHC string format (`$argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>`).
-Verification uses a constant-time comparison (`crypto/subtle`) so timing does not
-leak information about a partially-correct hash.
+API tokens are presented as bearer credentials. Server Admin tokens use the `adm_` prefix; Regular User tokens use `usr_`. Tokens are scoped to their account type and owner. Store tokens in a permission-restricted file, do not share them, and revoke them when no longer needed.
 
-## Sessions & Tokens
+Browser sign-in uses secure session handling. Administrative and user sessions remain separate. The administration interface uses its session cookie; API clients use bearer tokens. A browser cookie is not an API authorization credential.
 
-- Authentication issues a signed **JWT** (`HS256`) via `github.com/golang-jwt/jwt/v5`.
-- The signing secret comes from the `JWT_SECRET` environment variable. If it is
-  not set, a random secret is generated at process startup — sessions do not
-  survive a server restart in that case, so set `JWT_SECRET` explicitly in
-  production.
-- Session lifetime is controlled by the `session_timeout_minutes` setting
-  (default: 1440 minutes / 24 hours), editable from the admin panel.
-- Tokens are validated on every authenticated request; the `RequireAuth`,
-  `RequireAdmin`, `RequireRole`, and `RequireActiveUser` middleware wrap the
-  routes that need them.
+## Private profiles and link destinations
 
-## Two-Factor Authentication (2FA / TOTP)
+Private Regular User profiles are not disclosed through public routes. Anonymous direct requests return 404, and public searches, lists, links, QR endpoints, and click tracking must not reveal the profile. The owner may access their own profile; Server Admin access is available only through the authenticated administration panel.
 
-- 2FA uses TOTP (RFC 6238), 30-second period, 6-digit codes.
-- Enrollment (`POST /api/auth/2fa/enable` or `/api/v1/auth/2fa/enable`) generates
-  a base32 secret and 10 single-use backup codes (backup codes are stored as
-  hashes, shown to the user only once at enrollment time).
-- `POST /api/auth/login/2fa` completes login for accounts with 2FA enabled.
-- 2FA can be disabled via `POST /api/auth/2fa/disable` (authenticated).
+Profile links and shortlink destinations accept safe web URLs. Active-content schemes and internal or local destinations are rejected. Custom domains must be verified before routing to a profile and cannot resolve to private or local addresses.
 
-## API Keys & Scopes
+## Data handling
 
-The data model (`src/server/model/api.go`) defines API keys with per-key
-scopes (`profile:read`, `profile:write`, `link:read`, `link:write`,
-`analytics:read`, `user:read`, `user:write`) and expiration. As of this
-writing, API key issuance/management is **not yet wired to an HTTP endpoint** —
-the admin UI documents an `/admin/api-keys` page (see
-[Admin Panel](admin.md)), but authenticated requests currently use the JWT
-session token described above, not standalone API keys.
+Analytics do not retain raw visitor IP addresses. GeoIP is informational and does not control access. Settings secrets are visible only to Server Admins. QR generation stays within Cassocial and does not send profile details to external services.
 
-## Security Headers
+## Health and operational endpoints
 
-Every response (via the `SecurityHeaders` middleware) includes:
+The public health page is `GET /server/healthz`; the JSON endpoint is `GET /api/v1/server/healthz`. Health responses report service state without returning credentials or internal error details. Administrative, authentication, and account pages must not be included in public sitemaps or indexing.
 
-```
-X-Frame-Options: DENY
-X-Content-Type-Options: nosniff
-Strict-Transport-Security: max-age=31536000
-Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;
-```
+## Report a vulnerability
 
-## Rate Limiting
-
-Authenticated write endpoints can be wrapped with `RateLimitByUser`, a
-per-user, per-window rate limiter. Requests over the configured limit receive
-`429 Too Many Requests`.
-
-## Public / Health Endpoints
-
-| Path | Purpose |
-|------|---------|
-| `GET /server/healthz` | Human-readable HTML health page |
-| `GET /api/v1/server/healthz` | JSON health check (`status`, `uptime`, `version`, `timestamp`) |
-| `GET /health` | Legacy JSON health alias (kept for backward compatibility) |
-| `GET /health/ready` | Readiness probe (JSON `{"status":"ready"}`) |
-| `GET /health/live` | Liveness probe (JSON `{"status":"alive"}`) |
-| `GET /metrics` | Prometheus-format metrics — **restricted to `127.0.0.1`/`::1`/`localhost`**; all other callers get `404` |
-| `GET /robots.txt` | Crawler policy (disallows `/api/` and `/admin`) |
-| `GET /sitemap.xml` | Sitemap containing the home page |
-| `GET /.well-known/security.txt` | Security contact info (RFC 9116) |
-
-None of the database connection details, credentials, or internal error
-messages are exposed by these endpoints; the health checks only ping the
-database and report `healthy`/`unhealthy`.
-
-## Security Reporting
-
-Cassocial publishes an RFC 9116 `security.txt` at `/.well-known/security.txt`,
-which points researchers to the project's GitHub security page
-(`https://github.com/webappsgo/cassocial/security`) for coordinated disclosure.
-There is currently no separate in-app `/server/security` reporting page or
-`security_id` contact form — use the GitHub security advisories flow linked
-from `security.txt` to report a vulnerability.
-
-## Well-Known Namespace
-
-Only one `/.well-known/*` entry is currently enabled:
-
-| Path | Status |
-|------|--------|
-| `/.well-known/security.txt` | Enabled — see above |
-
-Any other `/.well-known/*` path (e.g. WebFinger, OpenID Provider Metadata,
-`assetlinks.json`, `apple-app-site-association`, MTA-STS) returns `404` — none
-of those are implemented in the current codebase. See
-[Integrations](integrations.md) for what would need to change for any of them
-to be enabled.
-
-## Reserved Slugs
-
-To prevent profile slugs from shadowing infrastructure routes, the following
-top-level paths are reserved and cannot be claimed as a profile slug: `api`,
-`admin`, `auth`, `setup`, `dashboard`, `static`, `health`, `metrics`,
-`manifest.json`, `service-worker.js`, `robots.txt`, `sitemap.xml`, `s`, `l`,
-`.well-known`, `server`.
+Use [GitHub private vulnerability reporting](https://github.com/webappsgo/cassocial/security/advisories/new). Do not post exploitable details in a public issue.
