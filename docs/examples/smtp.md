@@ -4,8 +4,8 @@
 
 ```go
 import (
-    "github.com/casapps/cassocial/src/server/model"
-    "github.com/casapps/cassocial/src/service"
+    "github.com/webappsgo/cassocial/src/server/model"
+    "github.com/webappsgo/cassocial/src/service"
 )
 
 // Create SMTP configuration

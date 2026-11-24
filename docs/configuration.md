@@ -8,7 +8,7 @@ Cassocial configuration is stored in `server.yml` and can be edited via:
 
 ## Configuration File
 
-Location: `/config/server.yml` (Docker) or `/etc/casapps/cassocial/server.yml` (system install)
+Location: `/config/server.yml` (Docker) or `/etc/webappsgo/cassocial/server.yml` (system install)
 
 ```yaml
 server:
@@ -71,10 +71,10 @@ CASSOCIAL_DB_USER=cassocial
 CASSOCIAL_DB_PASSWORD=password
 
 # Directories
-CASSOCIAL_CONFIG=/etc/casapps/cassocial
-CASSOCIAL_DATA=/var/lib/casapps/cassocial
-CASSOCIAL_LOG=/var/log/casapps/cassocial
-CASSOCIAL_PID=/var/run/casapps/cassocial.pid
+CASSOCIAL_CONFIG=/etc/webappsgo/cassocial
+CASSOCIAL_DATA=/var/lib/webappsgo/cassocial
+CASSOCIAL_LOG=/var/log/webappsgo/cassocial
+CASSOCIAL_PID=/var/run/webappsgo/cassocial.pid
 ```
 
 ## CLI Flags
@@ -84,9 +84,9 @@ All settings can be overridden with CLI flags:
 ```bash
 cassocial --port 8080
 cassocial --mode production
-cassocial --config /etc/casapps/cassocial
-cassocial --data /var/lib/casapps/cassocial
-cassocial --log /var/log/casapps/cassocial
+cassocial --config /etc/webappsgo/cassocial
+cassocial --data /var/lib/webappsgo/cassocial
+cassocial --log /var/log/webappsgo/cassocial
 cassocial --debug
 ```
 

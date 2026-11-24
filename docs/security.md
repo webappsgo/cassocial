@@ -92,7 +92,7 @@ database and report `healthy`/`unhealthy`.
 
 Cassocial publishes an RFC 9116 `security.txt` at `/.well-known/security.txt`,
 which points researchers to the project's GitHub security page
-(`https://github.com/casapps/cassocial/security`) for coordinated disclosure.
+(`https://github.com/webappsgo/cassocial/security`) for coordinated disclosure.
 There is currently no separate in-app `/server/security` reporting page or
 `security_id` contact form — use the GitHub security advisories flow linked
 from `security.txt` to report a vulnerability.

@@ -12,7 +12,7 @@ docker run -d \
   -p 64580:80 \
   -v ./rootfs/config:/config:z \
   -v ./rootfs/data:/data:z \
-  ghcr.io/casapps/cassocial:latest
+  ghcr.io/webappsgo/cassocial:latest
 ```
 
 Access at `http://localhost:64580`
@@ -21,7 +21,7 @@ Access at `http://localhost:64580`
 
 1. Download docker-compose.yml:
 ```bash
-curl -O https://raw.githubusercontent.com/casapps/cassocial/main/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/webappsgo/cassocial/main/docker/docker-compose.yml
 ```
 
 2. Start the service:
@@ -48,12 +48,12 @@ docker logs cassocial
 
 ```bash
 # Linux AMD64
-curl -LO https://github.com/casapps/cassocial/releases/latest/download/cassocial-linux-amd64
+curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64
 chmod +x cassocial-linux-amd64
 sudo mv cassocial-linux-amd64 /usr/local/bin/cassocial
 
 # macOS ARM64 (Apple Silicon)
-curl -LO https://github.com/casapps/cassocial/releases/latest/download/cassocial-darwin-arm64
+curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-darwin-arm64
 chmod +x cassocial-darwin-arm64
 sudo mv cassocial-darwin-arm64 /usr/local/bin/cassocial
 ```
@@ -98,7 +98,7 @@ The admin panel will be available at `/admin` after setup.
 
 ```bash
 # Pull latest image
-docker pull ghcr.io/casapps/cassocial:latest
+docker pull ghcr.io/webappsgo/cassocial:latest
 
 # Restart container
 docker compose down
@@ -109,7 +109,7 @@ docker compose up -d
 
 ```bash
 # Download new version
-curl -LO https://github.com/casapps/cassocial/releases/latest/download/cassocial-linux-amd64
+curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64
 
 # Stop service
 sudo systemctl stop cassocial

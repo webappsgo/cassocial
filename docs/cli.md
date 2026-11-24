@@ -120,7 +120,7 @@ The client resolves an API token in this order:
 1. `--token` flag
 2. `--token-file` flag
 3. `CASSOCIAL_TOKEN` environment variable
-4. `~/.config/casapps/cassocial/token` (a warning is printed if this file's
+4. `~/.config/webappsgo/cassocial/token` (a warning is printed if this file's
    permissions are looser than `0600`)
 
 ### Server URL Resolution
@@ -146,7 +146,7 @@ If neither is set, the client exits with an error.
 cassocial-cli --server https://cassocial.example.com profile casjay
 
 # List links for a profile ID, authenticated with a token file
-cassocial-cli --server https://cassocial.example.com --token-file ~/.config/casapps/cassocial/token \
+cassocial-cli --server https://cassocial.example.com --token-file ~/.config/webappsgo/cassocial/token \
   links 3f9c1e2a-...
 
 # Create a short link with a custom code

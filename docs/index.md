@@ -26,7 +26,7 @@ docker run -d \
   -p 64580:80 \
   -v ./rootfs/config:/config:z \
   -v ./rootfs/data:/data:z \
-  ghcr.io/casapps/cassocial:latest
+  ghcr.io/webappsgo/cassocial:latest
 ```
 
 Access the admin panel at `http://localhost:64580/admin`
@@ -51,6 +51,6 @@ Access the admin panel at `http://localhost:64580/admin`
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/casapps/cassocial/issues)
-- **Repository**: [GitHub](https://github.com/casapps/cassocial)
+- **Issues**: [GitHub Issues](https://github.com/webappsgo/cassocial/issues)
+- **Repository**: [GitHub](https://github.com/webappsgo/cassocial)
 - **License**: MIT

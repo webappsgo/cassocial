@@ -13,7 +13,7 @@ Thank you for your interest in contributing to Cassocial!
 ### Local Setup
 
 ```bash
-git clone https://github.com/casapps/cassocial.git
+git clone https://github.com/webappsgo/cassocial.git
 cd cassocial
 
 # Quick development build (outputs to temp dir)
@@ -71,7 +71,7 @@ Please **do not** file security vulnerabilities as public issues. See [SECURITY.
 
 ## Reporting Bugs
 
-Use the [bug report template](https://github.com/casapps/cassocial/issues/new?template=bug_report.md). Include:
+Use the [bug report template](https://github.com/webappsgo/cassocial/issues/new?template=bug_report.md). Include:
 - Cassocial version (`cassocial --version`)
 - Operating system and architecture
 - Steps to reproduce
@@ -80,7 +80,7 @@ Use the [bug report template](https://github.com/casapps/cassocial/issues/new?te
 
 ## Requesting Features
 
-Use the [feature request template](https://github.com/casapps/cassocial/issues/new?template=feature_request.md).
+Use the [feature request template](https://github.com/webappsgo/cassocial/issues/new?template=feature_request.md).
 
 ## Pull Request Requirements
 

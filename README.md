@@ -1,8 +1,8 @@
 # Cassocial
 
-[![Build Status](https://jenkins.casjay.cc/buildStatus/icon?job=casapps/cassocial)](https://jenkins.casjay.cc/job/casapps/job/cassocial/)
-[![GitHub release](https://img.shields.io/github/v/release/casapps/cassocial)](https://github.com/casapps/cassocial/releases)
-[![License](https://img.shields.io/github/license/casapps/cassocial)](LICENSE.md)
+[![Build Status](https://jenkins.casjay.cc/buildStatus/icon?job=webappsgo/cassocial)](https://jenkins.casjay.cc/job/casapps/job/cassocial/)
+[![GitHub release](https://img.shields.io/github/v/release/webappsgo/cassocial)](https://github.com/webappsgo/cassocial/releases)
+[![License](https://img.shields.io/github/license/webappsgo/cassocial)](LICENSE.md)
 
 ## About
 
@@ -36,7 +36,7 @@ docker run -d \
   -p 64580:80 \
   -v ./volumes/config:/config:z \
   -v ./volumes/data:/data:z \
-  ghcr.io/casapps/cassocial:latest
+  ghcr.io/webappsgo/cassocial:latest
 ```
 
 Access the admin panel at `http://localhost:64580/admin`
@@ -44,7 +44,7 @@ Access the admin panel at `http://localhost:64580/admin`
 ### Docker Compose
 
 ```bash
-curl -O https://raw.githubusercontent.com/casapps/cassocial/main/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/webappsgo/cassocial/main/docker/docker-compose.yml
 docker compose up -d
 ```
 
@@ -52,7 +52,7 @@ docker compose up -d
 
 ```bash
 # Download latest release
-curl -LO https://github.com/casapps/cassocial/releases/latest/download/cassocial-linux-amd64
+curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64
 
 # Make executable and run
 chmod +x cassocial-linux-amd64
@@ -69,7 +69,7 @@ A companion `cassocial-cli` client is available for interacting with the server 
 
 ```bash
 # Download latest release
-curl -LO https://github.com/casapps/cassocial/releases/latest/download/cassocial-cli-linux-amd64
+curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-cli-linux-amd64
 chmod +x cassocial-cli-linux-amd64
 sudo mv cassocial-cli-linux-amd64 /usr/local/bin/cassocial-cli
 ```
@@ -157,7 +157,7 @@ To use your own domain:
 docker logs cassocial
 
 # Binary
-tail -f /var/log/casapps/cassocial/cassocial.log
+tail -f /var/log/webappsgo/cassocial/cassocial.log
 ```
 
 **Health check:**
@@ -183,7 +183,7 @@ curl http://localhost:64580/healthz
 
 ```bash
 # Clone
-git clone https://github.com/casapps/cassocial
+git clone https://github.com/webappsgo/cassocial
 cd cassocial
 
 # Quick dev build (outputs to OS temp dir)

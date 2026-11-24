@@ -12,7 +12,7 @@ This guide is for contributors developing Cassocial.
 
 ```bash
 # Clone repository
-git clone https://github.com/casapps/cassocial
+git clone https://github.com/webappsgo/cassocial
 cd cassocial
 
 # Quick dev build (outputs to OS temp dir)
@@ -206,7 +206,7 @@ Debug mode enables:
 docker logs cassocial
 
 # Binary
-tail -f /var/log/casapps/cassocial/server.log
+tail -f /var/log/webappsgo/cassocial/server.log
 ```
 
 ## CI/CD
