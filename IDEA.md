@@ -79,6 +79,52 @@ System settings may contain SMTP credentials and other secrets. These values are
 | Internal | `role`, `status`, `created_at`, settings keys |
 | Public | `username`, `slug`, `display_name`, `bio`, `avatar_url`, `links` (for public profiles) |
 
+### API routes
+
+These are Cassocial-specific profile, link, service-catalog, analytics, and
+short-link operations. The route families supplied by AI.md (authentication,
+current-user accounts, custom-domain management, and Server Admin) are defined
+there and are not duplicated here. `{api_version}` is the configured API
+version. Public profile routes return only fields marked public; private
+profiles and their links return `404` to callers other than the owner.
+
+| Method | Route | Authentication | Request and response |
+|--------|-------|----------------|----------------------|
+| `GET` | `/api/{api_version}/users/profiles` | Regular User bearer token (`usr_`) | No body; returns the caller's profiles. |
+| `POST` | `/api/{api_version}/users/profiles` | Regular User bearer token (`usr_`) | JSON profile fields: `slug`, `display_name`, optional `bio`, `avatar_url`, `header_image_url`, `show_usernames`, `visibility`, `meta_title`, and `meta_description`; returns the created profile. |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | No body; returns the caller-owned profile. |
+| `PATCH` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | JSON object containing fields to update; returns the updated profile. Secret fields, including the profile protection password, are never returned. |
+| `DELETE` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | No body; deletes the caller-owned profile and returns `204`. |
+| `GET` | `/api/{api_version}/profiles/{slug}` | None | No body; returns the public profile representation or `404`. |
+| `GET` | `/api/{api_version}/profiles/{slug}/links` | None | No body; returns active public links in display order or `404`. |
+| `GET` | `/api/{api_version}/profiles/{slug}/qr` | None for a public profile; owner token for a private profile | Optional `format` (`png` or `svg`) and `size` query values; returns the generated QR image. |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/links` | Regular User bearer token (`usr_`) | No body; returns the caller-owned profile's ordered links. |
+| `POST` | `/api/{api_version}/users/profiles/{profile_id}/links` | Regular User bearer token (`usr_`) | JSON link fields: `title`, `url`, optional `service_id`, `username`, `icon_url`, `background_color`, and `text_color`; returns the created link. |
+| `PUT` | `/api/{api_version}/users/links/{link_id}` | Regular User bearer token (`usr_`) | JSON object containing link fields to update; returns the updated link. |
+| `DELETE` | `/api/{api_version}/users/links/{link_id}` | Regular User bearer token (`usr_`) | No body; deletes the caller-owned link and returns `204`. |
+| `POST` | `/api/{api_version}/users/profiles/{profile_id}/links/order` | Regular User bearer token (`usr_`) | JSON `{ "link_ids": ["..."] }`; returns the updated link order. |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics` | Regular User bearer token (`usr_`) | Optional `period` query value (`day`, `week`, `month`, `year`, or `all`); returns view, click, geography, device, and referrer aggregates. |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/links` | Regular User bearer token (`usr_`) | No body; returns click counts by link. |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/export` | Regular User bearer token (`usr_`) | Returns the profile analytics export in the requested supported format. |
+| `GET` | `/api/{api_version}/services` | None | Optional `category`, `limit`, and `offset`; returns active services. |
+| `GET` | `/api/{api_version}/services/search` | None | Search query and optional category/pagination values; returns matching active services. |
+| `GET` | `/api/{api_version}/services/categories` | None | No body; returns service categories. |
+| `GET` | `/api/{api_version}/services/popular` | None | No body; returns popular active services. |
+| `GET` | `/api/{api_version}/services/{service_id}` | None | No body; returns one active service or `404`. |
+| `GET` | `/api/{api_version}/users/shortlinks` | Regular User bearer token (`usr_`) | No body; returns the caller's short links. |
+| `POST` | `/api/{api_version}/users/shortlinks` | Regular User bearer token (`usr_`) | JSON `{ "profile_id": "...", "url": "https://...", "custom_code": "...", "expires_in": 0 }`; returns the created short link and its public short URL. |
+| `DELETE` | `/api/{api_version}/users/shortlinks/{code}` | Regular User bearer token (`usr_`) | No body; deletes the caller-owned short link and returns `204`. |
+| `GET` | `/api/{api_version}/shortlinks/{code}` | None | No body; returns public short-link metadata or `404`. |
+| `GET` | `/api/{api_version}/links/{link_id}/click` | None | No body; records an allowed click and redirects to the validated link destination. |
+
+Import and export use JSON payloads and are owned by the authenticated user:
+
+| Method | Route | Authentication | Request and response |
+|--------|-------|----------------|----------------------|
+| `POST` | `/api/{api_version}/users/profiles/import` | Regular User bearer token (`usr_`) | JSON `{ "source": "json", "data": { ... } }`; returns an import job identifier and result. |
+| `GET` | `/api/{api_version}/users/profiles/import/{job_id}` | Regular User bearer token (`usr_`) | No body; returns the caller-owned import result. |
+| `GET` | `/api/{api_version}/users/profiles/export/{profile_id}` | Regular User bearer token (`usr_`) | Returns the caller-owned profile and links as JSON. |
+
 ### Trust boundaries & external services
 
 **SMTP (outbound only):** Used for email verification, password reset, and Server Admin notifications. The operator supplies and controls the SMTP service and credentials. If delivery fails, the user receives a clear message and the failure does not expose credentials.

@@ -15,10 +15,14 @@ Open a pull request with one locale file, `src/common/i18n/locales/{lang}.json`.
 - Follow the language's typography and punctuation conventions. Right-to-left languages must retain their natural direction.
 - Review longer translations for clipping and overflow at 320, 768, and 1280 pixels. Check right-to-left layouts in their mirrored direction.
 - Keep the shared glossary consistent. Product and technology names such as Cassocial, API, Tor, `.onion`, I2P, and JSON remain unchanged.
+- AI-assisted translations are expected. Use natural, idiomatic wording when the language can be translated reliably; ask for human translation when it cannot. Do not hold a complete translation for native-speaker review, and incorporate human corrections in future updates.
+- Keep one consistent, neutral register for each language. Use complete sentences and avoid slang, humor, or idioms that do not translate well.
+- Follow script-specific font requirements. CJK, Devanagari, Thai, and other scripts may need a font stack that covers their characters. Text without spaces must wrap with `overflow-wrap: anywhere`.
+- Observe language-specific typography, including French non-breaking spaces before `: ; ! ?`. Locale-sensitive numbers and dates must use locale formatting, not translated punctuation or hard-coded separators.
 
 ## Review checklist
 
-Maintainers check that the locale has the same keys and placeholders as English, required plural categories are present, no values are empty, and translated text fits the interface. Native-speaker review is welcome. When English strings change, update every shipped locale in the same change where a reliable translation is available; request human translation rather than guessing when it is not.
+Maintainers check that the locale has the same message keys and placeholders as English, required plural categories are present, no values are empty, glossary terms are consistent, and translated text fits the interface. Native-speaker review is welcome but is not required before merging. When English strings change, update every shipped locale in the same change where a reliable translation is available; request human translation rather than guessing when it is not. A retired locale is removed only at its maintainer's request.
 
 ## Supported locales and credits
 

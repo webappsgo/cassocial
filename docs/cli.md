@@ -65,4 +65,6 @@ cassocial-cli --server "$CASSOCIAL_SERVER" profile YOUR_PROFILE
 cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" links
 ```
 
-See [AI.md PART 33](../AI.md) for the complete required client behavior.
+The client implementation is still missing required PART 33 features,
+including login, protected `cli.yml` configuration, interactive mode, and
+cluster failover. Those remain tracked in `TODO.AI.md`.

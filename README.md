@@ -18,6 +18,8 @@ Cassocial is a self-hosted link aggregator and social profile platform. It lets 
 - Optional custom profile domains (PART 36)
 - Server-rendered pages with progressive enhancement
 - A companion `cassocial-cli` client
+- Eight interface languages: English, Spanish, French, Arabic, German, Italian,
+  Japanese, and Chinese
 
 ## Production
 
