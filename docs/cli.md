@@ -36,25 +36,28 @@ cassocial-cli [flags] COMMAND [arguments]
 ```
 
 The client talks to a Cassocial server over its HTTP API. It supports `--help`,
-`--version`, `--color`, `--lang`, `--server`, `--token`, `--token-file`, and
-`--user`. Set the server with `--server` or `CASSOCIAL_SERVER`. Token lookup
-uses, in order, `--token`, `--token-file`, `CASSOCIAL_TOKEN`, and the protected
-per-user token file. On Unix, credential files must be mode `0600`.
+`--version`, `--color`, `--lang`, `--server`, `--token`, `--token-file`,
+`--config`, and `--user`. Set the server with `--server`, `CASSOCIAL_SERVER`,
+or `server.primary` in `cli.yml`. Token lookup uses, in order, `--token`,
+`--token-file`, `CASSOCIAL_TOKEN`, `auth.token` or `auth.token_file` in
+`cli.yml`, and the protected per-user token file. `--config` selects a YAML configuration file; otherwise
+the client reads `~/.config/casapps/cassocial/cli.yml` on Unix or the
+`%APPDATA%` Cassocial config directory on Windows. On Unix, credential files
+must be mode `0600` and loose permissions cause the client to refuse them.
 
 | Command | Purpose |
 |---------|---------|
 | `profile [slug]` | Read a public profile |
 | `links [profile-id]` | Read profile links |
-| `shortlink create --url URL [--code CODE]` | Create a short link |
+| `shortlink create --profile PROFILE_ID --url URL [--code CODE]` | Create a short link |
 | `shortlink list` | List the authenticated user's short links |
 | `shortlink delete --code CODE` | Delete a short link |
 | `version` | Print client version |
 
-`sl` is an alias for `shortlink`. The client currently has no login command,
-interactive TUI, saved YAML configuration, or cluster failover. Those are
-required by PART 33 and remain implementation work; the command reference must
-be updated when they are delivered. Authentication errors currently exit with
-status 1.
+`sl` is an alias for `shortlink`. Authentication and permission errors exit
+with status `77`, connection failures with `69`, missing resources with `66`,
+invalid server input with `65`, and missing client configuration with `78`.
+Unknown commands and general errors use `2` and `1`, respectively.
 
 Examples:
 
@@ -62,9 +65,11 @@ Examples:
 cassocial --help
 cassocial --lang it --status
 cassocial-cli --server "$CASSOCIAL_SERVER" profile YOUR_PROFILE
-cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" links
+cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" links PROFILE_ID
+cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" shortlink create --profile PROFILE_ID --url https://your-site.invalid
 ```
 
-The client implementation is still missing required PART 33 features,
-including login, protected `cli.yml` configuration, interactive mode, and
-cluster failover. Those remain tracked in `TODO.AI.md`.
+The API version defaults to `v1` and can be set with `server.api_version` in
+`cli.yml`. The client still lacks required PART 33 features, including login,
+interactive mode, cached-token revocation handling, and cluster failover.
+Those remain tracked in `TODO.AI.md`.

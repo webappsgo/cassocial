@@ -39,7 +39,11 @@ docs/             MkDocs documentation
 
 ```sh
 make test
-make lint
+docker run --rm \
+  --name "cassocial-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD:/app" -w /app \
+  -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest sh -c 'go vet ./... && staticcheck ./...'
 ```
 
 Tests run in the Go container with CGO disabled. The test target enforces the
