@@ -1,6 +1,6 @@
 ## Project description
 
-Cassocial is a self-hosted, open-source link aggregator and social profile platform. Users create a public profile page with links to their social media accounts, websites, and content — think Linktree, but self-hosted and fully open. Each user can own one or more named profiles, each with a unique URL slug, a customizable theme, an avatar, a bio, and an ordered list of links. A built-in admin panel lets server administrators manage users, profiles, services, and system settings. The application ships as a single self-contained binary with an embedded SQLite database and zero required external dependencies.
+Cassocial is a self-hosted, open-source link aggregator and social profile platform. Users create a public profile page with links to their social media accounts, websites, and content — think Linktree, but self-hosted and fully open. Each user can own one or more named profiles, each with a unique URL slug, a customizable theme, an avatar, a bio, and an ordered list of links. A built-in admin panel lets server administrators manage users, profiles, services, and system settings. The application is distributed as a single self-contained binary.
 
 ## Project variables
 
@@ -45,28 +45,28 @@ maintainer_email:    casjay@yahoo.com
 
 | Role | Description | Key Permissions |
 |------|-------------|-----------------|
-| **admin** | Server administrator | Full access: manage all users, all profiles, system settings, backup, GeoIP refresh |
+| **Server Admin** | Administrative account, separate from Regular Users | Full access: manage users and profiles, system settings, backups, and GeoIP |
 | **user** | Registered account holder | Create and manage own profiles and links; view own analytics; change own password/2FA |
 | **viewer** | Read-only account (future) | View own profile stats; cannot create links or profiles |
 | **public** (unauthenticated) | Anyone on the internet | View public profiles at `/{slug}`; follow redirect links; cannot access `/dashboard` or `/admin` |
 
-Admins are identified by `role = "admin"` in the `users` table. The first admin is created by the setup wizard. Subsequent admins are promoted via the admin panel. A `ServerAdmin` record in the store is the primary admin contact used for notifications; it mirrors the `users` row for the first admin.
+Server Admin accounts are separate from Regular User accounts. The first Server Admin is created by the setup wizard; additional Server Admins are managed through the admin panel.
 
 An active user (`status = "active"`, `email_verified = true`) can log in. Suspended users (`status = "suspended"`) receive a clear error on login. Pending users (`status = "pending"`) must verify their email before the first login.
 
 ### Data model & sensitivity
 
-**users** — account credentials and metadata. `password_hash` (Argon2id), `two_factor_secret`, `password_reset_token` are sensitive and never returned in API responses or logged.
+**users** — regular-user credentials and profile metadata. Password credentials, 2FA secrets, and password-reset credentials are sensitive and never exposed in responses or logs.
 
 **profiles** — public-facing landing pages. Each profile belongs to one user via `user_id`. `protection_password` (hashed) is sensitive. `custom_domain` is user-supplied and must be validated against DNS before `domain_verified` is set to true.
 
-**links** — ordered list of clickable cards on a profile. `url` is user-supplied and must pass scheme + host validation; SSRF-risky schemes (`file://`, `javascript:`, internal hostnames) are rejected at write time.
+**links** — ordered list of clickable cards on a profile. Only safe web destinations are accepted; active-content schemes and internal destinations are rejected.
 
-**profile_theme** — per-profile visual customization. `custom_css` is user-supplied; it is rendered inside a `<style>` tag scoped to the profile page and must be sanitized server-side before storage.
+**profile_theme** — per-profile visual customization. User styling cannot introduce executable content or affect other profiles.
 
-**settings** — key-value configuration store. Contains SMTP credentials (`smtp_password`) and other secrets; these values are masked in logs and never returned to non-admin callers.
+System settings may contain SMTP credentials and other secrets. These values are private to Server Admins and are never exposed to Regular Users or the public.
 
-**analytics** — view and click events stored with a SHA-256 hashed IP (never raw IP), user-agent string, device type, referrer, and GeoIP country code. Retention is configurable (`analytics_retention_days`).
+**analytics** — view and click activity includes device type, referrer, and optional GeoIP country code. Raw visitor IP addresses are not retained, and retention is configurable.
 
 **shortlinks** — short codes that redirect to a target URL. Target URL is validated the same as link URLs. Optional expiry.
 
@@ -75,21 +75,21 @@ An active user (`status = "active"`, `email_verified = true`) can log in. Suspen
 | Sensitivity | Fields |
 |-------------|--------|
 | Secret | `password_hash`, `two_factor_secret`, `password_reset_token`, `protection_password`, `smtp_password`, `bypass_token` |
-| Private | `email`, `last_login`, `two_factor_enabled`, raw analytics event IP |
+| Private | `email`, `last_login`, `two_factor_enabled` |
 | Internal | `role`, `status`, `created_at`, settings keys |
 | Public | `username`, `slug`, `display_name`, `bio`, `avatar_url`, `links` (for public profiles) |
 
 ### Trust boundaries & external services
 
-**SMTP (outbound only):** Used for email verification, password reset, and admin notifications. Credentials are stored in the `settings` table. Connection is made from the server to the configured SMTP host. Failure mode: email is not sent; registration and password-reset flows must degrade gracefully with a clear user message. SMTP host/port are operator-supplied and are trusted as server configuration.
+**SMTP (outbound only):** Used for email verification, password reset, and Server Admin notifications. The operator supplies and controls the SMTP service and credentials. If delivery fails, the user receives a clear message and the failure does not expose credentials.
 
-**GeoIP database (MaxMind GeoLite2 or compatible):** Loaded from a local file path at startup. Used exclusively to derive a country code from a hashed visitor IP for analytics. The database file is operator-supplied; no runtime network fetch is performed. If the file is absent or stale, GeoIP enrichment silently returns an empty country code — analytics still record the event.
+**GeoIP database:** An operator-supplied local database may enrich analytics with a country code. GeoIP is informational only; if the database is unavailable, profile and analytics features remain usable without country enrichment.
 
-**QR code generation:** Performed entirely in-process using a Go library. No external network call. Output is a PNG or SVG byte slice served directly. Untrusted input is only the profile URL (already a validated URL owned by an authenticated user).
+**QR code generation:** Profile QR codes are generated by Cassocial without sending profile data to third parties.
 
-**Let's Encrypt / ACME (optional TLS):** The server can request and auto-renew TLS certificates via the ACME protocol. Operator must point DNS to the server before enabling. Failure mode: serve on HTTP only; log the error and notify the admin via email if SMTP is configured.
+**Let's Encrypt / ACME (optional TLS):** Operators may enable automatic certificates for domains they control. Certificate setup failures must not expose secrets or prevent access to the configured service.
 
-**Custom domains (user-supplied):** A profile owner can set a `custom_domain`. The domain is not trusted until `domain_verified = true`, which requires a DNS TXT record check performed server-side. Custom domain routing must not allow a user to claim a domain that resolves to an internal address (SSRF mitigation: resolve the domain and reject RFC 1918 / loopback addresses).
+**Custom domains (user-supplied):** A profile owner must prove control of a domain before it serves their profile. Domains resolving to private or local destinations cannot be claimed.
 
 ### Threat model & abuse cases
 
@@ -117,18 +117,11 @@ An active user (`status = "active"`, `email_verified = true`) can log in. Suspen
 | Credential stuffing on `/auth/login` | Rate limit: max 5 attempts per IP per 15-minute window; exponential backoff; account lockout after 10 failures; identical error message for wrong password vs unknown user |
 | Spam account registration | Optional email verification (`email_verification_required = true`); optional admin approval (`registration_requires_approval = true`); registration rate limit per IP |
 | Link scraping | Public profiles are intentionally public; click-tracking URLs go through a server redirect so the target URL is not in the raw HTML; robots.txt disallows `/api` and `/admin` |
-| Privilege escalation | Role is stored server-side in the database; never derived from a request parameter; role check middleware applied to every `/admin` and `/api/admin` route |
-| SSRF via custom domains | Domain verified by DNS TXT record; IP of resolved domain is checked against RFC 1918 / loopback ranges before `domain_verified` is set; custom domain routing does not perform outbound HTTP to the claimed domain |
-| SSRF via link URLs | Link URLs validated for `http://` or `https://` scheme and non-empty host at write time; `file://`, `javascript:`, and bare internal hostnames are rejected |
+| Privilege escalation | Only Server Admins can access administrative controls; Regular Users cannot grant themselves higher privileges |
+| SSRF via custom domains | Domain ownership is verified before use; private and local destinations cannot be claimed |
+| SSRF via link URLs | Only safe web destinations are accepted; active-content schemes and internal destinations are rejected |
 | Malicious link URLs (phishing) | Links are presented as-is; the platform does not warrant link safety. Moderation tools allow admins to review and remove flagged links |
-| Stored XSS via custom CSS | Custom CSS is stored verbatim but rendered inside a scoped `<style>` tag; the template engine HTML-escapes all user text fields; CSP header set to `default-src 'self'` on public profile pages |
-| Session hijacking | Session tokens are random 32-byte values stored server-side (not in JWT); `HttpOnly`, `Secure`, `SameSite=Lax` flags; session TTL is configurable |
-| Path traversal in static file serving | Static files served from an embedded filesystem; no user-controlled path segments reach the filesystem |
-| Denial of service on analytics writes | Click and view events are written asynchronously with a bounded queue; if the queue is full, the event is silently dropped to protect the database |
-
-### Security decisions & exceptions
-
-- **Admin runtime privilege:** The server process does not drop privileges after binding to the configured port. The operator is responsible for running the binary under a non-root user account via a systemd unit or container entrypoint.
-- **Custom CSS injection:** User-supplied `custom_css` is stored and rendered without a sandbox. This is an intentional product decision to enable rich profile customization. Only authenticated profile owners can set custom CSS for their own profiles; anonymous users cannot trigger its rendering path.
-- **GeoIP country codes in analytics:** Country code is derived from a hashed IP using a local GeoIP database. It is used for informational analytics only, not as an access control gate. This is explicitly documented to satisfy the "GeoIP is a signal, not a gate" rule.
-- **Viewer role:** The `viewer` role is defined in code constants but not yet surfaced in the UI. Assignment requires direct database manipulation until a future release exposes it. This is a known limitation, not a security exception.
+| Stored XSS via custom CSS | User styling cannot execute scripts, escape its profile, or expose visitors to stored cross-site scripting |
+| Session hijacking | Sessions are protected from script access and cross-site request abuse, and their lifetime is configurable |
+| Path traversal in static file serving | User-controlled paths cannot expose private files or application data |
+| Denial of service on analytics writes | Analytics collection is best-effort and may drop events under overload without interrupting profile access |

@@ -1,243 +1,119 @@
 # Cassocial
 
-[![Build Status](https://jenkins.casjay.cc/buildStatus/icon?job=webappsgo/cassocial)](https://jenkins.casjay.cc/job/casapps/job/cassocial/)
-[![GitHub release](https://img.shields.io/github/v/release/webappsgo/cassocial)](https://github.com/webappsgo/cassocial/releases)
+[![CI](https://github.com/webappsgo/cassocial/actions/workflows/ci.yml/badge.svg)](https://github.com/webappsgo/cassocial/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/webappsgo/cassocial)](https://github.com/webappsgo/cassocial/releases)
 [![License](https://img.shields.io/github/license/webappsgo/cassocial)](LICENSE.md)
 
 ## About
 
-Cassocial is a self-hosted link aggregator and social profile landing page platform. Create beautiful, customizable profile pages with links to all your social media, websites, and content in one place - like Linktree, but fully under your control.
-
-## Official Site
-
-https://cassocial.casapps.us
+Cassocial is a self-hosted link aggregator and social profile platform. It lets people create profile pages with links, profile details, themes, and optional custom domains, managed from a server-rendered web interface.
 
 ## Features
 
-- **Profile Management** - Create unlimited profiles with custom slugs
-- **Link Aggregation** - Add links to 5000+ supported services with auto-detected icons
-- **Custom Domains** - Use your own domain for branded profile pages
-- **Analytics** - Track page views, link clicks, and visitor analytics
-- **QR Codes** - Generate QR codes for profiles with customizable styles
-- **Themes** - Beautiful dark/light themes with custom CSS support
-- **Multi-User** - Support for organizations and teams
-- **Import/Export** - Import from Linktree, Linkstack, Carrd, and others
-- **API Access** - Full REST, GraphQL, and OpenAPI support
-- **Privacy-Focused** - Self-hosted, GDPR compliant, no tracking scripts
-- **Shortlinks** - Create custom shortlinks with analytics
+- Multiple profiles with custom slugs, profile details, and ordered links
+- Public and private profile visibility
+- Responsive themes, QR codes, and link shortlinks
+- Profile and link analytics
+- Regular User accounts (PART 34) and Server Admin accounts
+- Optional custom profile domains (PART 36)
+- Server-rendered pages with progressive enhancement
+- A companion `cassocial-cli` client
 
 ## Production
 
-### Docker (Recommended)
+### Docker
 
 ```bash
 docker run -d \
   --name cassocial \
-  -p 64580:80 \
+  -p 172.17.0.1:64580:80 \
   -v ./volumes/config:/config:z \
   -v ./volumes/data:/data:z \
   ghcr.io/webappsgo/cassocial:latest
 ```
 
-Access the admin panel at `http://localhost:64580/admin`
-
 ### Docker Compose
 
 ```bash
-curl -O https://raw.githubusercontent.com/webappsgo/cassocial/main/docker/docker-compose.yml
+curl -q -LSsf -O https://raw.githubusercontent.com/webappsgo/cassocial/main/docker/docker-compose.yml
 docker compose up -d
 ```
 
 ### Binary
 
-```bash
-# Download latest release
-curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64
+Download the binary for your operating system and architecture from the [GitHub releases page](https://github.com/webappsgo/cassocial/releases), then run it:
 
-# Make executable and run
+```bash
+curl -q -LSsf -O https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64
 chmod +x cassocial-linux-amd64
 ./cassocial-linux-amd64
 ```
 
-The server will start and display a one-time setup token for admin panel access.
+The server creates its configuration and data directories using the platform paths described in the [installation guide](docs/installation.md). Follow the first-run setup instructions printed by the server to create the primary Server Admin.
+
+For systemd installation and service management, follow the [installation guide](docs/installation.md).
 
 ## Client
 
-A companion `cassocial-cli` client is available for interacting with the server API.
-
-### Install
+Download and install the `cassocial-cli` binary for your platform:
 
 ```bash
-# Download latest release
-curl -LO https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-cli-linux-amd64
+curl -q -LSsf -O https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-cli-linux-amd64
 chmod +x cassocial-cli-linux-amd64
 sudo mv cassocial-cli-linux-amd64 /usr/local/bin/cassocial-cli
+cassocial-cli --server https://YOUR_SERVER --help
 ```
 
-### Configure
-
-```bash
-# Connect to the official server
-cassocial-cli --server https://cassocial.casapps.us --token YOUR_API_TOKEN
-```
-
-### Usage
-
-```bash
-cassocial-cli --help
-cassocial-cli profile alice
-cassocial-cli shortlink create --url https://example.com
-```
+The client requires the operator's server URL. See the [CLI guide](docs/cli.md) for supported commands and authentication.
 
 ## Configuration
 
-Configuration is auto-generated on first run. Edit via admin panel at `http://localhost:64580/admin`.
-
-Key settings:
-
-- **Server**
-  - `server.port` - Listen port (default: 8080)
-  - `server.address` - Listen address (default: 0.0.0.0)
-  - `server.mode` - production or development
-
-- **Database**
-  - `database.driver` - sqlite (default), postgres, or mysql
-  - `database.name` - Database name/path
-
-- **Cassocial**
-  - `cassocial.site_name` - Site name (default: Cassocial)
-  - `cassocial.allow_registration` - Allow new user signups
-  - `cassocial.max_profiles_per_user` - Max profiles per user (default: 5)
-  - `cassocial.max_links_per_profile` - Max links per profile (default: 100)
-
-All settings can be configured via:
-1. Admin web UI at `/admin` (recommended)
-2. Configuration file at `{configdir}/server.yml`
-3. Environment variables (`CASSOCIAL_*`)
-4. CLI flags (`--port`, `--address`, etc.)
+Cassocial reads `{config_dir}/server.yml`, where `{config_dir}` follows the platform paths in the [installation guide](docs/installation.md). The server selects an available port in the 64xxx range by default. Server Admins can manage supported settings through `/server/administration`; see the [configuration reference](docs/configuration.md).
 
 ## API
 
-API documentation available at `/openapi` when running.
+The API is served by your Cassocial instance. See the [API reference](docs/api.md) for route families and authentication details. With no project-wide official site configured, use your own server address in requests:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /healthz` | Health check |
-| `GET /api/v1/profiles` | List profiles |
-| `GET /api/v1/profiles/{slug}` | Get profile by slug |
-| `GET /api/v1/links` | List links |
-| `POST /api/v1/links` | Create link (requires auth) |
-| `GET /api/v1/analytics` | Get analytics (requires auth) |
-| `GET /api/v1/services` | List supported services |
-| `GET /openapi` | Swagger UI |
-| `GET /openapi.json` | OpenAPI specification |
-| `GET /graphql` | GraphQL playground |
-
-Full API documentation: `http://localhost:64580/openapi`
+```bash
+curl -q -LSsf https://YOUR_SERVER/server/healthz
+```
 
 ## Other
 
-### Default Admin Access
-
-On first run, a setup token is displayed in the console. Use this token to access `/admin` and create your admin account.
-
-### Custom Domains
-
-To use your own domain:
-
-1. Point your domain DNS to your server
-2. Configure domain in admin panel
-3. Cassocial will automatically handle SSL via Let's Encrypt
-
-### Troubleshooting
-
-**Check logs:**
-```bash
-# Docker
-docker logs cassocial
-
-# Binary
-tail -f /var/log/webappsgo/cassocial/cassocial.log
-```
-
-**Health check:**
-```bash
-curl http://localhost:64580/healthz
-```
-
-**Status:**
-```bash
-./cassocial-linux-amd64 --status
-```
+- [Installation](docs/installation.md)
+- [Configuration](docs/configuration.md)
+- [Administration](docs/admin.md)
+- [Security](docs/security.md)
+- [Integrations](docs/integrations.md)
+- [Translation guide](docs/translating.md)
+- [Development](docs/development.md)
+- [Report a security issue](.github/SECURITY.md)
 
 ## Development
 
-**Development instructions are for contributors only.**
-
-### Prerequisites
-
-- Docker (for containerized builds)
-- Go 1.23+ (optional - Docker build works without Go installed)
-
-### Build
+Development instructions are for contributors. Builds and tests use the Docker toolchain described by the project Makefile and AI.md.
 
 ```bash
-# Clone
-git clone https://github.com/webappsgo/cassocial
+git clone https://github.com/webappsgo/cassocial.git
 cd cassocial
-
-# Quick dev build (outputs to OS temp dir)
 make dev
-
-# Full build (all platforms, outputs to binaries/)
-make build
-
-# Test
 make test
 ```
 
-### Project Structure
-
-```
-src/           # Source code
-  config/      # Configuration package
-  server/      # HTTP server, handlers, models, store
-  service/     # Business services (email, etc.)
-  swagger/     # OpenAPI/Swagger
-  graphql/     # GraphQL API
-  mode/        # Application mode detection
-  path/        # Path resolution
-  ssl/         # SSL/TLS handling
-  scheduler/   # Background tasks
-  admin/       # Admin panel
-
-docker/        # Docker files
-tests/         # Test files
-binaries/      # Built binaries (gitignored)
-```
-
-### Testing with Docker
-
-```bash
-# Build
-make build
-
-# Test in container
-docker run --rm -v $(pwd)/binaries:/app alpine:latest /app/cassocial --help
-```
+Read the [development guide](docs/development.md) before making changes. The project specification is in `AI.md`, with product scope in `IDEA.md`.
 
 ## Disclaimer
 
 This software is provided "as is" without warranty of any kind. Use at your own risk.
 
-- **No Warranty**: The authors are not responsible for any damages, data loss, or issues arising from use of this software
-- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice
-- **Third-Party Services**: If this software connects to external APIs or services, their terms of service apply separately
-- **Security**: While we strive to follow security best practices, no software is guaranteed to be free of vulnerabilities
-- **Production Use**: Evaluate thoroughly before deploying in production environments
+- **No Warranty**: The authors are not responsible for damages, data loss, or issues arising from use of this software.
+- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice.
+- **Third-Party Services**: Connected services remain subject to their own terms.
+- **Security**: No software is guaranteed to be free of vulnerabilities.
+- **Production Use**: Evaluate the software and its operational requirements before deploying it.
 
 By using this software, you acknowledge that you have read and understood this disclaimer.
 
 ## License
 
-MIT - See [LICENSE.md](LICENSE.md)
+See [LICENSE.md](LICENSE.md).

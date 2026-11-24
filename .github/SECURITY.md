@@ -10,7 +10,7 @@ Report source repository vulnerabilities through [GitHub private vulnerability r
 
 The project aims to acknowledge reports within 48 hours and provide a fix or mitigation for critical vulnerabilities within 14 days. The maintainers will coordinate disclosure with the reporter and publish details after a fix is available.
 
-For deployed-instance security concerns, use the application's security reporting page at `/server/security` and follow its private contact instructions.
+For deployed-instance security concerns, use the application's [security page](/server/security), its [machine-readable security.txt](/.well-known/security.txt), or the [private contact form](/server/contact?security_id=...). The application encrypts submitted reports where configured.
 
 ## Out of scope
 

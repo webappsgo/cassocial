@@ -98,17 +98,17 @@ Runs all tests via Docker.
 make dev
 
 # The output shows the binary location, e.g.:
-# Built: /tmp/casapps.XXXXXX/cassocial
+# Built: /tmp/webappsgo/cassocial-XXXXXX/cassocial
 
 # Test in container
-docker run --rm -v /tmp/casapps.XXXXXX:/app alpine:latest /app/cassocial --help
+docker run --rm -v /tmp/webappsgo/cassocial-XXXXXX:/app alpine:latest /app/cassocial --help
 ```
 
 ### Docker Testing
 
 ```bash
 # Use temp directory workflow
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/casapps.XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/webappsgo/cassocial-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
@@ -206,7 +206,7 @@ Debug mode enables:
 docker logs cassocial
 
 # Binary
-tail -f /var/log/webappsgo/cassocial/server.log
+tail -f /var/log/casapps/cassocial/server.log
 ```
 
 ## CI/CD

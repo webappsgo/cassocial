@@ -143,18 +143,18 @@ If neither is set, the client exits with an error.
 
 ```bash
 # Look up a public profile
-cassocial-cli --server https://cassocial.example.com profile casjay
+cassocial-cli --server https://YOUR_SERVER profile casjay
 
 # List links for a profile ID, authenticated with a token file
-cassocial-cli --server https://cassocial.example.com --token-file ~/.config/webappsgo/cassocial/token \
+cassocial-cli --server https://YOUR_SERVER --token-file ~/.config/webappsgo/cassocial/token \
   links 3f9c1e2a-...
 
 # Create a short link with a custom code
-cassocial-cli --server https://cassocial.example.com --token "$CASSOCIAL_TOKEN" \
-  shortlink create --url https://example.com/very/long/path --code demo
+cassocial-cli --server https://YOUR_SERVER --token "$CASSOCIAL_TOKEN" \
+  shortlink create --url https://YOUR_PROFILE_SITE/path --code demo
 
 # List your short links
-cassocial-cli --server https://cassocial.example.com --token "$CASSOCIAL_TOKEN" shortlink list
+cassocial-cli --server https://YOUR_SERVER --token "$CASSOCIAL_TOKEN" shortlink list
 ```
 
 If the server responds with `401 Unauthorized`, the client prints a message

@@ -53,13 +53,13 @@ On EVERY new conversation or after "context compacted" message:
 
 ## Key Placeholders
 - `{project_name}` = cassocial
-- `{project_org}` = casapps
+- `{project_org}` = webappsgo
 - `{admin_path}` = admin (default)
 
 ## Account Types (CRITICAL)
 - **Server Admin** = manages the app (NOT a privileged OS user)
 - **Primary Admin** = first admin, cannot be deleted
-- **Regular User** = end-user (PART 34, implemented — cassocial is multi-user)
+- **Regular User** = end-user (PART 34; activated in SPEC.md)
 - Server Admins ≠ Regular Users (separate DB tables)
 
 ## Cluster vs Managed Nodes (CRITICAL)
@@ -110,9 +110,9 @@ On EVERY new conversation or after "context compacted" message:
 - AI behavior: `.claude/rules/ai-rules.md` (PART 0, 1)
 - Project structure: `.claude/rules/project-rules.md` (PART 2, 3, 4)
 - Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16, 17)
-- Full spec: `AI.md` (~63k lines) ← **SOURCE OF TRUTH**
+- Full spec: `AI.md` ← **SOURCE OF TRUTH**
 
 ## Current Project State
-- Last read AI.md: 2026-07-30 (PART 0-6 bootstrap pass)
-- Current task: bootstrap — directory layout, project files, build system, dependencies, config, metadata
-- Relevant PARTs: 0, 1, 2, 3, 4, 5, 6
+- Last read AI.md: 2026-11-24 (full alignment work in progress)
+- Current task: bring implementation, server pages, deployment, CI/CD, tests, and docs into compliance with AI.md
+- Relevant PARTs: all applicable PARTs 0-36; PART 37 is reference-only; finish with FINAL CHECKPOINT
