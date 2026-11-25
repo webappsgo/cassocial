@@ -65,9 +65,11 @@ do not invoke the Go toolchain directly on the host.
 
 ## Database changes
 
-The schema is initialized idempotently at startup. Do not add versioned SQL
-migration files or migration instructions. A schema change must preserve
-existing data and be covered by tests against fresh and existing databases.
+AI.md PART 10 requires an idempotent schema bootstrap on every startup, with no
+versioned migration files or migration tool. Schema changes must preserve
+existing data and work against both fresh and already initialized databases.
+The repository's current migration-directory implementation is still tracked
+for replacement in `TODO.AI.md`; do not add more migration files.
 
 ## Documentation
 

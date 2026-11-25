@@ -1,99 +1,103 @@
 # Cassocial
 
+Cassocial is a self-hosted link aggregator and social profile platform. It lets people create profile pages with links, profile details, themes, and optional custom domains, managed from a server-rendered web interface.
+
 [![CI](https://github.com/webappsgo/cassocial/actions/workflows/ci.yml/badge.svg)](https://github.com/webappsgo/cassocial/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/webappsgo/cassocial)](https://github.com/webappsgo/cassocial/releases)
 [![License](https://img.shields.io/github/license/webappsgo/cassocial)](LICENSE.md)
-
-## About
-
-Cassocial is a self-hosted link aggregator and social profile platform. It lets people create profile pages with links, profile details, themes, and optional custom domains, managed from a server-rendered web interface.
+[![Documentation](https://readthedocs.org/projects/webappsgo-cassocial/badge/?version=latest)](https://webappsgo-cassocial.readthedocs.io/)
 
 ## Features
 
-- Multiple profiles with custom slugs, profile details, and ordered links
+- User accounts with multiple profiles, custom slugs, profile details, and ordered links
 - Public and private profile visibility
-- Responsive themes, QR codes, and link shortlinks
+- Responsive themes, QR codes, and short links
 - Profile and link analytics
-- Regular User accounts (PART 34) and Server Admin accounts
-- Optional custom profile domains (PART 36)
+- Separate Regular User and Server Admin accounts
+- Optional custom profile domains
 - Server-rendered pages with progressive enhancement
-- A companion `cassocial-cli` client
-- Eight interface languages: English, Spanish, French, Arabic, German, Italian,
-  Japanese, and Chinese
+- Companion `cassocial-cli` client
+- Eight interface languages: Arabic, German, English, Spanish, French, Italian, Japanese, and Chinese
 
-## Production
+## Install
 
-### Docker
+Download the matching server and client binaries from [GitHub Releases](https://github.com/webappsgo/cassocial/releases/latest).
+
+| Platform | Architectures |
+|---|---|
+| Linux | amd64, arm64 |
+| macOS | amd64 (Intel), arm64 (Apple Silicon) |
+| Windows | amd64, arm64 |
+| FreeBSD | amd64, arm64 |
+
+For example, install the Linux amd64 server:
 
 ```bash
-docker run -d \
-  --name cassocial \
-  -p 172.17.0.1:64580:80 \
-  -v ./volumes/config:/config:z \
-  -v ./volumes/data:/data:z \
-  ghcr.io/webappsgo/cassocial:latest
+curl -q -LSsf https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64 -o cassocial
+chmod +x cassocial
+./cassocial --help
 ```
 
-### Docker Compose
+On macOS, remove quarantine from downloaded binaries when required:
 
 ```bash
-curl -q -LSsf -O https://raw.githubusercontent.com/webappsgo/cassocial/main/docker/docker-compose.yml
+xattr -d com.apple.quarantine ./cassocial ./cassocial-cli 2>/dev/null || true
+```
+
+For Docker, systemd, service setup, and platform-specific paths, see the [installation guide](docs/installation.md).
+
+## Docker
+
+For Compose, create a persistent deployment directory and download the Compose file there:
+
+```bash
+mkdir -p "$HOME/cassocial/volumes/config" "$HOME/cassocial/volumes/data"
+cd "$HOME/cassocial"
+curl -q -LSsf -o docker-compose.yml https://raw.githubusercontent.com/webappsgo/cassocial/main/docker/docker-compose.yml
 docker compose up -d
 ```
 
-### Binary
+The container publishes port `64580` on the Docker bridge address `172.17.0.1`. Keep the deployment directory and its `volumes/` data when updating the image.
 
-Download the binary for your operating system and architecture from the [GitHub releases page](https://github.com/webappsgo/cassocial/releases), then run it:
+For a single-container deployment with PostgreSQL and Valkey bundled in the
+image, download `docker/all-in-one.yml` as `all-in-one.yml` and run
+`docker compose -f all-in-one.yml up -d`. The AIO image also includes Tor and
+i2pd; only the web port is published.
 
-```bash
-curl -q -LSsf -O https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-linux-amd64
-chmod +x cassocial-linux-amd64
-./cassocial-linux-amd64
-```
+## Client CLI
 
-The server creates its configuration and data directories using the platform paths described in the [installation guide](docs/installation.md). Follow the first-run setup instructions printed by the server to create the primary Server Admin.
-
-For systemd installation and service management, follow the [installation guide](docs/installation.md).
-
-## Client
-
-Download and install the `cassocial-cli` binary for your platform:
+Install the `cassocial-cli` binary for your platform from [GitHub Releases](https://github.com/webappsgo/cassocial/releases/latest), then point it at your server:
 
 ```bash
-curl -q -LSsf -O https://github.com/webappsgo/cassocial/releases/latest/download/cassocial-cli-linux-amd64
 chmod +x cassocial-cli-linux-amd64
-sudo mv cassocial-cli-linux-amd64 /usr/local/bin/cassocial-cli
-cassocial-cli --server https://YOUR_SERVER --help
+./cassocial-cli-linux-amd64 --server https://YOUR_SERVER --help
 ```
 
-The client requires the operator's server URL. See the [CLI guide](docs/cli.md) for supported commands and authentication.
+See the [CLI guide](docs/cli.md) for supported commands and authentication limitations.
 
-## Configuration
+## Configuration and API
 
-Cassocial reads `{config_dir}/server.yml`, where `{config_dir}` follows the platform paths in the [installation guide](docs/installation.md). The server selects an available port in the 64xxx range by default. Server Admins can manage supported settings through `/server/administration`; see the [configuration reference](docs/configuration.md).
+The server reads `{config_dir}/server.yml`; default paths and supported environment overrides are in the [configuration reference](docs/configuration.md). Server Admins manage the settings currently exposed by the application at `/server/administration`.
 
-## API
-
-The API is served by your Cassocial instance. See the [API reference](docs/api.md) for route families and authentication details. With no project-wide official site configured, use your own server address in requests:
+The API is served by each Cassocial instance. See the [API reference](docs/api.md) for route families and authentication details. Use your own server address:
 
 ```bash
 curl -q -LSsf https://YOUR_SERVER/server/healthz
 ```
 
-## Other
+## More documentation
 
-- [Installation](docs/installation.md)
-- [Configuration](docs/configuration.md)
 - [Administration](docs/admin.md)
 - [Security](docs/security.md)
 - [Integrations](docs/integrations.md)
+- [SMTP setup example](docs/examples/smtp.md)
 - [Translation guide](docs/translating.md)
 - [Development](docs/development.md)
 - [Report a security issue](.github/SECURITY.md)
 
 ## Development
 
-Development instructions are for contributors. Builds and tests use the Docker toolchain described by the project Makefile and AI.md.
+Contributor instructions are in the [development guide](docs/development.md). Builds and tests use the Docker Go toolchain described by the project Makefile and AI.md.
 
 ```bash
 git clone https://github.com/webappsgo/cassocial.git
@@ -102,19 +106,9 @@ make dev
 make test
 ```
 
-Read the [development guide](docs/development.md) before making changes. The project specification is in `AI.md`, with product scope in `IDEA.md`.
-
 ## Disclaimer
 
-This software is provided "as is" without warranty of any kind. Use at your own risk.
-
-- **No Warranty**: The authors are not responsible for damages, data loss, or issues arising from use of this software.
-- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice.
-- **Third-Party Services**: Connected services remain subject to their own terms.
-- **Security**: No software is guaranteed to be free of vulnerabilities.
-- **Production Use**: Evaluate the software and its operational requirements before deploying it.
-
-By using this software, you acknowledge that you have read and understood this disclaimer.
+This software is provided "as is" without warranty of any kind. Use it at your own risk. Evaluate its security and operational requirements before production use. Connected third-party services remain subject to their own terms.
 
 ## License
 

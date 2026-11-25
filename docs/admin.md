@@ -1,38 +1,57 @@
 # Server Administration
 
-Server Admin accounts manage Cassocial itself. They are separate from Regular User accounts and use a separate session. The default admin path is `/server/administration`; operators can change it with `server.admin_path`.
-
-The public interface does not link to or advertise the administration path. Enter the configured path directly. Unauthenticated requests go to the shared sign-in page. A signed-in Regular User is returned to their own account area and cannot use Server Admin routes.
+Server Admin accounts manage the Cassocial installation. They are separate
+from Regular User accounts and use a separate browser session. The default
+administration path is `/server/administration`; set `server.admin_path` to
+change it.
 
 ## First Server Admin
 
-On a new installation, the server prints a one-time setup token. Visit `/server/administration/setup` and use that token to create the primary Server Admin. The primary Server Admin cannot be deleted. Additional Server Admins are managed through the administration panel.
+On first start, Cassocial prints a one-time setup token and the setup URL.
+Open `/server/{admin_path}/setup` and use the token to create the primary
+Server Admin. The primary account cannot be deleted.
 
-## Pages
+## Available pages
 
-Administration routes use `/server/{admin_path}/...`. Common sections include:
+The current browser administration interface includes these pages:
 
 | Path | Purpose |
 |------|---------|
-| `/server/{admin_path}/` | Server dashboard |
-| `/server/{admin_path}/settings` | Server configuration |
-| `/server/{admin_path}/users` | Regular User management when PART 34 is enabled |
-| `/server/{admin_path}/security` | Security and authentication settings |
-| `/server/{admin_path}/email` | Email configuration |
-| `/server/{admin_path}/backup` | Backup and restore |
-| `/server/{admin_path}/logs` | Application and audit logs |
-| `/server/{admin_path}/scheduler` | Built-in scheduled tasks |
-| `/server/{admin_path}/updates` | Application updates |
-| `/server/{admin_path}/network` | Network and overlay settings |
+| `/server/{admin_path}/` | Server dashboard and overview |
+| `/server/{admin_path}/settings` | Update the settings exposed by the current form |
+| `/server/{admin_path}/smtp` | Configure and test SMTP |
+| `/server/{admin_path}/users` | Manage Regular User status and delete Regular User accounts |
+| `/server/{admin_path}/security/reports` | Review encrypted vulnerability reports and update triage status |
 
-The admin's personal account is under `/server/{admin_path}/{admin_username}/profile`. Server-wide settings stay in their section; they do not belong under the personal account path.
+The shared pages `/server/about`, `/server/privacy`, `/server/contact`,
+`/server/help`, `/server/terms`, and `/server/security` show installation-level
+information. Terms and contact details are controlled by the server operator.
 
-## Web and API authentication
+## API access
 
-Browser administration uses the Server Admin session and standard HTML forms. Core operations must work with JavaScript disabled. The JSON API uses the versioned route family `/api/{api_version}/server/{admin_path}/...` and Server Admin bearer tokens beginning with `adm_`; a browser session cookie does not replace API token authentication.
+The administration API is under
+`/api/{api_version}/server/{admin_path}/...` and requires a Server Admin bearer
+token beginning with `adm_`. The currently mounted endpoints cover Regular
+User management, settings, statistics, backup trigger, service import, cache
+clearing, SMTP, and notification preferences. See the
+[API reference](api.md#server-admin-api) for the route list.
 
-Never put passwords, one-time setup tokens, or API tokens in documentation, URLs, screenshots, or logs. Review [Security](security.md) before changing authentication settings.
+Browser session cookies do not authorize API requests. Regular User accounts
+and Server Admin accounts are stored and authorized separately; a Regular User
+role never grants Server Admin access.
 
-## Regular User separation
+## Regular User management
 
-When PART 34 is active, Regular Users manage their own profiles and account settings in the user area. They do not become Server Admins by receiving a role in the `users` table. Server Admin exceptions to private profile visibility are available only through the authenticated administration panel, never through a public profile route.
+When multi-user support is active, Server Admins can review user accounts,
+change account status, and delete accounts from the Users page. The user
+management API is available under
+`/api/{api_version}/server/{admin_path}/users`. Users manage their own profiles
+under `/users/`; private profiles return 404 to other visitors, including
+through public API routes.
+
+## Configuration safety
+
+SMTP passwords and other credentials are not returned by settings APIs or
+forms. Do not include setup tokens, passwords, or API tokens in support
+requests, screenshots, or logs. See [Security](security.md) for account and
+token handling.

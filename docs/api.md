@@ -1,64 +1,111 @@
 # API Reference
 
-Cassocial serves its JSON API at `/api/{api_version}/server/`; the default version is `v1`. Public API paths in this guide are relative because each operator runs their own server. Use your instance URL when making a request.
+Cassocial's default API version is `v1`; the server can change it with
+`server.api_version`. The default Server Admin path is `administration`, set by
+`server.admin_path`.
 
-```bash
+Use your server address in requests:
+
+```sh
 curl -q -LSsf https://YOUR_SERVER/api/v1/server/healthz
 ```
 
 ## API documentation
 
-The interactive OpenAPI explorer is available at `/server/docs/swagger`. The machine-readable OpenAPI document is served at `/api/{api_version}/server/swagger`; `/api/swagger` resolves directly to the configured version. The GraphQL interface is available at `/server/docs/graphql`, with its API at `/api/{api_version}/server/graphql`.
+The OpenAPI UI is available at `/server/docs/swagger`. The machine-readable
+OpenAPI document is served at `/api/{api_version}/server/swagger`; the direct
+alias `/api/swagger` serves the configured version. Cassocial does not provide
+a GraphQL endpoint or GraphiQL page.
 
 ## Health
 
 | Method | Path | Authentication | Description |
 |--------|------|----------------|-------------|
-| `GET` | `/server/healthz` | None | Server-rendered health status |
-| `GET` | `/api/v1/server/healthz` | None | JSON health status |
-| `GET` | `/api/healthz` | None | Direct alias for the configured API version |
+| `GET` | `/server/healthz` | None | HTML health status |
+| `GET` | `/api/{api_version}/server/healthz` | None | JSON health status |
+| `GET` | `/api/healthz` | None | Alias for the configured JSON health endpoint |
 
 ## Authentication
 
-Authentication endpoints live under `/server/auth/` and `/api/{api_version}/server/auth/`. Login is shared by account types; the server redirects a successful browser login to the appropriate account area. The API login response identifies the account type and may require a second-factor step.
+Browser sign-in and account forms are under `/server/auth/`. API sign-in is
+under `/api/{api_version}/server/auth/`.
 
 | Method | API path | Purpose |
 |--------|----------|---------|
-| `POST` | `/api/v1/server/auth/register` | Register a Regular User when open registration is enabled |
-| `POST` | `/api/v1/server/auth/login` | Sign in a Regular User or Server Admin |
-| `POST` | `/api/v1/server/auth/logout` | End the current session |
-| `POST` | `/api/v1/server/auth/2fa` | Complete a second-factor challenge |
-| `POST` | `/api/v1/server/auth/password/forgot` | Request password recovery |
-| `POST` | `/api/v1/server/auth/password/reset` | Set a new password from a recovery token |
-| `POST` | `/api/v1/server/auth/verify` | Verify an email address |
-| `POST` | `/api/v1/server/auth/refresh` | Refresh an authenticated session |
+| `POST` | `/api/{api_version}/server/auth/login` | Sign in a Server Admin or Regular User |
+| `POST` | `/api/{api_version}/server/auth/login/2fa` | Complete a second-factor challenge |
+| `POST` | `/api/{api_version}/server/auth/register` | Register a Regular User when registration is open |
+| `POST` | `/api/{api_version}/server/auth/forgot-password` | Request password recovery |
+| `POST` | `/api/{api_version}/server/auth/reset-password` | Set a password using a recovery token |
+| `GET` | `/api/{api_version}/server/auth/verify-email/{token}` | Verify an email address |
+| `POST` | `/api/{api_version}/server/auth/logout` | Revoke the authenticated API session |
+| `POST` | `/api/{api_version}/server/auth/refresh` | Refresh the authenticated API session |
+| `POST` | `/api/{api_version}/server/auth/2fa/enable` | Enable TOTP for the authenticated account |
+| `POST` | `/api/{api_version}/server/auth/2fa/verify` | Verify a TOTP code |
+| `POST` | `/api/{api_version}/server/auth/2fa/disable` | Disable TOTP for the authenticated account |
 
-Additional passkey, invite, external identity, and recovery routes are documented by the OpenAPI document for the running API version.
+Registration, email verification, and password recovery depend on the
+deployment's settings and working SMTP delivery. Browser forms use the
+server-rendered pages and session cookies; API routes use bearer tokens.
 
-## Authorization
+## Profiles, links, and short links
 
-Send an API token in the `Authorization` header:
+Regular User profile and link operations require a `usr_` bearer token.
+Server Admin API operations require an `adm_` bearer token. A browser session
+cookie does not authorize API requests.
 
-```bash
-curl -q -LSsf \
-  -H 'Authorization: Bearer YOUR_API_TOKEN' \
-  https://YOUR_SERVER/api/v1/server/auth/check
-```
+| Method | Path | Authentication | Purpose |
+|--------|------|----------------|---------|
+| `GET`, `POST` | `/api/{api_version}/users/profiles` | Regular User | List or create profiles owned by the caller |
+| `GET`, `PATCH`, `DELETE` | `/api/{api_version}/users/profiles/{id}` | Regular User | Read, update, or delete an owned profile |
+| `POST` | `/api/{api_version}/users/profiles/{id}/duplicate` | Regular User | Duplicate an owned profile |
+| `GET`, `POST` | `/api/{api_version}/users/profiles/{id}/links` | Regular User | List or add links to an owned profile |
+| `POST` | `/api/{api_version}/users/profiles/{id}/links/order` | Regular User | Reorder links for an owned profile |
+| `PUT`, `DELETE` | `/api/{api_version}/users/links/{id}` | Regular User | Update or delete an owned link |
+| `GET` | `/api/{api_version}/users/{username}` | Optional | Read a public account profile; private accounts return 404 to other callers |
+| `GET` | `/api/{api_version}/users/{username}.txt` | Optional | Read the same public account profile as plain text |
+| `GET` | `/api/{api_version}/profiles/{username}` | Optional | Read a public profile; private profiles return 404 to other users |
+| `GET` | `/api/{api_version}/profiles/{username}/links` | Optional | Read public profile links |
+| `GET` | `/api/{api_version}/profiles/{username}/qr` | Optional | Generate a profile QR code |
+| `GET` | `/api/{api_version}/services` | None | List the service catalog |
+| `GET` | `/api/{api_version}/services/search` | None | Search the service catalog |
+| `GET`, `POST` | `/api/{api_version}/users/shortlinks` | Regular User | List or create the caller's short links |
+| `DELETE` | `/api/{api_version}/users/shortlinks/{code}` | Regular User | Delete an owned short link |
+| `GET` | `/api/{api_version}/shortlinks/{code}` | None | Read public short-link information |
 
-Server Admin tokens begin with `adm_`; Regular User tokens begin with `usr_`. Tokens are scoped to their account type. A Server Admin bearer token is required for `/api/{api_version}/server/{admin_path}/...`; browser session cookies do not authorize API calls.
+Public account profiles omit email unless the user explicitly enables
+`show_email` in privacy settings. Private account profiles return `404` to
+other visitors. The browser renders `/users/{username}` as HTML and responds
+to `/users/{username}.txt` or `Accept: text/plain` with the same profile in
+plain text.
+
+The public short-link redirect is `GET /s/{code}`. The click redirect is
+`GET /links/{id}/click`.
 
 ## Server Admin API
 
-The API mirrors the administration pages under `/api/{api_version}/server/{admin_path}/...`. This family covers server settings, Regular User management, security, backups, logs, email, scheduler, updates, network, and other administration sections. Requests require a Server Admin token.
+Server Admin endpoints use
+`/api/{api_version}/server/{admin_path}/...` and require an `adm_` bearer
+token. The currently mounted API includes:
 
-## Public profile data
+- `GET /users`, `GET /users/{id}`, `PUT /users/{id}`, and `DELETE /users/{id}`
+- `GET /stats`
+- `GET /settings` and `PUT /settings`
+- `POST /backup`
+- `POST /services/import` and `POST /cache/clear`
+- `GET /smtp/config`, `PUT /smtp/config`, and `POST /smtp/test`
+- `GET /notifications/preferences` and `PUT /notifications/preferences`
 
-Public endpoints return only public profile data. Private Regular User profiles are excluded from lists and searches; requests that identify a private profile return 404. The profile owner can access their own profile with authentication. Server Admin access is through the authenticated administration panel only.
+The setup API is under `/api/{api_version}/server/{admin_path}/setup/`. Setup
+pages and the operations available after setup are described in
+[Administration](admin.md).
 
-Profile link and shortlink destinations are validated by the server. Unsafe schemes and private or local destinations are rejected.
+## Privacy and validation
 
-## Request and error behavior
+Public profile endpoints return public profiles only. Private profiles return
+404 to visitors; the owner may access their own profile. Profiles do not use
+password protection. The server validates input and authorization before
+changing data. Do not put credentials in query parameters or request logs.
 
-The server validates request bodies and authorization before changing data. Responses use JSON for API routes and the negotiated HTML or JSON format for paired browser/API routes. A rate-limited request returns HTTP `429`; callers should respect any `Retry-After` header.
-
-Use the OpenAPI document for exact request fields, response schemas, and status codes for the configured version. Do not put credentials in query parameters or report bodies.
+For exact request fields and response schemas, use the OpenAPI document served
+by the running version.

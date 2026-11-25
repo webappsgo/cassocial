@@ -30,7 +30,6 @@ maintainer_email:    casjay@yahoo.com
 - SMTP email for registration verification, password reset, and admin notifications
 - Maintenance mode (system-wide or per-profile) with a bypass token
 - 2FA (TOTP) for user accounts
-- Password protection on individual profiles
 - Accessibility pass (WCAG 2.1 AA): skip links, ARIA labels, keyboard navigation, reduced-motion support
 
 **Non-goals:**
@@ -58,7 +57,7 @@ An active user (`status = "active"`, `email_verified = true`) can log in. Suspen
 
 **users** — regular-user credentials and profile metadata. Password credentials, 2FA secrets, and password-reset credentials are sensitive and never exposed in responses or logs.
 
-**profiles** — public-facing landing pages. Each profile belongs to one user via `user_id`. `protection_password` (hashed) is sensitive. `custom_domain` is user-supplied and must be validated against DNS before `domain_verified` is set to true.
+**profiles** — public-facing landing pages. Each profile belongs to one user via `user_id`. Visibility is public or private; private profiles return 404 to anyone other than their owner. Profiles do not have password protection. `custom_domain` is user-supplied and must be validated against DNS before `domain_verified` is set to true.
 
 **links** — ordered list of clickable cards on a profile. Only safe web destinations are accepted; active-content schemes and internal destinations are rejected.
 
@@ -74,7 +73,7 @@ System settings may contain SMTP credentials and other secrets. These values are
 
 | Sensitivity | Fields |
 |-------------|--------|
-| Secret | `password_hash`, `two_factor_secret`, `password_reset_token`, `protection_password`, `smtp_password`, `bypass_token` |
+| Secret | `password_hash`, `two_factor_secret`, `password_reset_token`, `smtp_password`, `bypass_token` |
 | Private | `email`, `last_login`, `two_factor_enabled` |
 | Internal | `role`, `status`, `created_at`, settings keys |
 | Public | `username`, `slug`, `display_name`, `bio`, `avatar_url`, `links` (for public profiles) |
@@ -93,7 +92,7 @@ profiles and their links return `404` to callers other than the owner.
 | `GET` | `/api/{api_version}/users/profiles` | Regular User bearer token (`usr_`) | No body; returns the caller's profiles. |
 | `POST` | `/api/{api_version}/users/profiles` | Regular User bearer token (`usr_`) | JSON profile fields: `slug`, `display_name`, optional `bio`, `avatar_url`, `header_image_url`, `show_usernames`, `visibility`, `meta_title`, and `meta_description`; returns the created profile. |
 | `GET` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | No body; returns the caller-owned profile. |
-| `PATCH` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | JSON object containing fields to update; returns the updated profile. Secret fields, including the profile protection password, are never returned. |
+| `PATCH` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | JSON object containing fields to update; returns the updated profile. |
 | `DELETE` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User bearer token (`usr_`) | No body; deletes the caller-owned profile and returns `204`. |
 | `GET` | `/api/{api_version}/profiles/{slug}` | None | No body; returns the public profile representation or `404`. |
 | `GET` | `/api/{api_version}/profiles/{slug}/links` | None | No body; returns active public links in display order or `404`. |
@@ -141,7 +140,7 @@ Import and export use JSON payloads and are owned by the authenticated user:
 
 **Primary assets being protected:**
 - User credentials (passwords, 2FA secrets, reset tokens)
-- Private profile data (password-protected profiles, analytics)
+- Private profile data (private profiles and analytics)
 - Server integrity (preventing privilege escalation, SSRF, malicious link injection)
 - Availability (rate limits protect against brute force and scraping)
 

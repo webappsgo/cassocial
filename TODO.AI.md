@@ -22,7 +22,6 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Complete PART 31: registry-driven i18n for every user-facing string, CLDR plural rules, locale selection and persistence, accessibility checks, and translated CLI/API/email/page content.
 - [ ] Complete active PART 34: registration modes, user account lifecycle, profile privacy, user/session/token controls, and the full account-management pages and APIs.
 - [ ] Complete active PART 36: custom-domain verification, DNS safety, routing, certificates, ownership controls, and admin/user management.
-- [ ] Resolve the IDEA.md password-protected profile flow against the applicable user/account requirements and implement its no-JS visitor experience without exposing protected profile data.
 
 ## Client
 

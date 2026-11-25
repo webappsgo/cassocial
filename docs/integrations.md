@@ -1,68 +1,57 @@
 # Integrations
 
-This page documents external identity providers, discovery endpoints, and
-platform-level integrations. Where a category is not implemented in the
-shipped product, that is stated explicitly rather than omitted.
+Cassocial currently supports SMTP delivery and the standard browser discovery
+endpoints. External identity providers, webhooks, GraphQL, and platform app-link
+verification are not wired into the running server.
 
-## External Identity
+## SMTP email
 
-**None enabled.** Cassocial only supports local username/password
-authentication (Argon2id-hashed, optionally combined with TOTP 2FA — see
-[Security](security.md)). There is no OIDC, LDAP, or SAML provider
-integration in the current codebase, so there is nothing to configure here.
+SMTP supports email verification, password recovery, and notification mail.
+Settings are stored under `server.notifications.email.smtp` in `server.yml`;
+the password is stored separately in `{config_dir}/secrets.yml`.
 
-## Discovery & Protocol Endpoints
+Server Admins can review and update SMTP settings at
+`/server/{admin_path}/smtp`. The JSON API is:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/{api_version}/server/{admin_path}/smtp/config` | Read SMTP settings without returning the password |
+| `PUT` | `/api/{api_version}/server/{admin_path}/smtp/config` | Update SMTP settings |
+| `POST` | `/api/{api_version}/server/{admin_path}/smtp/test` | Test the configured relay |
+
+The SMTP password is never echoed in the configuration response. For
+autodetection, TLS modes, and environment variables, see the
+[SMTP example](examples/smtp.md) and [Configuration](configuration.md).
+
+## Discovery endpoints
 
 | Path | Status |
 |------|--------|
-| `GET /robots.txt` | Enabled |
-| `GET /sitemap.xml` | Enabled |
-| `GET /manifest.json` | Enabled — PWA manifest |
-| `GET /service-worker.js` | Enabled — PWA service worker |
-| `/server/docs/swagger`, `/api/swagger` | Not implemented |
-| `/graphql`, `/api/graphql` | Scaffolded but **not mounted** — a `src/graphql` package and a GraphiQL playground generator (`generateGraphiQLHTML` in `src/server/handler/import_export.go`) exist and are covered by unit tests, but no `/graphql` route is registered in `src/server/handler/router.go`. There is currently no live GraphQL endpoint. |
-| `/api/v1/server/healthz`, `/health` | See [Security](security.md#public--health-endpoints) |
+| `GET /robots.txt` | Available |
+| `GET /sitemap.xml` | Available |
+| `GET /manifest.json` | Available — PWA manifest |
+| `GET /service-worker.js` | Available — service worker |
+| `GET /.well-known/security.txt` | Available |
+| `GET /server/docs/swagger` | Available — OpenAPI UI |
+| `GET /api/{api_version}/server/swagger` | Available — OpenAPI document |
 
-## Platform Integrations
+There is no GraphQL or GraphiQL route in the current server.
 
-- **Android App Links / `assetlinks.json`** — not implemented.
-- **Apple Universal Links / `apple-app-site-association`** — not implemented.
-- **Webhooks** — a data model (`APIWebhook` in `src/server/model/api.go`) exists
-  with event constants (`profile.created`, `profile.updated`, `profile.deleted`,
-  `link.created`, `link.updated`, `link.deleted`, `link.clicked`) and
-  failure-count auto-disable logic, but there is **no HTTP endpoint** to
-  create, list, or trigger webhooks yet — the model is not wired into the
-  router.
-- **Federation / ActivityPub / autodiscovery** — not implemented.
+## Other integrations
 
-## Email (SMTP)
+- **OIDC, LDAP, and SAML:** not implemented.
+- **Webhooks:** the model has event constants, but the router does not expose
+  webhook management or delivery endpoints.
+- **Android App Links and Apple Universal Links:** not implemented.
+- **Federation and ActivityPub:** not implemented.
+- **Tor:** the server checks for Tor at startup and attempts to start its
+  managed hidden service when available.
 
-SMTP is the one integration that is fully wired end-to-end:
+## Short links
 
-- Configured via the setup wizard (`/api/setup/email`) or the admin panel
-  (`GET`/`PUT /api/admin/smtp/config`, `POST /api/admin/smtp/test`).
-- `src/service/smtp.go` implements the client (TLS and plain connections,
-  provider host lookup, retry-on-send).
-- `src/service/mailer.go` and `src/service/templates.go` build and send
-  transactional email (password reset, email verification, notifications).
-- Used for password-reset (`POST /api/auth/forgot-password`,
-  `/api/auth/reset-password`) and email verification
-  (`GET /api/auth/verify-email/{token}`).
+Short links are a Cassocial feature. An authenticated Regular User creates one
+at `POST /api/{api_version}/users/shortlinks`; public redirects use
+`GET /s/{code}`. The API requires a profile ID when creating a short link.
 
-## Short Links
-
-`/s/{code}` is a public redirect endpoint for short links created via
-`POST /api/v1/shortlinks`. This is an internal Cassocial feature, not a
-third-party integration, but is listed here since it is a public-facing
-redirect surface.
-
-## Operator Notes
-
-- No integration in this document requires configuration before first run —
-  Cassocial works standalone with local auth and (optionally) SMTP.
-- SMTP is optional; without it, password reset and email verification links
-  cannot be delivered, and the setup wizard will note this during the
-  Email step.
-- If external identity, webhooks, or GraphQL are added in a future release,
-  update this page alongside the code change (see PART 30 documentation
-  requirements).
+Cassocial works with local accounts and without SMTP. When no working relay is
+available, email-dependent account flows cannot deliver messages.

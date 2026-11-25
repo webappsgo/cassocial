@@ -1,31 +1,71 @@
 # Security
 
-Cassocial treats public requests, profile content, destination URLs, and uploaded configuration as untrusted input. Validation and authorization happen on the server. The product uses separate Server Admin and Regular User account boundaries.
+Cassocial validates requests on the server and treats profile content,
+destination URLs, headers, and configuration input as untrusted. Server Admin
+and Regular User accounts have separate records and authorization boundaries.
 
 ## Accounts and passwords
 
-Passwords are stored as Argon2id hashes. Passwords, reset credentials, recovery codes, setup tokens, and API tokens must never appear in API responses or logs. Server Admins are stored separately from Regular Users. A Regular User role does not grant access to Server Admin routes.
+Passwords are stored as Argon2id hashes. Passwords, reset credentials,
+recovery codes, setup tokens, and API tokens must not appear in API responses
+or logs. A Regular User role does not grant access to Server Admin routes.
 
 ## Tokens and sessions
 
-API tokens are presented as bearer credentials. Server Admin tokens use the `adm_` prefix; Regular User tokens use `usr_`. Tokens are scoped to their account type and owner. Store tokens in a permission-restricted file, do not share them, and revoke them when no longer needed.
+API tokens are sent in the `Authorization: Bearer` header. Server Admin tokens
+use the `adm_` prefix; Regular User tokens use `usr_`. Keep tokens in
+permission-restricted files and revoke them when they are no longer needed.
 
-Browser sign-in uses secure session handling. Administrative and user sessions remain separate. The administration interface uses its session cookie; API clients use bearer tokens. A browser cookie is not an API authorization credential.
+Browser sessions use separate admin and user cookies. Those cookies authorize
+browser pages only; API routes require their documented bearer token. Session
+cookies are `HttpOnly`, use `SameSite=Lax`, and are marked `Secure` for
+HTTPS requests.
 
-## Private profiles and link destinations
+## CSRF protection
 
-Private Regular User profiles are not disclosed through public routes. Anonymous direct requests return 404, and public searches, lists, links, QR endpoints, and click tracking must not reveal the profile. The owner may access their own profile; Server Admin access is available only through the authenticated administration panel.
+Cookie-authenticated frontend forms use a double-submit CSRF token. The token
+is available in the `csrf_token` cookie and in the form's hidden field. API
+routes and Bearer-authenticated requests are outside frontend CSRF validation.
+Same-origin form submissions use the browser's `SameSite=Lax` session-cookie
+posture; cross-site or unknown-origin mutations require a valid token.
 
-Profile links and shortlink destinations accept safe web URLs. Active-content schemes and internal or local destinations are rejected. Custom domains must be verified before routing to a profile and cannot resolve to private or local addresses.
+Do not disable `web.csrf.enabled` on deployments that serve browser forms.
+Use `web.csrf.exempt_paths` only for a required frontend exception; API routes
+are already outside the CSRF scope.
 
-## Data handling
+## Private profiles and links
 
-Analytics do not retain raw visitor IP addresses. GeoIP is informational and does not control access. Settings secrets are visible only to Server Admins. QR generation stays within Cassocial and does not send profile details to external services.
+Private Regular User profiles return 404 to other visitors. The owner can view
+their own profile after signing in; Server Admin access is through the
+authenticated administration interface. Profiles do not have password
+protection. Private profiles and links must not be exposed through public API
+responses, search, QR codes, or click redirects.
 
-## Health and operational endpoints
+Profile link and short-link destinations are validated by the server. Avoid
+active-content schemes and internal or local destinations. Custom domains
+must be verified before they route to a profile.
 
-The public health page is `GET /server/healthz`; the JSON endpoint is `GET /api/v1/server/healthz`. Health responses report service state without returning credentials or internal error details. Administrative, authentication, and account pages must not be included in public sitemaps or indexing.
+## Data and operations
+
+Analytics avoid retaining raw visitor IP addresses. GeoIP is informational.
+SMTP passwords are stored in `{config_dir}/secrets.yml`; do not commit that
+file or copy credentials into issue reports. Protect configuration, data, and
+backup directories with operating-system permissions appropriate to the
+deployment.
+
+The public health endpoints are `GET /server/healthz` and
+`GET /api/{api_version}/server/healthz`. They report service state without
+returning credentials. Do not include administration, authentication, or
+account pages in public sitemaps.
 
 ## Report a vulnerability
 
-Use [GitHub private vulnerability reporting](https://github.com/webappsgo/cassocial/security/advisories/new). Do not post exploitable details in a public issue.
+Use `/server/security` to review the coordinated disclosure policy and submit
+a report through `/server/contact`. Researchers can use the one-time status
+link in the acknowledgment email to check triage updates. Administrators review
+reports at `/server/{admin_path}/security/reports`; closed reports are retained
+for the configured `server.security.reports.retention_days` period (365 days
+by default).
+
+Use [GitHub private vulnerability reporting](https://github.com/webappsgo/cassocial/security/advisories/new).
+Do not post exploitable details in a public issue.
