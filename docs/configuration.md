@@ -45,6 +45,12 @@ server:
   security:
     reports:
       retention_days: 365
+    allowlist: []
+  geoip:
+    enabled: true
+    deny_countries: []
+    allow_countries: []
+    presets: {}
   notifications:
     email:
       smtp:
@@ -81,6 +87,15 @@ SMTP credentials are not written into `server.yml`. The SMTP password is
 stored in `{config_dir}/secrets.yml` with restricted permissions. The web
 administration page redacts the password and indicates whether one is
 configured. See [SMTP](examples/smtp.md) for relay behavior.
+
+GeoIP downloads checksum-verified ASN, country, and city MMDB files from
+ip-location-db on first run and refreshes them weekly. Country codes are
+ISO 3166-1 alpha-2 values. `allow_countries` takes precedence over
+`deny_countries`; leaving both empty allows all countries. Lookup failures,
+missing datasets, and stale datasets fail open, while authentication and
+authorization remain required. Private and internal addresses are not looked
+up. Operators can manage country lists and presets at
+`/server/{admin_path}/network/geoip`.
 
 ## Environment variables
 

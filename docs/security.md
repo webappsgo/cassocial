@@ -47,7 +47,15 @@ must be verified before they route to a profile.
 
 ## Data and operations
 
-Analytics avoid retaining raw visitor IP addresses. GeoIP is informational.
+Analytics avoid retaining raw visitor IP addresses. GeoIP uses locally stored,
+checksum-verified ASN, country, and DB-IP city datasets from ip-location-db.
+Country filtering is an optional fail-open risk signal; authentication and
+authorization remain required. The IP allowlist bypasses country filtering,
+and private/internal or loopback addresses are never looked up. For Tor
+requests, only the observed exit address may be evaluated; the visitor's real
+IP is never inferred or logged. Configure countries and operator-owned presets
+at `/server/{admin_path}/network/geoip`. The public `/server/about` page and
+the repository's LICENSE.md include the required DB-IP attribution.
 SMTP passwords are stored in `{config_dir}/secrets.yml`; do not commit that
 file or copy credentials into issue reports. Protect configuration, data, and
 backup directories with operating-system permissions appropriate to the

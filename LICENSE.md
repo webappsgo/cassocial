@@ -24,6 +24,19 @@ SOFTWARE.
 
 ## Embedded Licenses
 
+## Third-party data attribution
+
+| Dataset | Source | License |
+|---------|--------|---------|
+| ASN | [iptoasn.com](https://iptoasn.com/) (RouteViews / RIR data) | PDDL |
+| Country | [iptoasn.com](https://iptoasn.com/) (RIR data) | PDDL |
+| City | [DB-IP](https://db-ip.com/) | CC BY 4.0 |
+
+The city database is provided by DB-IP under CC BY 4.0. Required attribution:
+<a href="https://db-ip.com/">IP Geolocation by DB-IP</a>
+
+The ASN and country databases are provided by iptoasn.com under PDDL.
+
 This software includes the following third-party libraries:
 
 ---
