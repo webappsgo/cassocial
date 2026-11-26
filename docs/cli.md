@@ -40,17 +40,20 @@ The client accepts `--help`, `--version`, `--color`, `--lang`, `--debug`,
 Server URL resolution uses `--server`, then `CASSOCIAL_SERVER`, then
 `server.primary` in `cli.yml`. Token resolution uses `--token`, `--token-file`,
 `CASSOCIAL_TOKEN`, `auth.token`, `auth.token_file`, and the default token file,
-in that order.
+in that order. A relative `auth.token_file` path is resolved beside `cli.yml`.
 
 By default, configuration is read from
 `~/.config/casapps/cassocial/cli.yml` on Unix-like systems and the matching
 `%APPDATA%` directory on Windows. A relative `--config` path is resolved under
 that configuration directory. Unix configuration and token files must have
 mode `0600`; the client refuses files with broader permissions. Windows ACL
-validation is not implemented yet.
+validation requires the credential file to be owned by the running user and
+to grant access only to that user's SID. Login removes inherited file ACLs and
+sets the current user's ACE before validating the result.
 
 | Command | Purpose |
 |---------|---------|
+| `login` | Prompt for username and hidden password, complete optional 2FA, and save the token with restrictive permissions |
 | `health` | Read the connected server's health response |
 | `profile SLUG` | Read a public profile |
 | `links PROFILE_ID` | Read links for a profile the token can access |
@@ -59,10 +62,16 @@ validation is not implemented yet.
 | `shortlink delete --code CODE` | Delete one of the user's short links |
 | `version` | Print client version and build information |
 
-`sl` is an alias for `shortlink`. Responses are printed as JSON. The client
-does not currently implement interactive login, a TUI, automatic cluster
-failover, or self-update. The `server.cluster` client configuration is not
-used for failover yet.
+`sl` is an alias for `shortlink`. Responses are printed as JSON. Login stores
+the bearer token in the platform's default token file. Revoked or expired
+tokens are removed from the default token file and the configured `cli.yml`,
+then the command exits with status `77` and directs the user to sign in again.
+When `server.cluster` contains URLs learned from a server health response, the
+client retries connection failures and server errors against those nodes and
+uses the first working node for the current process. The server health
+response does not yet publish cluster URLs, so automatic discovery and
+promotion are still pending. The client TUI, GUI, and self-update remain
+pending.
 
 Authentication and permission errors exit with status `77`, connection errors
 with `69`, missing resources with `66`, invalid server input with `65`, and

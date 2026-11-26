@@ -85,6 +85,23 @@ The server creates its configuration and data directories at the platform
 paths below. See `cassocial --help` for service-management options supported by
 the target operating system.
 
+### Service management
+
+Run `cassocial --service --help` to see the service commands. An administrator
+can install a system service with `cassocial --service --install`; a regular
+user installs a per-user service where the operating system supports one. The
+server uses the systemd user manager on Linux, a LaunchAgent on macOS, and an
+ONLOGON scheduled task on Windows. FreeBSD has no per-user service manager, so
+the command prints guidance and exits successfully. Linux system installs use
+the detected service manager (systemd, OpenRC, SysVinit, runit, or s6), while
+FreeBSD uses rc.d and macOS uses launchd.
+
+Use `cassocial --service start|stop|restart|status` to manage an installed
+service, and `cassocial --service --disable` to disable automatic startup.
+Uninstall with `cassocial --service --uninstall`; this asks for confirmation
+before deleting the service definition and the application's configuration,
+data, cache, logs, backups, and managed service account. Back up data first.
+
 ## First run
 
 On first start, Cassocial writes its default configuration, chooses a port in
@@ -103,19 +120,30 @@ Admin credentials are separate from Regular User accounts.
 
 ## Platform paths
 
-The server uses `internal_org: casapps` and `internal_name: cassocial` for
-stable system paths:
+Cassocial keeps the stable `internal_org: casapps` and
+`internal_name: cassocial` identity in native OS paths. System and user paths
+are separate:
 
-| Purpose | Linux / BSD | macOS | Windows |
-|---------|-------------|-------|---------|
-| Configuration | `/etc/casapps/cassocial` | `/Library/Application Support/casapps/cassocial` | `%PROGRAMDATA%\casapps\cassocial` |
-| Data | `/var/lib/casapps/cassocial` | `/Library/Application Support/casapps/cassocial` | `%PROGRAMDATA%\casapps\cassocial` |
-| Logs | `/var/log/casapps/cassocial` | `/Library/Logs/casapps/cassocial` | `%PROGRAMDATA%\casapps\cassocial\logs` |
+| Platform and run mode | Config | Data | Cache | Logs | Backups |
+|-----------------------|--------|------|-------|-------|---------|
+| Linux system | `/etc/casapps/cassocial` | `/var/lib/casapps/cassocial` | `/var/cache/casapps/cassocial` | `/var/log/casapps/cassocial` | `/mnt/Backups/casapps/cassocial` |
+| Linux user | `~/.config/casapps/cassocial` | `~/.local/share/casapps/cassocial` | `~/.cache/casapps/cassocial` | `~/.local/log/casapps/cassocial` | `~/.local/share/Backups/casapps/cassocial` |
+| macOS system | `/Library/Application Support/casapps/cassocial` | `/Library/Application Support/casapps/cassocial/data` | `/Library/Caches/casapps/cassocial` | `/Library/Logs/casapps/cassocial` | `/Library/Backups/casapps/cassocial` |
+| macOS user | `~/Library/Application Support/casapps/cassocial` | `~/Library/Application Support/casapps/cassocial` | `~/Library/Caches/casapps/cassocial` | `~/Library/Logs/casapps/cassocial` | `~/Library/Backups/casapps/cassocial` |
+| FreeBSD system | `/usr/local/etc/casapps/cassocial` | `/var/db/casapps/cassocial` | `/var/cache/casapps/cassocial` | `/var/log/casapps/cassocial` | `/var/backups/casapps/cassocial` |
+| FreeBSD user | `~/.config/casapps/cassocial` | `~/.local/share/casapps/cassocial` | `~/.cache/casapps/cassocial` | `~/.local/log/casapps/cassocial` | `~/.local/share/Backups/casapps/cassocial` |
+| Windows administrator | `%PROGRAMDATA%\casapps\cassocial` | `%PROGRAMDATA%\casapps\cassocial\data` | `%PROGRAMDATA%\casapps\cassocial\cache` | `%PROGRAMDATA%\casapps\cassocial\logs` | `%PROGRAMDATA%\Backups\casapps\cassocial` |
+| Windows user | `%APPDATA%\casapps\cassocial` | `%LOCALAPPDATA%\casapps\cassocial` | `%LOCALAPPDATA%\casapps\cassocial\cache` | `%LOCALAPPDATA%\casapps\cassocial\logs` | `%LOCALAPPDATA%\Backups\casapps\cassocial` |
 
-User installs use `~/.config/casapps/cassocial` for configuration and
-`~/.local/share/casapps/cassocial` for data and logs. Docker uses `/config`
-and `/data` inside the container. `CONFIG_DIR`, `DATA_DIR`, and `LOG_DIR` can
-override these locations.
+On Windows, SSL certificates and configuration live under the Config path,
+and the database and security data live under Data; the Windows Service Control
+Manager replaces PID files. On other native platforms, SSL and configuration
+live under Config, while database and security data live under Data. Unix
+system installs keep the PID file in `/var/run/casapps/cassocial/`; user
+installs keep it in their data directory. Containers do not create PID files.
+Docker uses `/config/cassocial` and `/data/cassocial` inside the container;
+those container paths do not apply to native installs. `CONFIG_DIR`,
+`DATA_DIR`, and `LOG_DIR` override their respective directories when set.
 
 ## Upgrading
 

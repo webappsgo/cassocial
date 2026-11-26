@@ -59,6 +59,9 @@ under `/api/{api_version}/server/auth/`.
 Registration, email verification, and password recovery depend on the
 deployment's settings and working SMTP delivery. Browser forms use the
 server-rendered pages and session cookies; API routes use bearer tokens.
+Requests using a revoked opaque API token return HTTP `401` with
+`{"error":"TOKEN_REVOKED", ...}`; expired tokens return `TOKEN_EXPIRED`.
+Clients should discard the cached credential and require an explicit sign-in.
 
 ## Profiles, links, and short links
 
