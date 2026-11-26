@@ -53,6 +53,22 @@ docker run -d \
 
 View startup output with `docker logs cassocial`.
 
+## Reverse proxy path prefix
+
+To publish Cassocial below a path such as `/cassocial`, send the trusted
+`X-Forwarded-Prefix` header from the reverse proxy. The server uses that
+prefix for requests and generated page links; when no trusted proxy header is
+present, set `server.baseurl` in `server.yml` or pass `--baseurl`.
+
+```nginx
+location /cassocial/ {
+    proxy_pass http://cassocial/;
+    proxy_set_header X-Forwarded-Prefix /cassocial;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
 ## Binary
 
 Download the release matching the operating system and architecture from

@@ -68,12 +68,24 @@ cookie does not authorize API requests.
 
 | Method | Path | Authentication | Purpose |
 |--------|------|----------------|---------|
+| `GET` | `/api/{api_version}/users` | Regular User | Read the caller's account summary |
 | `GET`, `POST` | `/api/{api_version}/users/profiles` | Regular User | List or create profiles owned by the caller |
 | `GET`, `PATCH`, `DELETE` | `/api/{api_version}/users/profiles/{id}` | Regular User | Read, update, or delete an owned profile |
 | `POST` | `/api/{api_version}/users/profiles/{id}/duplicate` | Regular User | Duplicate an owned profile |
 | `GET`, `POST` | `/api/{api_version}/users/profiles/{id}/links` | Regular User | List or add links to an owned profile |
 | `POST` | `/api/{api_version}/users/profiles/{id}/links/order` | Regular User | Reorder links for an owned profile |
+| `POST` | `/api/{api_version}/users/profiles/import` | Regular User | Start an import for the caller |
+| `GET` | `/api/{api_version}/users/profiles/import/{job_id}` | Regular User | Read import job status |
+| `GET` | `/api/{api_version}/users/profiles/export/{profile_id}` | Regular User | Export an owned profile |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics` | Regular User | Read profile analytics |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/links` | Regular User | Read link analytics |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/export` | Regular User | Export analytics |
 | `PUT`, `DELETE` | `/api/{api_version}/users/links/{id}` | Regular User | Update or delete an owned link |
+| `POST` | `/api/{api_version}/users/links/{id}/toggle` | Regular User | Toggle an owned link's enabled state |
+| `GET`, `PATCH` | `/api/{api_version}/users/settings` | Regular User | Read or update account settings |
+| `GET`, `POST` | `/api/{api_version}/users/tokens` | Regular User | List or create API tokens |
+| `GET`, `DELETE` | `/api/{api_version}/users/tokens/{token_id}` | Regular User | Read or revoke an owned token |
+| `POST` | `/api/{api_version}/users/tokens/{token_id}/rotate` | Regular User | Rotate an owned token |
 | `GET` | `/api/{api_version}/users/{username}` | Optional | Read a public account profile; private accounts return 404 to other callers |
 | `GET` | `/api/{api_version}/users/{username}.txt` | Optional | Read the same public account profile as plain text |
 | `GET` | `/api/{api_version}/profiles/{username}` | Optional | Read a public profile; private profiles return 404 to other users |
@@ -81,6 +93,9 @@ cookie does not authorize API requests.
 | `GET` | `/api/{api_version}/profiles/{username}/qr` | Optional | Generate a profile QR code |
 | `GET` | `/api/{api_version}/services` | None | List the service catalog |
 | `GET` | `/api/{api_version}/services/search` | None | Search the service catalog |
+| `GET` | `/api/{api_version}/services/categories` | None | List service categories |
+| `GET` | `/api/{api_version}/services/popular` | None | List popular services |
+| `GET` | `/api/{api_version}/services/{id}` | None | Read a service entry |
 | `GET`, `POST` | `/api/{api_version}/users/shortlinks` | Regular User | List or create the caller's short links |
 | `DELETE` | `/api/{api_version}/users/shortlinks/{code}` | Regular User | Delete an owned short link |
 | `GET` | `/api/{api_version}/shortlinks/{code}` | None | Read public short-link information |
@@ -93,6 +108,24 @@ plain text.
 
 The public short-link redirect is `GET /s/{code}`. The click redirect is
 `GET /links/{id}/click`.
+
+## Public server content API
+
+These endpoints expose the operator-configured public content also shown on
+server-rendered information pages:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`, `POST` | `/api/{api_version}/server/contact` | Read contact details or submit a contact report |
+| `GET` | `/api/{api_version}/server/about` | Read About content |
+| `GET` | `/api/{api_version}/server/help` | Read Help content |
+| `GET` | `/api/{api_version}/server/privacy` | Read privacy information |
+| `GET` | `/api/{api_version}/server/terms` | Read terms |
+| `GET` | `/api/{api_version}/server/security` | Read security information |
+| `GET` | `/api/{api_version}/server/security/policy` | Read the security reporting policy |
+| `GET` | `/api/{api_version}/server/security/thanks` | Read the security report receipt page |
+
+The account and profile endpoints are described in the [Regular User guide](users.md).
 
 ## Server Admin API
 

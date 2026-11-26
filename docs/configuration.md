@@ -21,8 +21,8 @@ overrides.
 
 ## Main settings
 
-The generated file includes additional scheduler, rate-limit, and product
-settings. The following is the canonical SMTP and web-security structure:
+The following shows the main canonical SMTP, network-security, and web
+settings. See the complete setting reference below for every supported key.
 
 ```yaml
 server:
@@ -32,6 +32,7 @@ server:
   mode: production
   admin_path: administration
   api_version: v1
+  baseurl: /
   healthz:
     root:
       enabled: false
@@ -105,6 +106,57 @@ available port in the 64000–64999 range. Use the configured port when
 connecting directly, or use the container and reverse-proxy settings in
 [Installation](installation.md).
 
+## Setting reference
+
+The generated `server.yml` contains the settings below. Nested names are YAML
+paths. Omitted values use the generated defaults; unknown keys are rejected.
+
+| YAML path | Purpose and behavior |
+|-----------|----------------------|
+| `server.address`, `server.port` | Listen address and port; the generated port is selected from 64000–64999. |
+| `server.fqdn`, `server.mode`, `server.debug` | Public hostname, `production` or `development` mode, and debug setting. `DOMAIN` and `MODE` can override the corresponding values. |
+| `server.admin_path`, `server.api_version` | URL path segment for Server Admin pages and version segment for APIs. |
+| `server.baseurl` | URL path prefix for the installation, such as `/myproject`; defaults to `/`. Trusted reverse-proxy prefix headers take precedence per request. |
+| `server.trusted_proxies.additional`, `server.trusted_proxies.client_ip_header` | Explicit trusted proxy addresses/CIDRs and the forwarding header policy (`auto` or a supported header name). |
+| `server.healthz.root.enabled` | Mount `/healthz` as a direct alias of `/server/healthz`; disabled by default. |
+| `server.branding.title`, `.tagline`, `.description`, `.content.about`, `.content.privacy`, `.content.terms` | Site branding and operator-authored information-page content. |
+| `server.seo.keywords` | Keywords used by page metadata. |
+| `server.contact.admin.email`, `.security.email`, `.abuse.email`, `.general.email`, `.dpo.name`, `.dpo.email` | Public operator contact roles. |
+| `server.pages.contact.enabled`, `.captcha`, `.captcha_site_key`, `.success_message` | Public contact form availability and response behavior. Secret captcha credentials are not serialized in this file. |
+| `server.pages.contact.antispam.honeypot`, `.min_fill_seconds`, `.max_age_seconds`, `.per_ip`, `.per_email`, `.global`, `.window`, `.max_links`, `.reject_markup`, `.blocked_words`, `.blocked_email_domains`, `.strikes`, `.ban_hours`, `.review_min_seconds`, `.review_max_seconds`, `.duplicate_window_hours` | Honeypot, submission timing, IP/email/global limits, window, link and markup limits, blocked words/domains, strike and ban thresholds, review timing, and duplicate-report window. |
+| `server.pages.help.content` | Operator-authored Help page content. |
+| `server.privacy.data.sold`, `.stored_on_server`, `.sharing` | Public privacy disclosures about storage and conditional sharing. Each sharing entry has `condition`, `when`, and `data`. |
+| `server.privacy.retention.period`, `.export_available`, `.deletion_available` | Public retention, export, and deletion disclosures. |
+| `server.privacy.cookies.*` | Named cookie categories with `enabled` and `description` values. |
+| `server.privacy.third_party.services` | Third-party service disclosures; each item has `name`, `purpose`, and `policy_url`. |
+| `server.security.reports.retention_days` | Retention period for security reports. |
+| `server.security.encryption_key`, `.encryption_key_version` | Managed encryption key metadata. The application provisions and rotates this key; operators should not set or copy key material manually. |
+| `server.security.allowlist` | Trusted IP/CIDR entries, each with `cidr` and a required `description`. |
+| `server.security.blocklists.enabled`, `.auto_update`, `.action`, `.reject_message`, `.log_blocked` | Blocklist enforcement policy. `action` is `reject` or `drop`; the built-in FireHOL Level 1 source remains available. |
+| `server.security.blocklists.extra_sources` | Additional HTTPS sources with `id`, `type` (`ip` or `domain`), `url`, and optional `enabled`. |
+| `server.geoip.enabled`, `.deny_countries`, `.allow_countries`, `.presets` | Local GeoIP lookups and ISO 3166-1 alpha-2 country filtering. An allow-list takes precedence over a deny-list. |
+| `server.i2p.enabled`, `.expose`, `.binary`, `.sam_address`, `.virtual_port`, `.inbound_length`, `.outbound_length`, `.inbound_quantity`, `.outbound_quantity`, `.signature_type`, `.bootstrap_timeout` | I2P provider, SAM bridge, tunnel, and bootstrap settings. The generated container default enables I2P; bare-metal defaults disable it. |
+| `server.backup.encryption.enabled` | Backup encryption state. The password is held in the protected secret store and is not a YAML value. |
+| `server.notifications.email.smtp.host`, `.port`, `.username`, `.password`, `.tls`, `.from.name`, `.from.email` | Canonical SMTP relay and sender configuration. A legacy YAML password is migrated to `{config_dir}/secrets.yml`; the admin UI never returns it. |
+| `server.admin.email` | Default Server Admin contact address. Account credentials are stored in the database, not here. |
+| `server.i18n.default_language`, `.available_languages` | Default locale and enabled translation locales. |
+| `server.user`, `server.group` | Operating-system user and group used by service operations. |
+| `server.pidfile`, `server.daemonize` | Enable PID-file creation and configure daemon startup behavior. |
+| `database.driver`, `.url`, `.host`, `.port`, `.name`, `.user`, `.password`, `.ssl_mode`, `.max_connections`, `.max_idle_connections` | Database driver and connection pool. A configured `url` takes precedence over individual connection fields. |
+| `logging.level`, `logging.format` | Log threshold (`debug`, `info`, `warn`, `error`) and format (`text`, `json`). |
+| `ssl.enabled`, `.cert_file`, `.key_file`, `.letsencrypt`, `.domain` | HTTPS certificate settings. Certificate files and private keys require restrictive permissions. |
+| `email.enabled`, `.host`, `.port`, `.username`, `.password`, `.from_name`, `.from`, `.tls`, `.tls_mode` | Legacy SMTP settings accepted during migration to `server.notifications.email`; use the canonical `server.notifications` keys for new configuration. Passwords are moved into the protected secret file. |
+| `scheduler.enabled`, `.tasks` | Built-in scheduled jobs. Each named task accepts `enabled`, `schedule`, and applicable `retry_on_fail`, `retry_delay`, `retention`, or `renew_before` values. |
+| `rate_limit.enabled`, `.global_burst`, `.read`, `.write`, `.health`, `.auth.login`, `.auth.password_reset`, `.auth.registration` | Per-IP request limits. Each rule contains `requests` and `window` in seconds. |
+| `web.ui.theme`, `web.cors` | Default UI theme (`dark`, `light`, or `auto`) and CORS policy. |
+| `web.csrf.enabled`, `.token_length`, `.cookie_name`, `.header_name`, `.secure`, `.exempt_paths` | CSRF protection for cookie-authenticated frontend forms. API paths cannot be exempted through this setting. |
+| `cassocial.site_name`, `.site_description`, `.allow_registration`, `.max_profiles_per_user`, `.max_links_per_profile` | Product name and Regular User registration/profile limits. |
+
+The built-in scheduler currently provides `geoip_update`, `blocklist_update`,
+`cve_update`, `log_rotation`, `session_cleanup`, `backup`, `ssl_renewal`,
+`health_check`, and `tor_health`. Each task can be enabled, disabled, or
+rescheduled in `scheduler.tasks`.
+
 SMTP credentials are not written into `server.yml`. The SMTP password is
 stored in `{config_dir}/secrets.yml` with restricted permissions. The web
 administration page redacts the password and indicates whether one is
@@ -154,7 +206,9 @@ These server environment variables override configuration values:
 |----------|---------|
 | `CONFIG_DIR` | Configuration directory |
 | `DATA_DIR` | Data directory |
+| `CACHE_DIR` | Cache directory |
 | `LOG_DIR` | Log directory |
+| `BACKUP_DIR` | Backup directory |
 | `PORT` | `server.port` |
 | `LISTEN` | `server.address` |
 | `DOMAIN` | `server.fqdn` |

@@ -10,7 +10,8 @@ cassocial [flags]
 ```
 
 The server supports `--help`, `--version`, `--color`, `--lang`, `--shell`,
-`--config`, `--data`, `--log`, `--pid`, `--address`, `--port`, `--mode`,
+`--config`, `--data`, `--cache`, `--log`, `--backup`, `--pid`, `--address`,
+`--port`, `--baseurl`, `--mode`,
 `--debug`, `--status`, `--daemon`, `--service`, `--maintenance`, and `--update`.
 Run `cassocial --help` for the current descriptions and accepted values.
 
@@ -18,6 +19,15 @@ Configuration is read from `server.yml`; command-line flags take precedence
 over environment variables and file values. Service and maintenance commands
 depend on the target operating system and installation. Do not place passwords
 or tokens in command-line arguments.
+
+The directory flags accept filesystem paths. They create the selected
+directories when needed. Relative paths are resolved from the current working
+directory; paths containing `..` segments or control characters are rejected.
+`--backup` overrides the platform backup location, while `--cache` selects the
+cache directory. Equivalent `CONFIG_DIR`, `DATA_DIR`, `CACHE_DIR`, `LOG_DIR`,
+and `BACKUP_DIR` environment variables are supported.
+`--baseurl` sets the installation URL prefix. Trusted reverse-proxy prefix
+headers take precedence when a request arrives through a trusted proxy.
 
 ## Companion client
 

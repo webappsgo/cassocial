@@ -27,6 +27,7 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/` | Server dashboard and overview |
 | `/server/{admin_path}/settings` | Update the settings exposed by the current form |
 | `/server/{admin_path}/smtp` | Configure and test SMTP |
+| `/server/{admin_path}/backup` | Review and trigger backup operations |
 | `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |
 | `/server/{admin_path}/network/blocklists` | Manage built-in and operator-defined IP/domain blocklists |
@@ -44,7 +45,8 @@ The administration API is under
 `/api/{api_version}/server/{admin_path}/...` and requires a Server Admin bearer
 token beginning with `adm_`. The currently mounted endpoints cover Regular
 User management, settings, statistics, backup trigger, service import, cache
-clearing, SMTP, notification preferences, GeoIP, blocklists, and allowlists. See the
+clearing, SMTP, notification preferences, I2P, blocklists, and allowlists. GeoIP
+is currently managed through its browser page; no GeoIP admin API is mounted. See the
 [API reference](api.md#server-admin-api) for the route list.
 
 The I2P API supports `GET` and `PATCH` on
@@ -64,6 +66,28 @@ management API is available under
 `/api/{api_version}/server/{admin_path}/users`. Users manage their own profiles
 under `/users/`; private profiles return 404 to other visitors, including
 through public API routes.
+
+## Regular User browser pages
+
+Regular Users sign in through `/server/auth/login`. The server-rendered account
+area provides:
+
+| Path | Purpose |
+|------|---------|
+| `/users/` | Dashboard and owned profiles |
+| `/users/profiles/new` | Create a profile |
+| `/users/profiles/{id}` | Edit profile details |
+| `/users/profiles/{id}/links` | Add, edit, remove, and order profile links |
+| `/users/settings` | Account settings |
+| `/users/settings/privacy` | Public profile and privacy preferences |
+| `/users/settings/notifications` | Notification preferences |
+| `/users/settings/appearance` | Theme and appearance preferences |
+| `/users/tokens` | Create, rotate, and revoke API tokens |
+| `/users/security/sessions` | Review and revoke browser sessions |
+| `/users/{username}` | Public account profile, when visible |
+
+Forms work without JavaScript and use session authentication and CSRF
+protection. API tokens are shown only once when created; store them securely.
 
 ## Configuration safety
 
