@@ -32,6 +32,9 @@ server:
   mode: production
   admin_path: administration
   api_version: v1
+  trusted_proxies:
+    additional: []
+    client_ip_header: auto
   branding:
     title: Cassocial
     tagline: ""
