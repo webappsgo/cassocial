@@ -41,6 +41,7 @@ validation is not implemented yet.
 
 | Command | Purpose |
 |---------|---------|
+| `health` | Read the connected server's health response |
 | `profile SLUG` | Read a public profile |
 | `links PROFILE_ID` | Read links for a profile the token can access |
 | `shortlink create --profile PROFILE_ID --url URL [--code CODE]` | Create a short link |
@@ -64,6 +65,7 @@ use `1`.
 cassocial --help
 cassocial --lang it --status
 cassocial-cli --server "$CASSOCIAL_SERVER" profile YOUR_PROFILE
+cassocial-cli --server "$CASSOCIAL_SERVER" health
 cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" links PROFILE_ID
 cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" shortlink create --profile PROFILE_ID --url https://your-site.invalid
 ```

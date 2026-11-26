@@ -73,9 +73,11 @@ Install the `cassocial-cli` binary for your platform from [GitHub Releases](http
 ```bash
 chmod +x cassocial-cli-linux-amd64
 ./cassocial-cli-linux-amd64 --server https://YOUR_SERVER --help
+./cassocial-cli-linux-amd64 --server https://YOUR_SERVER health
 ```
 
-See the [CLI guide](docs/cli.md) for supported commands and authentication limitations.
+The client can check server health and read public profiles without a token;
+profile-link and short-link management use an API token. See the [CLI guide](docs/cli.md) for supported commands and authentication limitations.
 
 ## Configuration and API
 
