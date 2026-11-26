@@ -63,6 +63,11 @@ authentication and authorization. YAML entries are operator-managed; entries
 added in the administration page are persisted in the server database. The
 admin API exposes list, add, delete, and address-check operations under
 `/api/{api_version}/server/{admin_path}/security/allowlist`.
+The built-in `firehol_level1` IP blocklist and any enabled HTTPS IP or domain
+sources are checked before rate limiting and request handlers. Source health
+checks appear in the server health endpoint; failed refreshes keep the last
+valid source data active. Administrators can manage sources and view aggregate
+rule statistics at `/server/{admin_path}/network/blocklists`.
 SMTP passwords are stored in `{config_dir}/secrets.yml`; do not commit that
 file or copy credentials into issue reports. Protect configuration, data, and
 backup directories with operating-system permissions appropriate to the

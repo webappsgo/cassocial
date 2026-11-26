@@ -95,6 +95,10 @@ token. The currently mounted API includes:
 - `POST /services/import` and `POST /cache/clear`
 - `GET /smtp/config`, `PUT /smtp/config`, and `POST /smtp/test`
 - `GET /notifications/preferences` and `PUT /notifications/preferences`
+- `GET /security/allowlist`, `POST /security/allowlist`, `DELETE /security/allowlist/{id}`, and `GET /security/allowlist/check/{ip}`
+- `GET /network/blocklists`, `PATCH /network/blocklists`, and `GET /network/blocklists/stats`
+- `POST /network/blocklists/sources`, `PATCH /network/blocklists/sources/{name}`, and `DELETE /network/blocklists/sources/{name}`
+- `POST /network/blocklists/update`, `POST /network/blocklists/update/{name}`, and `GET /network/blocklists/check/{ip}`
 
 The setup API is under `/api/{api_version}/server/{admin_path}/setup/`. Setup
 pages and the operations available after setup are described in

@@ -46,6 +46,13 @@ server:
     reports:
       retention_days: 365
     allowlist: []
+    blocklists:
+      enabled: true
+      auto_update: true
+      extra_sources: []
+      action: reject
+      reject_message: ""
+      log_blocked: true
   geoip:
     enabled: true
     deny_countries: []
@@ -102,6 +109,15 @@ description. Administrators can add and remove database-backed entries at
 `/server/{admin_path}/security/allowlist`; configuration entries remain
 managed in `server.yml`. Allowlisted clients bypass blocklists, rate limits,
 and GeoIP country filtering, while authentication remains required.
+
+Blocklists always include the built-in `firehol_level1` IP source. Add
+operator-managed HTTPS sources under `server.security.blocklists.extra_sources`
+using an `id`, a `type` (`ip` or `domain`), a URL, and optional `enabled`.
+Sources refresh daily; the last valid copy remains active when an update fails.
+Manage source and enforcement settings at
+`/server/{admin_path}/network/blocklists`. The default rejection response is
+403; allowlisted requests bypass blocklist enforcement but still require
+authentication.
 
 ## Environment variables
 

@@ -14,6 +14,7 @@ Cassocial is a self-hosted link aggregator and social profile platform. It lets 
 - Responsive themes, QR codes, and short links
 - Profile and link analytics
 - Checksum-verified GeoIP datasets with optional country risk filtering
+- Daily IP/domain blocklists with a built-in FireHOL source and trusted-IP allowlisting
 - Separate Regular User and Server Admin accounts
 - Optional custom profile domains
 - Server-rendered pages with progressive enhancement
