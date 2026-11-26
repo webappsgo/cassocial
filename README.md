@@ -108,7 +108,12 @@ git clone https://github.com/webappsgo/cassocial.git
 cd cassocial
 make dev
 make test
+./tests/run_tests.sh
 ```
+
+`make test` runs the Go suite with coverage. `tests/run_tests.sh` builds the
+server and CLI, then checks the compiled binaries and HTTP behavior in an
+Alpine container.
 
 ## Disclaimer
 
