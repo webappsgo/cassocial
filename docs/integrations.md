@@ -46,6 +46,10 @@ There is no GraphQL or GraphiQL route in the current server.
 - **Federation and ActivityPub:** not implemented.
 - **Tor:** the server checks for Tor at startup and attempts to start its
   managed hidden service when available.
+- **I2P:** when enabled, the server prefers a dedicated `i2pd` process and
+  falls back to an existing SAM bridge. The server persists its own destination
+  key and serves the eepsite through a separate loopback listener. The optional
+  address can be exposed through autodiscovery when `server.i2p.expose` is on.
 
 ## Short links
 

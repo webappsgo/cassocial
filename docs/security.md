@@ -70,6 +70,11 @@ sources are checked before rate limiting and request handlers. Source health
 checks appear in the server health endpoint; failed refreshes keep the last
 valid source data active. Administrators can manage sources and view aggregate
 rule statistics at `/server/{admin_path}/network/blocklists`.
+I2P eepsite traffic reaches a dedicated loopback-only listener separate from
+the clearnet port. Untrusted `X-I2P-*` headers are stripped, and I2P visitors
+share a global rate-limit bucket because the SAM forwarder connects from the
+same loopback address. The I2P destination key is kept in a `0600` file under
+`{data_dir}/i2p/site`.
 SMTP passwords are stored in `{config_dir}/secrets.yml`; do not commit that
 file or copy credentials into issue reports. Protect configuration, data, and
 backup directories with operating-system permissions appropriate to the

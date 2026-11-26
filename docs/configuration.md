@@ -58,6 +58,18 @@ server:
     deny_countries: []
     allow_countries: []
     presets: {}
+  i2p:
+    enabled: false
+    expose: false
+    binary: ""
+    sam_address: "127.0.0.1:7656"
+    virtual_port: 80
+    inbound_length: 3
+    outbound_length: 3
+    inbound_quantity: 5
+    outbound_quantity: 5
+    signature_type: 7
+    bootstrap_timeout: 300
   notifications:
     email:
       smtp:
@@ -119,6 +131,13 @@ Manage source and enforcement settings at
 403; allowlisted requests bypass blocklist enforcement but still require
 authentication.
 
+The I2P eepsite is disabled on bare metal and in VMs. Application containers
+enable it by default; `I2P_ENABLED` or `--i2p=false` can opt out. When enabled,
+the server prefers its own managed `i2pd` process and otherwise tries the
+configured SAM bridge. The destination key is stored under `{data_dir}/i2p/site`
+with mode `0600`; the generated `.b32.i2p` address remains stable across
+restarts. Manage the provider at `/server/{admin_path}/network/i2p`.
+
 ## Environment variables
 
 These server environment variables override configuration values:
@@ -133,6 +152,7 @@ These server environment variables override configuration values:
 | `DOMAIN` | `server.fqdn` |
 | `MODE` | `server.mode`; `debug` selects development mode and enables debug output unless overridden |
 | `DEBUG` | `server.debug` |
+| `I2P_ENABLED` | `server.i2p.enabled` |
 | `DATABASE_DRIVER` | `database.driver` |
 | `DATABASE_URL` | `database.url` |
 | `SMTP_HOST`, `SMTP_PORT` | `server.notifications.email.smtp.host` and `.port` |

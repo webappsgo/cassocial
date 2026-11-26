@@ -27,6 +27,7 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/` | Server dashboard and overview |
 | `/server/{admin_path}/settings` | Update the settings exposed by the current form |
 | `/server/{admin_path}/smtp` | Configure and test SMTP |
+| `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |
 | `/server/{admin_path}/network/blocklists` | Manage built-in and operator-defined IP/domain blocklists |
 | `/server/{admin_path}/security/allowlist` | Manage trusted IP/CIDR entries and check an address |
@@ -45,6 +46,11 @@ token beginning with `adm_`. The currently mounted endpoints cover Regular
 User management, settings, statistics, backup trigger, service import, cache
 clearing, SMTP, notification preferences, GeoIP, blocklists, and allowlists. See the
 [API reference](api.md#server-admin-api) for the route list.
+
+The I2P API supports `GET` and `PATCH` on
+`/api/{api_version}/server/{admin_path}/network/i2p`, plus `POST` operations at
+`/validate`, `/restart`, and `/regenerate`. Regeneration creates a new I2P
+destination and changes the public address.
 
 Browser session cookies do not authorize API requests. Regular User accounts
 and Server Admin accounts are stored and authorized separately; a Regular User

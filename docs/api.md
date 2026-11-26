@@ -99,6 +99,7 @@ token. The currently mounted API includes:
 - `GET /network/blocklists`, `PATCH /network/blocklists`, and `GET /network/blocklists/stats`
 - `POST /network/blocklists/sources`, `PATCH /network/blocklists/sources/{name}`, and `DELETE /network/blocklists/sources/{name}`
 - `POST /network/blocklists/update`, `POST /network/blocklists/update/{name}`, and `GET /network/blocklists/check/{ip}`
+- `GET` and `PATCH /network/i2p`, plus `POST /network/i2p/validate`, `/network/i2p/restart`, and `/network/i2p/regenerate`
 
 The setup API is under `/api/{api_version}/server/{admin_path}/setup/`. The
 server prints the one-time setup token on first run; `POST /setup/verify`
