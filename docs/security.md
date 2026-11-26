@@ -56,6 +56,13 @@ requests, only the observed exit address may be evaluated; the visitor's real
 IP is never inferred or logged. Configure countries and operator-owned presets
 at `/server/{admin_path}/network/geoip`. The public `/server/about` page and
 the repository's LICENSE.md include the required DB-IP attribution.
+Trusted IP addresses and CIDRs can also be managed at
+`/server/{admin_path}/security/allowlist`. Allowlisted requests bypass IP
+blocklists, rate limits, and GeoIP country filtering, but still require normal
+authentication and authorization. YAML entries are operator-managed; entries
+added in the administration page are persisted in the server database. The
+admin API exposes list, add, delete, and address-check operations under
+`/api/{api_version}/server/{admin_path}/security/allowlist`.
 SMTP passwords are stored in `{config_dir}/secrets.yml`; do not commit that
 file or copy credentials into issue reports. Protect configuration, data, and
 backup directories with operating-system permissions appropriate to the

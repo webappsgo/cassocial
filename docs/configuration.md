@@ -97,6 +97,12 @@ authorization remain required. Private and internal addresses are not looked
 up. Operators can manage country lists and presets at
 `/server/{admin_path}/network/geoip`.
 
+`server.security.allowlist` accepts IP addresses or CIDRs with a required
+description. Administrators can add and remove database-backed entries at
+`/server/{admin_path}/security/allowlist`; configuration entries remain
+managed in `server.yml`. Allowlisted clients bypass blocklists, rate limits,
+and GeoIP country filtering, while authentication remains required.
+
 ## Environment variables
 
 These server environment variables override configuration values:
