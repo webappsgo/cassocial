@@ -35,10 +35,26 @@ headers take precedence when a request arrives through a trusted proxy.
 cassocial-cli [options] COMMAND [arguments]
 ```
 
+With no command, `display.mode: auto` opens the Bubble Tea interface when
+stdin and stdout are interactive terminals. Use the filter input to search
+available actions, `↑`/`↓` to move, `Enter` to select, `?` for help, and `q` or
+`Ctrl+C` to quit. Required action values are prompted after the menu closes.
+Set `display.mode: tui` to require the TUI, or `display.mode: gui` to receive a
+`gui_unavailable` error because native GUI support is not built in. Set
+`tui.enabled: false` in `cli.yml` to keep command-only behavior. The TUI
+defaults to the dark palette, mouse support, and Unicode symbols. Configure
+`tui.theme` as `dark`, `light`, or `system`; system mode uses `COLORFGBG` and
+falls back to dark. Configure `tui.mouse` and `tui.unicode` to change the other
+preferences. A command is required when no interactive terminal is available.
+
 The client accepts `--help`, `--version`, `--color`, `--lang`, `--debug`,
 `--shell`, `--server`, `--token`, `--token-file`, `--config`, and `--user`.
+`--user` supplies the default profile target when `profile` has no slug;
+`@name` is accepted for that user target. An organization prefix is rejected
+while PART 35 remains inactive in this project.
 Server URL resolution uses `--server`, then `CASSOCIAL_SERVER`, then
-`server.primary` in `cli.yml`. Token resolution uses `--token`, `--token-file`,
+`server.primary` in `cli.yml`, then the compiled official-site default when
+available. Token resolution uses `--token`, `--token-file`,
 `CASSOCIAL_TOKEN`, `auth.token`, `auth.token_file`, and the default token file,
 in that order. A relative `auth.token_file` path is resolved beside `cli.yml`.
 
@@ -63,15 +79,15 @@ sets the current user's ACE before validating the result.
 | `version` | Print client version and build information |
 
 `sl` is an alias for `shortlink`. Responses are printed as JSON. Login stores
-the bearer token in the platform's default token file. Revoked or expired
-tokens are removed from the default token file and the configured `cli.yml`,
-then the command exits with status `77` and directs the user to sign in again.
+the bearer token in the platform's default token file. When a token from a
+cached source is revoked or expired, that source is cleared and the command
+exits with status `77` and directs the user to sign in again.
 When `server.cluster` contains URLs learned from a server health response, the
 client retries connection failures and server errors against those nodes and
 uses the first working node for the current process. The server health
-response does not yet publish cluster URLs, so automatic discovery and
-promotion are still pending. The client TUI, GUI, and self-update remain
-pending.
+response does not publish cluster URLs because the AI.md health requirements
+conflict on whether addresses may be exposed. Native GUI and self-update
+remain pending.
 
 Authentication and permission errors exit with status `77`, connection errors
 with `69`, missing resources with `66`, invalid server input with `65`, and
