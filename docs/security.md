@@ -80,10 +80,13 @@ file or copy credentials into issue reports. Protect configuration, data, and
 backup directories with operating-system permissions appropriate to the
 deployment.
 
-The public health endpoints are `GET /server/healthz` and
-`GET /api/{api_version}/server/healthz`. They report service state without
-returning credentials. Do not include administration, authentication, or
-account pages in public sitemaps.
+The public health endpoints include `GET /server/healthz`,
+`GET /api/{api_version}/server/healthz`, and the versionless `GET /api/healthz`.
+The root `GET /healthz` alias is disabled unless `server.healthz.root.enabled`
+is true. Health reports public service state and aggregate counters; they never
+return credentials, private addresses, filesystem paths, or provider error
+details. Do not include administration, authentication, or account pages in
+public sitemaps.
 
 ## Report a vulnerability
 

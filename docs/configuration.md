@@ -32,6 +32,9 @@ server:
   mode: production
   admin_path: administration
   api_version: v1
+  healthz:
+    root:
+      enabled: false
   trusted_proxies:
     additional: []
     client_ip_header: auto
@@ -130,6 +133,11 @@ Manage source and enforcement settings at
 `/server/{admin_path}/network/blocklists`. The default rejection response is
 403; allowlisted requests bypass blocklist enforcement but still require
 authentication.
+
+The canonical frontend health route is `/server/healthz`. Set
+`server.healthz.root.enabled: true` to mount `/healthz` as a direct alias;
+the default is false. API health JSON is available at
+`/api/{api_version}/server/healthz`, with dotted text at its `.txt` alias.
 
 The I2P eepsite is disabled on bare metal and in VMs. Application containers
 enable it by default; `I2P_ENABLED` or `--i2p=false` can opt out. When enabled,

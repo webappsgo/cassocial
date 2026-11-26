@@ -109,11 +109,19 @@ cd cassocial
 make dev
 make test
 ./tests/run_tests.sh
+./tests/incus.sh
+./tests/e2e.sh
 ```
 
 `make test` runs the Go suite with coverage. `tests/run_tests.sh` builds the
 server and CLI, then checks the compiled binaries and HTTP behavior in an
-Alpine container.
+Alpine container. `tests/incus.sh` runs the full service lifecycle suite in
+Incus containers using Debian with systemd and Alpine with OpenRC; pass
+`systemd` or `openrc` to run one mode.
+`tests/e2e.sh` is a separate, on-demand browser suite: it checks server-rendered
+HTML, core flows with JavaScript disabled, and full browser behavior with
+headless Chromium. It runs its Go tests in Docker and starts a temporary
+Chromium sidecar; it is not part of `make test` or `tests/run_tests.sh`.
 
 ## Disclaimer
 

@@ -21,9 +21,21 @@ a GraphQL endpoint or GraphiQL page.
 
 | Method | Path | Authentication | Description |
 |--------|------|----------------|-------------|
-| `GET` | `/server/healthz` | None | HTML health status |
-| `GET` | `/api/{api_version}/server/healthz` | None | JSON health status |
-| `GET` | `/api/healthz` | None | Alias for the configured JSON health endpoint |
+| `GET` | `/server/healthz` | None | Frontend health page; negotiates HTML, JSON, or human-readable text |
+| `GET` | `/healthz` | None | Optional direct alias for `/server/healthz`; disabled by default |
+| `GET` | `/api/{api_version}/server/healthz` | None | API health JSON; accepts text with `Accept: text/plain` |
+| `GET` | `/api/{api_version}/server/healthz.txt` | None | Dotted key/value API health text |
+| `GET` | `/api/healthz` | None | Unversioned JSON health alias |
+| `GET` | `/api/healthz.txt` | None | Unversioned dotted key/value API health text |
+
+Health responses include public project and build information, runtime mode,
+overlay feature state, component checks, and aggregate request statistics. A
+`healthy`, `degraded`, or `restart_required` response uses HTTP 200;
+`unhealthy`, `maintenance`, and `shutting_down` use HTTP 503. Overlay feature
+statuses are limited to `disabled`, `starting`, `healthy`, or `unavailable`.
+Health output never includes credentials, private addresses, filesystem paths,
+or provider error details. The optional root alias is enabled with
+`server.healthz.root.enabled: true`.
 
 ## Authentication
 
