@@ -90,7 +90,7 @@ cookie does not authorize API requests.
 | `GET` | `/api/{api_version}/users/{username}.txt` | Optional | Read the same public account profile as plain text |
 | `GET` | `/api/{api_version}/profiles/{username}` | Optional | Read a public profile; private profiles return 404 to other users |
 | `GET` | `/api/{api_version}/profiles/{username}/links` | Optional | Read public profile links |
-| `GET` | `/api/{api_version}/profiles/{username}/qr` | Optional | Generate a profile QR code |
+| `GET` | `/api/{api_version}/profiles/{username}/qr` | Optional | Generate a profile QR image; accepts `format=png` (default) or `format=svg`, and `size=128`, `256` (default), `512`, or `1024` |
 | `GET` | `/api/{api_version}/services` | None | List the service catalog |
 | `GET` | `/api/{api_version}/services/search` | None | Search the service catalog |
 | `GET` | `/api/{api_version}/services/categories` | None | List service categories |
