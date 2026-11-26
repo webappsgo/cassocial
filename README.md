@@ -117,7 +117,9 @@ make test
 server and CLI, then checks the compiled binaries and HTTP behavior in an
 Alpine container. `tests/incus.sh` runs the full service lifecycle suite in
 Incus containers using Debian with systemd and Alpine with OpenRC; pass
-`systemd` or `openrc` to run one mode.
+`systemd` or `openrc` to run one mode. To run an init-system suite after the Go
+coverage gate, use `make test INCUS=systemd`, `make test INCUS=openrc`, or
+`make test INCUS=all`.
 `tests/e2e.sh` is a separate, on-demand browser suite: it checks server-rendered
 HTML, core flows with JavaScript disabled, and full browser behavior with
 headless Chromium. It runs its Go tests in Docker and starts a temporary

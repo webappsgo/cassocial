@@ -19,6 +19,27 @@ Set `CONFIG_DIR`, `DATA_DIR`, or `LOG_DIR` to override the corresponding
 directory. The server accepts `--config`, `--data`, and `--log` as command-line
 overrides.
 
+## Drop-in configuration
+
+Keep node-specific values in `server.yml` and put other configuration areas in
+`{config_dir}/yaml.d/`. The server reads `.yml` and `.yaml` files in
+byte-wise filename order after `server.yml`; later files override earlier
+values. Nested maps merge by key, while a scalar or list replaces the earlier
+value. Environment variables and command-line flags retain higher precedence.
+
+For example, an operator can enable I2P in
+`{config_dir}/yaml.d/50-i2p.yml`:
+
+```yaml
+server:
+  i2p:
+    enabled: true
+```
+
+The `yaml.d` directory must be mode `0700`; `server.yml`, `secrets.yml`, and
+each drop-in must be mode `0600`. The server corrects these modes at startup.
+Hidden files, backup files, non-YAML files, and subdirectories are ignored.
+
 ## Main settings
 
 The following shows the main canonical SMTP, network-security, and web
