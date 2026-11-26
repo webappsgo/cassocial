@@ -32,7 +32,7 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 ## Build, operations, and CI
 
 - [ ] Complete PARTS 26–28: exact Makefile targets, all 8 OS/architecture builds for server and CLI, static CGO-free binaries, Docker images/compose files, runtime configuration, and container checks.
-- [ ] Fix the current FreeBSD/amd64 build failure and rerun the complete all-platform build using the corrected in-container `go env` recipe.
+- [x] Cross-compile server and CLI for all eight OS/architecture combinations inside the Go container; FreeBSD/amd64 and FreeBSD/arm64 both build successfully.
 - [ ] Complete PARTS 29–30: required tests, coverage gates, linters, security checks, all provider workflows, documentation build, and generated OpenAPI/GraphQL artifacts.
 - [ ] Verify GitHub, GitLab, Gitea, Forgejo, and Jenkins workflows against AI.md, including their real CI runs after push and resolution of failures.
 
