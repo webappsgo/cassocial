@@ -76,11 +76,14 @@ the 64000–64999 range, initializes the database, and prints startup details.
 If no working SMTP relay is available, the server continues running with
 email-dependent flows unavailable.
 
-The first-run setup token and URL are printed to the server console. Open
-`/server/administration/setup` (or the configured `server.admin_path` setup
-URL) and use the token to create the primary Server Admin. The token is
-one-time; keep it private. Server Admin credentials are separate from Regular
-User accounts.
+The first-run setup token and URL are printed to the server console. Open the
+configured `/server/{admin_path}` URL and submit the token to enter the
+server-rendered setup wizard. The six steps create the primary Server Admin,
+generate an API token, configure branding and server settings, configure
+security, choose optional services, and complete setup. The raw API token and
+optional TOTP recovery codes are shown once. Completion invalidates the setup
+token and signs the primary admin in. Keep the setup token private. Server
+Admin credentials are separate from Regular User accounts.
 
 ## Platform paths
 

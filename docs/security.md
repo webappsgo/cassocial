@@ -6,9 +6,11 @@ and Regular User accounts have separate records and authorization boundaries.
 
 ## Accounts and passwords
 
-Passwords are stored as Argon2id hashes. Passwords, reset credentials,
-recovery codes, setup tokens, and API tokens must not appear in API responses
-or logs. A Regular User role does not grant access to Server Admin routes.
+Passwords are stored as Argon2id hashes. Passwords, reset credentials, setup
+tokens, and stored API token values never appear in ordinary API responses or
+logs. The authorized first-run setup flow displays a newly generated API token
+and optional TOTP recovery codes exactly once so the operator can save them.
+A Regular User role does not grant access to Server Admin routes.
 
 ## Tokens and sessions
 

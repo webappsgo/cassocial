@@ -100,8 +100,25 @@ token. The currently mounted API includes:
 - `POST /network/blocklists/sources`, `PATCH /network/blocklists/sources/{name}`, and `DELETE /network/blocklists/sources/{name}`
 - `POST /network/blocklists/update`, `POST /network/blocklists/update/{name}`, and `GET /network/blocklists/check/{ip}`
 
-The setup API is under `/api/{api_version}/server/{admin_path}/setup/`. Setup
-pages and the operations available after setup are described in
+The setup API is under `/api/{api_version}/server/{admin_path}/setup/`. The
+server prints the one-time setup token on first run; `POST /setup/verify`
+validates it and issues a short-lived setup session cookie. That cookie
+authorizes the remaining setup steps until completion. The server-rendered
+forms post to same-origin CSRF-protected routes which call the same step
+handlers.
+
+| Method | Path suffix | Step |
+|--------|-------------|------|
+| `GET` | `/setup` | Read setup status |
+| `POST` | `/setup/verify` | Verify the one-time setup token |
+| `POST` | `/setup/account` | Create the primary Server Admin |
+| `POST` | `/setup/token` | Create an admin-bound API token; raw value returned once |
+| `POST` | `/setup/config` | Save app branding, domain, mode, and timezone |
+| `POST` | `/setup/security` | Save optional backup encryption and admin TOTP settings |
+| `POST` | `/setup/services` | Save HTTPS and Regular User registration settings |
+| `POST` | `/setup/complete` | Invalidate setup token and create the admin browser session |
+
+Setup pages and the operations available after setup are described in
 [Administration](admin.md).
 
 ## Privacy and validation

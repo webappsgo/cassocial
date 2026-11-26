@@ -8,8 +8,15 @@ change it.
 ## First Server Admin
 
 On first start, Cassocial prints a one-time setup token and the setup URL.
-Open `/server/{admin_path}/setup` and use the token to create the primary
-Server Admin. The primary account cannot be deleted.
+Open `/server/{admin_path}` and submit the token. The server then guides you
+through creating the primary Server Admin, generating an admin-bound API
+token, setting the app name/domain/mode/timezone, optionally configuring
+encrypted scheduled backups and admin TOTP, choosing HTTPS and Regular User
+registration, and completing setup. Setup forms are server-rendered and include
+CSRF protection; JavaScript only enhances token copying. The API token and TOTP
+recovery codes are displayed once. Completion invalidates the setup token and
+signs the new primary admin into the browser. The primary account cannot be
+deleted.
 
 ## Available pages
 
