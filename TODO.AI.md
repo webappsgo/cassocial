@@ -9,7 +9,8 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Complete PARTS 9–15: server lifecycle, API envelopes and validation, security headers, authentication/session/token storage, database schema initialization, networking, proxy/base-path behavior, TLS, and URL safety.
 - [ ] Add the PART 12 `server.trusted_proxies` configuration and trust-gated forwarded host/proto/port/base-path/client-IP resolution; include its additional CIDR allow-list in `IsSecureRequest` and other proxy consumers.
 - [ ] Implement PART 15 frontend CSRF protection for cookie-authenticated HTML mutations, including tokens in server-rendered forms and validation on every state-changing web route.
-- [ ] Replace the current migration-file/versioning approach with the PART 10 idempotent schema bootstrap while preserving existing user data.
+- [x] Replace the migration-file runner with the PART 10 idempotent schema bootstrap; verify a stored user row survives a repeated schema pass.
+- [x] Use the canonical SQLite `server.db` filename by default and preserve the previous `cassocial.db` contents through an online snapshot during first startup after upgrade.
 - [ ] Split SQLite persistence into `server.db` and `users.db` per PART 10, and apply the required `srv_`/`usr_` table prefixes in cluster databases.
 - [ ] Add separate `admin_sessions` and `user_sessions`, distinct cookies, persistent session expiry/revocation, and `adm_`/`usr_` bearer-token validation.
 - [ ] Finish the canonical route migration using configurable `server.api_version` and `server.admin_path`; remove non-spec legacy aliases and keep generated API specifications in sync.

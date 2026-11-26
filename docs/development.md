@@ -66,10 +66,16 @@ do not invoke the Go toolchain directly on the host.
 ## Database changes
 
 AI.md PART 10 requires an idempotent schema bootstrap on every startup, with no
-versioned migration files or migration tool. Schema changes must preserve
-existing data and work against both fresh and already initialized databases.
-The repository's current migration-directory implementation is still tracked
-for replacement in `TODO.AI.md`; do not add more migration files.
+versioned migration files or migration tool. The statement list lives in
+`src/server/store/schema_statements.go`; `DB.EnsureSchema` applies it on fresh
+and already initialized databases and preserves existing rows. Add schema
+changes there as additive, repeatable statements with the introduction
+version documented beside each update.
+
+The default SQLite database is `{data_dir}/db/server.db`. On first startup
+after upgrading from the earlier `{data_dir}/db/cassocial.db` filename, the
+server creates `server.db` from a SQLite online snapshot and leaves the old
+database in place as a recovery copy.
 
 ## Documentation
 

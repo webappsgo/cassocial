@@ -58,7 +58,7 @@ server:
 
 database:
   driver: sqlite
-  name: "{data_dir}/db/cassocial.db"
+  name: "{data_dir}/db/server.db"
 
 web:
   ui:
