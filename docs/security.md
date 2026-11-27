@@ -20,16 +20,17 @@ permission-restricted files and revoke them when they are no longer needed.
 
 Browser sessions use separate admin and user cookies. Those cookies authorize
 browser pages only; API routes require their documented bearer token. Session
-cookies are `HttpOnly`, use `SameSite=Lax`, and are marked `Secure` for
+cookies are `HttpOnly`, use `SameSite=Strict`, and are marked `Secure` for
 HTTPS requests.
 
 ## CSRF protection
 
-Cookie-authenticated frontend forms use a double-submit CSRF token. The token
-is available in the `csrf_token` cookie and in the form's hidden field. API
-routes and Bearer-authenticated requests are outside frontend CSRF validation.
-Same-origin form submissions use the browser's `SameSite=Lax` session-cookie
-posture; cross-site or unknown-origin mutations require a valid token.
+Frontend forms receive a double-submit CSRF token in the `csrf_token` cookie
+and hidden form field. State-changing frontend forms, including public forms
+such as login, registration, and contact, require a valid token when the
+request is cross-site or its origin is unknown. Same-origin mutations with a
+Strict session cookie can rely on the browser's cookie posture. API routes and
+Bearer-authenticated requests are outside frontend CSRF validation.
 
 Do not disable `web.csrf.enabled` on deployments that serve browser forms.
 Use `web.csrf.exempt_paths` only for a required frontend exception; API routes
