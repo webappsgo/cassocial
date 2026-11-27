@@ -185,7 +185,10 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.tor.expose`, `.contact_email` | Opt in to publishing the running onion address through autodiscovery; Tor contact email is shown only on Tor responses. Both default to empty/false. |
 | `server.update.cli_min_version`, `.agent_min_version` | Minimum client versions included in autodiscovery responses when configured. |
 | `cli.binary_download.dir`, `.require_auth` | Operator-provisioned CLI release directory and whether downloads require a bearer token; default directory is `{data_dir}/cli`, downloads are public by default. |
+| `server.backup.retention.max_backups`, `.keep_weekly`, `.keep_monthly`, `.keep_yearly`, `.max_total_size` | Full-backup retention and storage cap. The size cap accepts bytes or a percentage of the backup volume. |
 | `server.backup.encryption.enabled` | Backup encryption state. The password is held in the protected secret store and is not a YAML value. |
+| `server.restore.max_archive_size`, `.max_expanded_size`, `.max_files`, `.max_file_size`, `.max_ratio` | Limits checked before and during backup archive extraction. |
+| `scheduler.tasks.backup_daily.enabled`, `.schedule` | Daily backup task state and cron schedule. Retention remains under `server.backup.retention`. |
 | `server.notifications.email.smtp.host`, `.port`, `.username`, `.password`, `.tls`, `.from.name`, `.from.email` | Canonical SMTP relay and sender configuration. A legacy YAML password is migrated to `{config_dir}/secrets.yml`; the admin UI never returns it. |
 | `server.admin.email` | Default Server Admin contact address. Account credentials are stored in the database, not here. |
 | `server.i18n.default_language`, `.available_languages` | Default locale and enabled translation locales. |

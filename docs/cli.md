@@ -29,6 +29,22 @@ and `BACKUP_DIR` environment variables are supported.
 `--baseurl` sets the installation URL prefix. Trusted reverse-proxy prefix
 headers take precedence when a request arrives through a trusted proxy.
 
+### Offline backup restore
+
+```text
+cassocial --maintenance restore [backup-file] [--password PASS]
+```
+
+With no filename, the server selects the newest dated full backup. Restore
+requires typing `RESTORE` at an interactive terminal. Encrypted archives
+prompt for the backup password without echo when `--password` is omitted.
+Authorization is granted to root, on a first-run database with no Server
+Admins, or to the service account after valid Server Admin credentials (and
+2FA when enabled). The server must be stopped before an offline restore. The
+`--password` may be supplied explicitly when the command line is protected,
+but shell history and process listings may expose its value; typed confirmation
+still requires an interactive terminal.
+
 ## Companion client
 
 ```text

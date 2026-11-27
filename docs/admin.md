@@ -36,7 +36,7 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/scheduler` | View built-in task schedules and current-process run counts, update schedules, enable or disable tasks, and queue a task to run now |
 | `/server/{admin_path}/logs` | View bounded recent tails of access, error, audit, security, and server logs |
 | `/server/{admin_path}/email` | Configure and test SMTP |
-| `/server/{admin_path}/backup` | Create manual backups, review the backup inventory, and download backup archives |
+| `/server/{admin_path}/backup` | Configure daily backup scheduling, encryption, retention, and restore limits; create manual backups, review the inventory, and download archives |
 | `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |
 | `/server/{admin_path}/network/blocklists` | Manage built-in and operator-defined IP/domain blocklists |
