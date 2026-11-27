@@ -38,7 +38,9 @@ cassocial-cli [options] COMMAND [arguments]
 With no command, `display.mode: auto` opens the Bubble Tea interface when
 stdin and stdout are interactive terminals. Use the filter input to search
 available actions, `↑`/`↓` to move, `Enter` to select, `?` for help, and `q` or
-`Ctrl+C` to quit. Required action values are prompted after the menu closes.
+`Ctrl+C` to quit. If no valid server is configured, the client first opens a
+setup screen to enter a server URL, test its health endpoint, and save it to
+`cli.yml`. Required action values are prompted after the menu closes.
 Set `display.mode: tui` to require the TUI, or `display.mode: gui` to receive a
 `gui_unavailable` error because native GUI support is not built in. Set
 `tui.enabled: false` in `cli.yml` to keep command-only behavior. The TUI
@@ -46,17 +48,34 @@ defaults to the dark palette, mouse support, and Unicode symbols. Configure
 `tui.theme` as `dark`, `light`, or `system`; system mode uses `COLORFGBG` and
 falls back to dark. Configure `tui.mouse` and `tui.unicode` to change the other
 preferences. A command is required when no interactive terminal is available.
+Version and help are flags (`--version`/`-v`, `--help`/`-h`), not commands.
 
-The client accepts `--help`, `--version`, `--color`, `--lang`, `--debug`,
-`--shell`, `--server`, `--token`, `--token-file`, `--config`, and `--user`.
+The client accepts `--help`, `--version`, `--color`, `--format` (or `--output`),
+`--lang`, `--debug`, `--shell`, `--server`, `--token`, `--token-file`,
+`--config`, and `--user`.
 `--user` supplies the default profile target when `profile` has no slug;
 `@name` is accepted for that user target. An organization prefix is rejected
 while PART 35 remains inactive in this project.
-Server URL resolution uses `--server`, then `CASSOCIAL_SERVER`, then
-`server.primary` in `cli.yml`, then the compiled official-site default when
-available. Token resolution uses `--token`, `--token-file`,
+Server URL resolution uses `--server`, then `CASSOCIAL_SERVER_PRIMARY`, then
+the compatibility alias `CASSOCIAL_SERVER`, then `server.primary` in `cli.yml`,
+then the compiled official-site default when available. Token resolution uses
+`--token`, `--token-file`,
 `CASSOCIAL_TOKEN`, `auth.token`, `auth.token_file`, and the default token file,
 in that order. A relative `auth.token_file` path is resolved beside `cli.yml`.
+The HTTP timeout comes from `CASSOCIAL_SERVER_TIMEOUT`, then
+`server.timeout` in `cli.yml`, then `30s`; the environment value accepts
+seconds or a Go duration such as `45s`. Transient GET/HEAD/OPTIONS failures
+use `CASSOCIAL_SERVER_RETRY` and `CASSOCIAL_SERVER_RETRY_DELAY`, then
+`server.retry` and `server.retry_delay` in `cli.yml`; defaults are three retry
+attempts and a one-second exponential backoff. Client errors are not retried,
+and requests that may change server data are never replayed.
+`--format` and `--output` work before the command or after its arguments.
+Response format precedence is `--format`/`--output`,
+`CASSOCIAL_OUTPUT_FORMAT`, `output.format` in `cli.yml`, then `table`.
+Supported formats are `table`, `json`, `yaml`, `plain`, and `csv`.
+Color precedence is `--color`, `output.color` in `cli.yml`, `NO_COLOR`, then
+terminal detection. `output.color` accepts `auto`, `yes`, or `no`; boolean
+values are also accepted for compatibility with the shared binary setting.
 
 By default, configuration is read from
 `~/.config/casapps/cassocial/cli.yml` on Unix-like systems and the matching
@@ -67,6 +86,12 @@ validation requires the credential file to be owned by the running user and
 to grant access only to that user's SID. Login removes inherited file ACLs and
 sets the current user's ACE before validating the result.
 
+When `--server` supplies a valid server and `server.primary` is empty or
+invalid, the client saves it as the primary server. When `--token` is supplied
+and `auth.token` is empty, the client saves the token to `cli.yml`; a configured
+token is never overwritten by the flag. Both writes preserve other config
+values and keep Unix permissions at `0600`.
+
 | Command | Purpose |
 |---------|---------|
 | `login` | Prompt for username and hidden password, complete optional 2FA, and save the token with restrictive permissions |
@@ -76,9 +101,10 @@ sets the current user's ACE before validating the result.
 | `shortlink create --profile PROFILE_ID --url URL [--code CODE]` | Create a short link |
 | `shortlink list` | List the authenticated user's short links |
 | `shortlink delete --code CODE` | Delete one of the user's short links |
-| `version` | Print client version and build information |
 
-`sl` is an alias for `shortlink`. Responses are printed as JSON. Login stores
+`sl` is an alias for `shortlink`. Responses default to table output; choose a
+machine-readable format with `--format json`, `--format yaml`, or
+`--format csv`. Login stores
 the bearer token in the platform's default token file. When a token from a
 cached source is revoked or expired, that source is cleared and the command
 exits with status `77` and directs the user to sign in again.
@@ -99,10 +125,10 @@ use `1`.
 ```sh
 cassocial --help
 cassocial --lang it --status
-cassocial-cli --server "$CASSOCIAL_SERVER" profile YOUR_PROFILE
-cassocial-cli --server "$CASSOCIAL_SERVER" health
-cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" links PROFILE_ID
-cassocial-cli --server "$CASSOCIAL_SERVER" --token-file "$HOME/.config/casapps/cassocial/token" shortlink create --profile PROFILE_ID --url https://your-site.invalid
+cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" profile YOUR_PROFILE
+cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" health
+cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" --token-file "$HOME/.config/casapps/cassocial/token" links PROFILE_ID
+cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" --token-file "$HOME/.config/casapps/cassocial/token" shortlink create --profile PROFILE_ID --url https://your-site.invalid
 ```
 
 The client API version defaults to `v1` and can be set with `server.api_version`
