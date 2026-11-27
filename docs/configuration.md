@@ -176,6 +176,7 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.privacy.retention.period`, `.export_available`, `.deletion_available` | Public retention, export, and deletion disclosures. |
 | `server.privacy.cookies.*` | Named cookie categories with `enabled` and `description` values. |
 | `server.privacy.third_party.services` | Third-party service disclosures; each item has `name`, `purpose`, and `policy_url`. |
+| `server.compliance.gdpr`, `.ccpa`, `.hipaa`, `.soc2`, `.pci_dss`, `.iso27001`, `.fedramp`, `.lgpd`, `.pipeda`, `.appi`, `.pdpa` | Compliance standards stored in `yaml.d/privacy.yml`; all default to `false`. Enabling any standard requires encrypted backups. |
 | `server.tracking.type`, `.id`, `.url` | Consent-gated analytics provider settings stored in `yaml.d/privacy.yml`. Supported providers are `google`, `matomo`, `piwik`, `owa`, `fathom`, `plausible`, `umami`, `simple`, and `cloudflare`; empty or `none` disables tracking. Matomo, Piwik, OWA, and Umami require a URL; Fathom and Plausible allow an optional URL. |
 | `server.security.reports.retention_days` | Retention period for security reports. |
 | `server.security.encryption_key`, `.encryption_key_version` | Managed encryption key metadata. The application provisions and rotates this key; operators should not set or copy key material manually. |

@@ -39,16 +39,19 @@ docs/             MkDocs documentation
 
 ```sh
 make test
-docker run --rm \
+bash "$HOME/.codex/hooks/test-lint-run.sh" lint -- docker run --rm \
   --name "cassocial-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v "$PWD:/app" -w /app \
   -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest sh -c 'go vet ./... && staticcheck ./...'
 ```
 
-Tests run in the Go container with CGO disabled. The test target enforces the
-repository's coverage threshold. Run tests and lint after the complete change;
-do not invoke the Go toolchain directly on the host.
+`make test` runs the full Go suite with coverage enforcement, then
+`tests/run_tests.sh` builds and checks the server and CLI in a container.
+`tests/run_tests.sh` can run that binary tier independently; `tests/incus.sh`
+is the separate full service lifecycle check. The lint command uses the
+session's test/lint gate wrapper, and all Go tools run in the Go container with
+CGO disabled.
 
 ## Implementation conventions
 
