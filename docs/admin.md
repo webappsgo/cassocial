@@ -18,13 +18,19 @@ recovery codes are displayed once. Completion invalidates the setup token and
 signs the new primary admin into the browser. The primary account cannot be
 deleted.
 
+Admin usernames cannot match an admin section name. On startup after a version
+adds a section, a conflicting existing username receives the next available
+numeric suffix; active admin sessions are updated with the new username.
+
 ## Available pages
 
 The current browser administration interface includes these pages:
 
 | Path | Purpose |
 |------|---------|
-| `/server/{admin_path}/` | Server dashboard and overview |
+| `/server/{admin_path}` | Server dashboard and overview (canonical path; a trailing slash redirects here) |
+| `/server/{admin_path}/{admin_username}/preferences` | Update the authenticated admin's theme, font size, motion, date, and time preferences |
+| `/server/{admin_path}/{admin_username}/notifications` | Update the authenticated admin's WebUI and email notification preferences |
 | `/server/{admin_path}/settings` | Update the settings exposed by the current form |
 | `/server/{admin_path}/email` | Configure and test SMTP |
 | `/server/{admin_path}/backup` | Review and trigger backup operations |
@@ -44,7 +50,9 @@ information. Terms and contact details are controlled by the server operator.
 
 The administration API is under
 `/api/{api_version}/server/{admin_path}/...` and requires a Server Admin bearer
-token beginning with `adm_`. The currently mounted endpoints cover Regular
+token beginning with `adm_`. Admin self-preference routes are scoped to the
+authenticated username at `/api/{api_version}/server/{admin_path}/{admin_username}/preferences`.
+The currently mounted endpoints cover Regular
 User management, settings, statistics, backup trigger, service import, cache
 clearing, SMTP, notification preferences, I2P, blocklists, and allowlists. GeoIP
 is currently managed through its browser page; no GeoIP admin API is mounted. See the
