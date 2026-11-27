@@ -32,6 +32,9 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/{admin_username}/preferences` | Update the authenticated admin's theme, font size, motion, date, and time preferences |
 | `/server/{admin_path}/{admin_username}/notifications` | Update the authenticated admin's WebUI and email notification preferences |
 | `/server/{admin_path}/settings` | Update the settings exposed by the current form |
+| `/server/{admin_path}/info` | View build version, runtime environment, database driver, and optional dependency status |
+| `/server/{admin_path}/scheduler` | View built-in task schedules and current-process run counts, update schedules, enable or disable tasks, and queue a task to run now |
+| `/server/{admin_path}/logs` | View bounded recent tails of access, error, audit, security, and server logs |
 | `/server/{admin_path}/email` | Configure and test SMTP |
 | `/server/{admin_path}/backup` | Review and trigger backup operations |
 | `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |

@@ -127,6 +127,8 @@ coverage gate, use `make test INCUS=systemd`, `make test INCUS=openrc`, or
 HTML, core flows with JavaScript disabled, and full browser behavior with
 headless Chromium. It runs its Go tests in Docker and starts a temporary
 Chromium sidecar; it is not part of `make test` or `tests/run_tests.sh`.
+Go test flags can be forwarded to select scenarios, for example
+`./tests/e2e.sh -run '^TestTier1SSRPublicProfile$'`.
 
 ## Disclaimer
 
