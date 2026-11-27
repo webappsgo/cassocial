@@ -12,7 +12,11 @@ Open `/server/{admin_path}` and submit the token. The server then guides you
 through creating the primary Server Admin, generating an admin-bound API
 token, setting the app name/domain/mode/timezone, optionally configuring
 encrypted scheduled backups and admin TOTP, choosing HTTPS and Regular User
-registration, and completing setup. Setup forms are server-rendered and include
+registration, and completing setup. Regular User accounts are disabled by
+default; when enabled, `server.users.registration.mode` controls whether
+public registration is `open` or `private`. In either mode, Server Admins can
+invite or directly create users. See the [Regular User guide](users.md) and
+[configuration reference](configuration.md#regular-user-registration). Setup forms are server-rendered and include
 CSRF protection; JavaScript only enhances token copying. The API token and TOTP
 recovery codes are displayed once. Completion invalidates the setup token and
 signs the new primary admin into the browser. The primary account cannot be

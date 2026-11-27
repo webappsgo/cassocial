@@ -2,15 +2,21 @@
 
 Cassocial keeps Regular User accounts separate from Server Admin accounts.
 Regular Users manage their own profiles and API tokens; they do not receive
-Server Admin access. Registration is available only when the operator enables
-it and any configured email verification and approval requirements are met.
+Server Admin access. Multi-user mode is disabled by default. When enabled,
+public self-registration defaults to `open`; the operator can set the mode to
+`private` to disable the public registration form. Email verification applies
+when it is enabled and SMTP delivery is available. There is no admin-approval
+step in the registration flow.
 
 ## Sign in and dashboard
 
-Use `/server/auth/register` to create an account when registration is open, or
-`/server/auth/login` to sign in. The dashboard at `/users/` lists profiles
-owned by the signed-in account. Browser pages are server-rendered and their
-core forms work without JavaScript.
+Use `/server/auth/register` to create an account when `server.users.enabled` is
+true and `server.users.registration.mode` is `open`, or use
+`/server/auth/login` to sign in. In `private` mode, existing users can still
+sign in and a Server Admin creates accounts through an invite or direct-create
+flow; both let the user set their own password through a one-time link. The
+dashboard at `/users/` lists profiles owned by the signed-in account. Browser
+pages are server-rendered and their core forms work without JavaScript.
 
 ## Profiles and links
 

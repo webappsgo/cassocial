@@ -23,6 +23,17 @@ token can be revoked independently. A `read` token sees read tools; a
 the operations the token owner may perform. Server Admin tokens are for
 operator tools, not general clients.
 
+MCP ignores browser cookies; a valid Bearer token is required on every
+request. Each POST must include `MCP-Protocol-Version: 2026-07-28` and
+`Mcp-Method` matching the JSON-RPC method. The protocol-version header must
+match `params._meta.io.modelcontextprotocol/protocolVersion`. Calls to
+`tools/call` also require `Mcp-Name` to match `params.name`. Missing or
+mismatched headers return a JSON-RPC error with HTTP 400. The endpoint rejects
+the older `initialize` handshake and protocol versions other than
+`2026-07-28`. Unknown methods return HTTP 404; `GET` and `DELETE` return HTTP
+405. The caller's token scope filters both the `tools/list` response and
+`tools/call` authorization.
+
 ## Connect a client
 
 Set the token in your shell without putting it in a command history:
@@ -71,6 +82,13 @@ Browser origins are validated; command-line clients without an `Origin`
 header are unaffected. The endpoint does not perform an initialize handshake,
 keep sessions, or accept `GET`/`DELETE` requests.
 
+When an `Origin` header is present, its origin must match the request's own
+origin, a configured public origin, or an explicit CORS allow-list entry. A
+wildcard CORS default does not authorize MCP origins. An unapproved origin
+returns HTTP 403. The endpoint reuses normal API token validation, ownership
+checks, rate limits, and audit logging; MCP requests are marked with source
+`mcp`.
+
 ## Cassocial tools
 
 Tools cover public profile reads and authenticated operations on the caller's
@@ -91,3 +109,13 @@ Server Admins can edit the Cassocial-specific section shown on
 `server.pages.help.mcp` in `yaml.d/pages.yml` and becomes active immediately.
 Keep the content aligned with the real tools and project data described in
 `IDEA.md`.
+
+## Troubleshooting
+
+| Status | Meaning | What to check |
+|--------|---------|---------------|
+| `400` | Unsupported protocol version or missing/mismatched MCP headers | Use protocol version `2026-07-28`; match the method and tool-name headers to the JSON-RPC body. |
+| `401` | Missing, invalid, expired, or revoked Bearer token | Create or refresh an API token and send it in the `Authorization` header. |
+| `403` | Unapproved browser origin or insufficient token scope | Use an allowed origin and a token whose scope includes the requested tool. |
+| `404` | Unknown MCP method | Use a supported JSON-RPC method such as `tools/list` or `tools/call`. |
+| `405` | HTTP method is not supported | Send MCP requests with `POST`. |

@@ -95,6 +95,8 @@ curl -q -LSsf https://YOUR_SERVER/server/healthz
 ## More documentation
 
 - [Administration](docs/admin.md)
+- [Regular User guide](docs/users.md)
+- [MCP connection guide](docs/mcp.md)
 - [Security](docs/security.md)
 - [Integrations](docs/integrations.md)
 - [SMTP setup example](docs/examples/smtp.md)

@@ -10,6 +10,7 @@ Cassocial is a self-hosted link aggregator and social profile platform. Use this
 - [User guide](users.md) — Regular User profiles, links, settings, and sessions
 - [API](api.md) — API routes and authentication
 - [CLI](cli.md) — companion client commands
+- [MCP](mcp.md) — connect MCP clients with a Cassocial API token
 
 ## Operations and development
 

@@ -152,6 +152,30 @@ available port in the 64000–64999 range. Use the configured port when
 connecting directly, or use the container and reverse-proxy settings in
 [Installation](installation.md).
 
+## Regular User registration
+
+Regular User accounts are disabled by default. Enable multi-user mode to
+activate account and profile features. In that mode, `open` is the default
+registration mode; `private` disables public self-registration while allowing
+Server Admin invitations and direct account creation.
+
+```yaml
+server:
+  users:
+    enabled: true
+    registration:
+      mode: open
+      require_email_verification: true
+      allowed_domains: []
+      blocked_domains: []
+      invite_expiration_days: 7
+```
+
+Email verification applies to open registration when SMTP is working. Without
+a working SMTP relay, new addresses are verified automatically so accounts can
+still be created. Configure SMTP in `server.notifications.email`; see the
+[SMTP guide](examples/smtp.md).
+
 ## Setting reference
 
 The generated `server.yml` contains the settings below. Nested names are YAML
@@ -162,6 +186,11 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.address`, `server.port` | Listen address and port; the generated port is selected from 64000–64999. |
 | `server.fqdn`, `server.mode`, `server.debug` | Public hostname, `production` or `development` mode, and debug setting. `DOMAIN` and `MODE` can override the corresponding values. |
 | `server.admin_path`, `server.api_version` | URL path segment for Server Admin pages and version segment for APIs. |
+| `server.users.enabled` | Enable Regular User accounts and multi-user features; defaults to `false`. |
+| `server.users.registration.mode` | Public self-registration mode: `open` (default when multi-user mode is enabled) or `private`. |
+| `server.users.registration.require_email_verification` | Require verification for open registration when SMTP delivery is available. |
+| `server.users.registration.allowed_domains`, `.blocked_domains` | Optional email domain allow-list and block-list for open registration. |
+| `server.users.registration.invite_expiration_days` | Validity period for admin-generated invite and activation links. |
 | `server.baseurl` | URL path prefix for the installation, such as `/myproject`; defaults to `/`. Trusted reverse-proxy prefix headers take precedence per request. |
 | `server.trusted_proxies.additional`, `server.trusted_proxies.client_ip_header` | Explicit trusted proxy addresses/CIDRs and the forwarding header policy (`auto` or a supported header name). |
 | `server.healthz.root.enabled` | Mount `/healthz` as a direct alias of `/server/healthz`; disabled by default. |
@@ -206,7 +235,6 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `rate_limit.global_burst`, `.read`, `.write`, `.health`, `.strict`, `.auth_failures`, `.auth.login`, `.auth.password_reset`, `.auth.registration` | Always-on request limits. Each rule contains `requests` and `window` in seconds; anonymous traffic is counted per IP, valid bearer tokens per token, strict bearer actions per owner, and failed authentication per IP. |
 | `web.ui.theme`, `web.cors` | Default UI theme (`dark`, `light`, or `auto`) and CORS policy. |
 | `web.csrf.enabled`, `.token_length`, `.cookie_name`, `.header_name`, `.secure`, `.exempt_paths` | CSRF protection for cookie-authenticated frontend forms. API paths cannot be exempted through this setting. |
-| `cassocial.site_name`, `.site_description`, `.allow_registration`, `.max_profiles_per_user`, `.max_links_per_profile` | Product name and Regular User registration/profile limits. |
 
 ## Analytics tracking and consent
 

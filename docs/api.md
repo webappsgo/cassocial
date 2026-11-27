@@ -56,7 +56,7 @@ under `/api/{api_version}/server/auth/`.
 |--------|----------|---------|
 | `POST` | `/api/{api_version}/server/auth/login` | Sign in a Server Admin or Regular User |
 | `POST` | `/api/{api_version}/server/auth/login/2fa` | Complete a second-factor challenge |
-| `POST` | `/api/{api_version}/server/auth/register` | Register a Regular User when registration is open |
+| `POST` | `/api/{api_version}/server/auth/register` | Register a Regular User when multi-user mode is enabled and registration mode is `open`; unavailable in `private` mode |
 | `POST` | `/api/{api_version}/server/auth/forgot-password` | Request password recovery |
 | `POST` | `/api/{api_version}/server/auth/reset-password` | Set a password using a recovery token |
 | `GET` | `/api/{api_version}/server/auth/verify-email/{token}` | Verify an email address |
@@ -66,8 +66,9 @@ under `/api/{api_version}/server/auth/`.
 | `POST` | `/api/{api_version}/server/auth/2fa/verify` | Verify a TOTP code |
 | `POST` | `/api/{api_version}/server/auth/2fa/disable` | Disable TOTP for the authenticated account |
 
-Registration, email verification, and password recovery depend on the
-deployment's settings and working SMTP delivery. Browser forms use the
+Registration depends on `server.users.enabled` and
+`server.users.registration.mode`. Email verification and password recovery
+depend on their settings and working SMTP delivery. Browser forms use the
 server-rendered pages and session cookies; API routes use bearer tokens.
 Requests using a revoked opaque API token return HTTP `401` with
 `{"error":"TOKEN_REVOKED", ...}`; expired tokens return `TOKEN_EXPIRED`.

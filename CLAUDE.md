@@ -113,6 +113,6 @@ On EVERY new conversation or after "context compacted" message:
 - Full spec: `AI.md` ← **SOURCE OF TRUTH**
 
 ## Current Project State
-- Last read AI.md: 2026-11-24 (full alignment work in progress)
+- Last read AI.md: 2026-11-27 (full alignment work in progress)
 - Current task: bring implementation, server pages, deployment, CI/CD, tests, and docs into compliance with AI.md
 - Relevant PARTs: all applicable PARTs 0-36; PART 37 is reference-only; finish with FINAL CHECKPOINT
