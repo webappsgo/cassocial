@@ -34,6 +34,7 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/security/allowlist` | Manage trusted IP/CIDR entries and check an address |
 | `/server/{admin_path}/users` | Manage Regular User status and delete Regular User accounts |
 | `/server/{admin_path}/security/reports` | Review encrypted vulnerability reports and update triage status |
+| `POST /server/{admin_path}/{admin_username}/logout` | Revoke the authenticated Server Admin's browser session |
 
 The shared pages `/server/about`, `/server/privacy`, `/server/contact`,
 `/server/help`, `/server/terms`, and `/server/security` show installation-level
