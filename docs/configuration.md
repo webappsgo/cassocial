@@ -188,7 +188,8 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.backup.retention.max_backups`, `.keep_weekly`, `.keep_monthly`, `.keep_yearly`, `.max_total_size` | Full-backup retention and storage cap. The size cap accepts bytes or a percentage of the backup volume. |
 | `server.backup.encryption.enabled` | Backup encryption state. The password is held in the protected secret store and is not a YAML value. |
 | `server.restore.max_archive_size`, `.max_expanded_size`, `.max_files`, `.max_file_size`, `.max_ratio` | Limits checked before and during backup archive extraction. |
-| `scheduler.tasks.backup_daily.enabled`, `.schedule` | Daily backup task state and cron schedule. Retention remains under `server.backup.retention`. |
+| `scheduler.tasks.backup_daily.enabled`, `.schedule` | Daily full backup and differential task state and schedule. Retention remains under `server.backup.retention`. |
+| `scheduler.tasks.backup_hourly.enabled`, `.schedule` | Optional cumulative hourly differential task; disabled by default. |
 | `server.notifications.email.smtp.host`, `.port`, `.username`, `.password`, `.tls`, `.from.name`, `.from.email` | Canonical SMTP relay and sender configuration. A legacy YAML password is migrated to `{config_dir}/secrets.yml`; the admin UI never returns it. |
 | `server.admin.email` | Default Server Admin contact address. Account credentials are stored in the database, not here. |
 | `server.i18n.default_language`, `.available_languages` | Default locale and enabled translation locales. |

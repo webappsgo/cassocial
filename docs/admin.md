@@ -36,7 +36,7 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/scheduler` | View built-in task schedules and current-process run counts, update schedules, enable or disable tasks, and queue a task to run now |
 | `/server/{admin_path}/logs` | View bounded recent tails of access, error, audit, security, and server logs |
 | `/server/{admin_path}/email` | Configure and test SMTP |
-| `/server/{admin_path}/backup` | Configure daily backup scheduling, encryption, retention, and restore limits; create manual backups, review the inventory, and download archives |
+| `/server/{admin_path}/backup` | Configure daily full and differential backups, optional hourly differentials, encryption, retention, and restore limits; create and test backups, review the inventory, and download archives |
 | `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |
 | `/server/{admin_path}/network/blocklists` | Manage built-in and operator-defined IP/domain blocklists |
@@ -50,6 +50,25 @@ The current browser administration interface includes these pages:
 The shared pages `/server/about`, `/server/privacy`, `/server/contact`,
 `/server/help`, `/server/terms`, and `/server/security` show installation-level
 information. Terms and contact details are controlled by the server operator.
+
+## Backup verification
+
+Run `cassocial --maintenance backup` to create a full backup in the configured
+backup directory, or pass a `.tar.gz` filename to select an explicit
+destination. Add `--password <value>` to create an encrypted `.tar.gz.enc`
+archive. Optional SSL files and other data-directory files can be included with
+`--include-ssl` and `--include-data`.
+
+Use the **Test a backup** form on `/server/{admin_path}/backup` to verify the
+newest full backup or choose another archive. Enter the backup password for an
+encrypted archive. Verification checks the archive, manifest, checksums,
+SQLite integrity, and an incremental's base without installing backup contents
+into live data directories.
+
+From the CLI, run `cassocial --maintenance backup test` to verify the newest
+full backup, or name a full or incremental archive with
+`cassocial --maintenance backup test <file>`. Encrypted archives prompt for the
+backup password; use `--password <value>` for non-interactive operation.
 
 ## API access
 
