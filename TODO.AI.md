@@ -15,10 +15,12 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Add separate `admin_sessions` and `user_sessions`, distinct cookies, persistent session expiry/revocation, and `adm_`/`usr_` bearer-token validation.
 - [ ] Finish the canonical route migration using configurable `server.api_version` and `server.admin_path`; remove non-spec legacy aliases and keep generated API specifications in sync.
 - [x] Add the IDEA.md API-route contract test that compares project routes with the router and generated OpenAPI output; generate OpenAPI with the configured API version.
+- [x] Match IDEA.md delete contracts: use path parameters for shortlinks, return `204` without bodies for profile/link/shortlink deletion, and let the CLI accept an empty `204` response.
 
 ## Pages and product features
 
 - [ ] Complete PARTS 16–18: all server-rendered pages and forms work with JavaScript disabled; accessibility, themes, and account/admin navigation follow the templates.
+- [ ] Implement the PART 16 guest `/server/preferences` and `/server/preferences/sync` pages and API mirrors, including consent-gated cookie writes, export/import, safe redirects, and reset behavior.
 - [ ] Complete PARTS 19–25: scheduler, backup/restore, email, GeoIP, metrics, updates, audit/security, cluster, and administration workflows.
 - [ ] Complete PART 31: registry-driven i18n for every user-facing string, CLDR plural rules, locale selection and persistence, accessibility checks, and translated CLI/API/email/page content.
 - [ ] Complete active PART 34: registration modes, user account lifecycle, profile privacy, user/session/token controls, and the full account-management pages and APIs.
@@ -36,6 +38,8 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Complete PARTS 26–28: exact Makefile targets, all 8 OS/architecture builds for server and CLI, static CGO-free binaries, Docker images/compose files, runtime configuration, and container checks.
 - [x] Cross-compile server and CLI for all eight OS/architecture combinations inside the Go container; FreeBSD/amd64 and FreeBSD/arm64 both build successfully.
 - [ ] Complete PARTS 29–30: required tests, coverage gates, linters, security checks, all provider workflows, documentation build, and generated OpenAPI/GraphQL artifacts.
+- [ ] Expand the standalone E2E suite to cover every IDEA.md user-facing feature in named SSR, no-JavaScript, and full-browser scenarios; add the required full crawl, admin/user flows, theme/language checks, form validation/CSRF, error pages, and static asset checks.
+- [x] Exercise the registered user's dashboard, profile editor, and profile-link management in all three E2E tiers; verify JavaScript-free login and full-browser console/request errors.
 - [ ] Verify GitHub, GitLab, Gitea, Forgejo, and Jenkins workflows against AI.md, including their real CI runs after push and resolution of failures.
 
 ## Documentation and final verification
