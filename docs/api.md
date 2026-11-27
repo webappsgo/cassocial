@@ -149,13 +149,14 @@ token. The currently mounted API includes:
 - `GET /users`, `GET /users/{id}`, `PUT /users/{id}`, and `DELETE /users/{id}`
 - `GET /stats`
 - `GET /settings` and `PUT /settings`
-- `POST /backup`
+- `GET /backup`, `POST /backup`, `GET /backup/{id}`, `DELETE /backup/{id}`, and `GET /backup/{id}/download`
 - `POST /services/import` and `POST /cache/clear`
 - `GET /email/config`, `PUT /email/config`, and `POST /email/test`
 - `GET /notifications/preferences` and `PUT /notifications/preferences`
 - `GET` and `PATCH /{admin_username}/preferences` for the authenticated admin's appearance settings
 - `GET` and `PATCH /{admin_username}/notifications` for the authenticated admin's notification settings
 - `GET /security/allowlist`, `POST /security/allowlist`, `DELETE /security/allowlist/{id}`, and `GET /security/allowlist/check/{ip}`
+- `GET /security/ratelimit` and `PATCH /security/ratelimit`
 - `GET /security/tokens`, `DELETE /security/tokens/{id}`, and `POST /security/tokens/{id}/rotate`
 - `GET /network/blocklists`, `PATCH /network/blocklists`, and `GET /network/blocklists/stats`
 - `POST /network/blocklists/sources`, `PATCH /network/blocklists/sources/{name}`, and `DELETE /network/blocklists/sources/{name}`

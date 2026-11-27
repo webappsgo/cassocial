@@ -36,12 +36,12 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/scheduler` | View built-in task schedules and current-process run counts, update schedules, enable or disable tasks, and queue a task to run now |
 | `/server/{admin_path}/logs` | View bounded recent tails of access, error, audit, security, and server logs |
 | `/server/{admin_path}/email` | Configure and test SMTP |
-| `/server/{admin_path}/backup` | Review and trigger backup operations |
+| `/server/{admin_path}/backup` | Create manual backups, review the backup inventory, and download backup archives |
 | `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |
 | `/server/{admin_path}/network/blocklists` | Manage built-in and operator-defined IP/domain blocklists |
 | `/server/{admin_path}/security/allowlist` | Manage trusted IP/CIDR entries and check an address |
-| `/server/{admin_path}/security/ratelimit` | Configure request ceilings and windows for read, write, health, login, password reset, and registration traffic; rate limiting stays on |
+| `/server/{admin_path}/security/ratelimit` | Configure always-on read, write, health, strict-action, failed bearer-authentication, login, password reset, and registration limits |
 | `/server/{admin_path}/security/tokens` | Inventory API-token metadata, create admin tokens, rotate credentials, and revoke tokens |
 | `/server/{admin_path}/users` | Manage Regular User status and delete Regular User accounts |
 | `/server/{admin_path}/security/reports` | Review encrypted vulnerability reports and update triage status |
@@ -58,9 +58,10 @@ The administration API is under
 token beginning with `adm_`. Admin self-preference routes are scoped to the
 authenticated username at `/api/{api_version}/server/{admin_path}/{admin_username}/preferences`.
 The currently mounted endpoints cover Regular
-User management, settings, statistics, backup trigger, service import, cache
-clearing, SMTP, notification preferences, API-token inventory and rotation, I2P,
-blocklists, and allowlists. GeoIP is currently managed through its browser page; no GeoIP admin API is mounted. See the
+User management, settings, statistics, backup creation and inventory, service import, cache
+clearing, SMTP, notification preferences, rate limits, API-token inventory and
+rotation, I2P, blocklists, and allowlists. GeoIP is currently managed through its
+browser page; no GeoIP admin API is mounted. See the
 [API reference](api.md#server-admin-api) for the route list.
 
 The I2P API supports `GET` and `PATCH` on
