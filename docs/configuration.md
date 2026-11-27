@@ -223,8 +223,10 @@ server:
 ```
 
 Optional analytics scripts are included only after a visitor consents to
-analytics cookies. The provider configuration adds its required hosts to the
-Content Security Policy only for consented requests. The same-origin
+analytics cookies and while `server.privacy.cookies.analytics.enabled` is
+true. Disabling that category hides its consent toggle and suppresses provider
+scripts, the tracking endpoint, and provider hosts in the Content Security
+Policy. The same-origin
 `/server/tracking.js` endpoint returns `404` without consent and on Tor or I2P
 requests, so analytics requests do not leave an overlay network.
 
