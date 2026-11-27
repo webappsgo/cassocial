@@ -68,7 +68,7 @@ Version and help are flags (`--version`/`-v`, `--help`/`-h`), not commands.
 The version output uses the running binary name and includes the version,
 short commit, build date, Go version, and OS/architecture.
 
-The client accepts `--help`, `--version`, `--color`, `--format` (or `--output`),
+The client accepts `--help`, `--version`, `--color`, `--output`,
 `--lang`, `--debug`, `--shell`, `--server`, `--token`, `--token-file`,
 `--config`, `--user`, and `--update`.
 `--user` supplies the default profile target when `profile` has no slug;
@@ -90,10 +90,10 @@ and requests that may change server data are not repeated against the same
 node. If the node returns a server error or a connection failure, the client
 tries the next configured cluster URL once with a fresh request; authentication
 and other client errors do not trigger failover.
-`--format` and `--output` work before the command or after its arguments.
-Response format precedence is `--format`/`--output`,
+`--output` works before the command or after its arguments.
+Response format precedence is `--output`,
 `CASSOCIAL_OUTPUT_FORMAT`, `output.format` in `cli.yml`, then `table`.
-Supported formats are `table`, `json`, `yaml`, `plain`, and `csv`.
+Supported formats are `table`, `json`, and `plain`.
 Color precedence is `--color`, `output.color` in `cli.yml`, `NO_COLOR`, then
 terminal detection. `output.color` accepts `auto`, `yes`, or `no`; boolean
 values are also accepted for compatibility with the shared binary setting.
@@ -124,8 +124,7 @@ values and keep Unix permissions at `0600`.
 | `shortlink delete --code CODE` | Delete one of the user's short links |
 
 `sl` is an alias for `shortlink`. Responses default to table output; choose a
-machine-readable format with `--format json`, `--format yaml`, or
-`--format csv`. Login stores
+machine-readable format with `--output json`. Login stores
 the bearer token in the platform's default token file. When a token from a
 cached source is revoked or expired, that source is cleared and the command
 exits with status `77` and directs the user to sign in again.

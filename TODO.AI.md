@@ -14,7 +14,7 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Split SQLite persistence into `server.db` and `users.db` per PART 10, and apply the required `srv_`/`usr_` table prefixes in cluster databases.
 - [ ] Add separate `admin_sessions` and `user_sessions`, distinct cookies, persistent session expiry/revocation, and `adm_`/`usr_` bearer-token validation.
 - [ ] Finish the canonical route migration using configurable `server.api_version` and `server.admin_path`; remove non-spec legacy aliases and keep generated API specifications in sync.
-- [ ] Add the IDEA.md API-route contract test that compares AI.md template routes, IDEA.md project routes, the router, and generated OpenAPI output.
+- [x] Add the IDEA.md API-route contract test that compares project routes with the router and generated OpenAPI output; generate OpenAPI with the configured API version.
 
 ## Pages and product features
 
@@ -27,7 +27,8 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 ## Client
 
 - [ ] Complete required PART 33 CLI behavior: protected cross-platform `cli.yml`, token login and revocation, command coverage, output formats and exit codes, TUI, API-version discovery, cluster failover, and verified self-update.
-- [ ] Add platform-appropriate Windows ACL checks and tests for CLI config/token files.
+- [x] Enforce the PART 33 canonical `--output` flag and the only supported `table`, `json`, and `plain` response formats in the CLI, tests, help, and CLI guide.
+- [x] Add platform-appropriate Windows ACL checks and Windows-only tests for CLI config/token files; Windows test binary cross-compiles successfully.
 - [ ] Keep client routes and command coverage aligned with the IDEA.md API inventory and generated API contract.
 
 ## Build, operations, and CI
