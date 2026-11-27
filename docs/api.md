@@ -151,7 +151,7 @@ token. The currently mounted API includes:
 - `GET /settings` and `PUT /settings`
 - `POST /backup`
 - `POST /services/import` and `POST /cache/clear`
-- `GET /smtp/config`, `PUT /smtp/config`, and `POST /smtp/test`
+- `GET /email/config`, `PUT /email/config`, and `POST /email/test`
 - `GET /notifications/preferences` and `PUT /notifications/preferences`
 - `GET /security/allowlist`, `POST /security/allowlist`, `DELETE /security/allowlist/{id}`, and `GET /security/allowlist/check/{ip}`
 - `GET /network/blocklists`, `PATCH /network/blocklists`, and `GET /network/blocklists/stats`

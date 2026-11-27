@@ -299,5 +299,5 @@ permissions.
 
 Server Admins can change the settings exposed by the current interface at
 `/server/{admin_path}/settings` and SMTP at
-`/server/{admin_path}/smtp`. Settings that affect listeners, database
+`/server/{admin_path}/email`. Settings that affect listeners, database
 connections, or TLS setup may require a restart.

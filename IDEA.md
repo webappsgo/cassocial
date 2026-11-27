@@ -26,7 +26,7 @@ maintainer_email:    casjay@yahoo.com
 - Per-profile analytics: view count, click count, geographic breakdown (GeoIP), device type
 - Import/export of profile link data (JSON)
 - First-run setup wizard that creates the initial admin account and persists settings to the database
-- Admin panel: user management (create, list, suspend, delete), system settings, backup, aggregate stats
+- Admin panel: user management (create, list, suspend, delete), system settings, backup, aggregate stats, cache clearing under `cache`, and service catalog administration under `services`
 - SMTP email for registration verification, password reset, and admin notifications
 - Maintenance mode (system-wide or per-profile) with a bypass token
 - 2FA (TOTP) for user accounts

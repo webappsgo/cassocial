@@ -11,13 +11,13 @@ Settings are stored under `server.notifications.email.smtp` in `server.yml`;
 the password is stored separately in `{config_dir}/secrets.yml`.
 
 Server Admins can review and update SMTP settings at
-`/server/{admin_path}/smtp`. The JSON API is:
+`/server/{admin_path}/email`. The JSON API is:
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/{api_version}/server/{admin_path}/smtp/config` | Read SMTP settings without returning the password |
-| `PUT` | `/api/{api_version}/server/{admin_path}/smtp/config` | Update SMTP settings |
-| `POST` | `/api/{api_version}/server/{admin_path}/smtp/test` | Test the configured relay |
+| `GET` | `/api/{api_version}/server/{admin_path}/email/config` | Read SMTP settings without returning the password |
+| `PUT` | `/api/{api_version}/server/{admin_path}/email/config` | Update SMTP settings |
+| `POST` | `/api/{api_version}/server/{admin_path}/email/test` | Test the configured relay |
 
 The SMTP password is never echoed in the configuration response. For
 autodetection, TLS modes, and environment variables, see the

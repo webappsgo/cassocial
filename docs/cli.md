@@ -54,7 +54,7 @@ short commit, build date, Go version, and OS/architecture.
 
 The client accepts `--help`, `--version`, `--color`, `--format` (or `--output`),
 `--lang`, `--debug`, `--shell`, `--server`, `--token`, `--token-file`,
-`--config`, and `--user`.
+`--config`, `--user`, and `--update`.
 `--user` supplies the default profile target when `profile` has no slug;
 `@name` is accepted for that user target. An organization prefix is rejected
 while PART 35 remains inactive in this project.
@@ -70,7 +70,10 @@ seconds or a Go duration such as `45s`. Transient GET/HEAD/OPTIONS failures
 use `CASSOCIAL_SERVER_RETRY` and `CASSOCIAL_SERVER_RETRY_DELAY`, then
 `server.retry` and `server.retry_delay` in `cli.yml`; defaults are three retry
 attempts and a one-second exponential backoff. Client errors are not retried,
-and requests that may change server data are never replayed.
+and requests that may change server data are not repeated against the same
+node. If the node returns a server error or a connection failure, the client
+tries the next configured cluster URL once with a fresh request; authentication
+and other client errors do not trigger failover.
 `--format` and `--output` work before the command or after its arguments.
 Response format precedence is `--format`/`--output`,
 `CASSOCIAL_OUTPUT_FORMAT`, `output.format` in `cli.yml`, then `table`.
@@ -120,6 +123,16 @@ and a matching SHA-256 checksum. The server publishes a release only when the
 operator has provisioned the binary and matching `version.txt` and
 `sha256.txt` files in its CLI distribution directory.
 
+Configure automatic non-interactive installation in the protected client
+`cli.yml`:
+
+```yaml
+update:
+  auto: false
+  check_interval: per_invocation
+  channel: stable
+```
+
 When `server.cluster` contains URLs, the client retries connection failures
 and server errors against those nodes, including replayable mutations. It does
 not fail over on authentication or other client errors. The current server
@@ -139,6 +152,8 @@ cassocial --help
 cassocial --lang it --status
 cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" profile YOUR_PROFILE
 cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" health
+cassocial-cli --update check
+cassocial-cli --update yes
 cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" --token-file "$HOME/.config/casapps/cassocial/token" links PROFILE_ID
 cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" --token-file "$HOME/.config/casapps/cassocial/token" shortlink create --profile PROFILE_ID --url https://your-site.invalid
 ```

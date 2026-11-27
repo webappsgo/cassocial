@@ -26,7 +26,7 @@ The current browser administration interface includes these pages:
 |------|---------|
 | `/server/{admin_path}/` | Server dashboard and overview |
 | `/server/{admin_path}/settings` | Update the settings exposed by the current form |
-| `/server/{admin_path}/smtp` | Configure and test SMTP |
+| `/server/{admin_path}/email` | Configure and test SMTP |
 | `/server/{admin_path}/backup` | Review and trigger backup operations |
 | `/server/{admin_path}/network/i2p` | Configure the I2P eepsite, inspect provider status, restart, or regenerate its address |
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |

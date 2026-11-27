@@ -79,7 +79,8 @@ chmod +x cassocial-cli-linux-amd64
 The client can check server health and read public profiles without a token;
 profile-link and short-link management use an API token. See the [CLI guide](docs/cli.md) for supported commands and authentication limitations.
 Running `cassocial-cli` without a command opens its searchable terminal menu
-when attached to an interactive terminal.
+when attached to an interactive terminal. It discovers the API version on
+startup and can verify and install operator-provisioned CLI updates over HTTPS.
 
 ## Configuration and API
 
