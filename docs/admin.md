@@ -41,6 +41,8 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}/network/geoip` | Configure country filtering and GeoIP dataset presets |
 | `/server/{admin_path}/network/blocklists` | Manage built-in and operator-defined IP/domain blocklists |
 | `/server/{admin_path}/security/allowlist` | Manage trusted IP/CIDR entries and check an address |
+| `/server/{admin_path}/security/ratelimit` | Configure request ceilings and windows for read, write, health, login, password reset, and registration traffic; rate limiting stays on |
+| `/server/{admin_path}/security/tokens` | Inventory API-token metadata, create admin tokens, rotate credentials, and revoke tokens |
 | `/server/{admin_path}/users` | Manage Regular User status and delete Regular User accounts |
 | `/server/{admin_path}/security/reports` | Review encrypted vulnerability reports and update triage status |
 | `POST /server/{admin_path}/{admin_username}/logout` | Revoke the authenticated Server Admin's browser session |
@@ -57,8 +59,8 @@ token beginning with `adm_`. Admin self-preference routes are scoped to the
 authenticated username at `/api/{api_version}/server/{admin_path}/{admin_username}/preferences`.
 The currently mounted endpoints cover Regular
 User management, settings, statistics, backup trigger, service import, cache
-clearing, SMTP, notification preferences, I2P, blocklists, and allowlists. GeoIP
-is currently managed through its browser page; no GeoIP admin API is mounted. See the
+clearing, SMTP, notification preferences, API-token inventory and rotation, I2P,
+blocklists, and allowlists. GeoIP is currently managed through its browser page; no GeoIP admin API is mounted. See the
 [API reference](api.md#server-admin-api) for the route list.
 
 The I2P API supports `GET` and `PATCH` on

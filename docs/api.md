@@ -156,6 +156,7 @@ token. The currently mounted API includes:
 - `GET` and `PATCH /{admin_username}/preferences` for the authenticated admin's appearance settings
 - `GET` and `PATCH /{admin_username}/notifications` for the authenticated admin's notification settings
 - `GET /security/allowlist`, `POST /security/allowlist`, `DELETE /security/allowlist/{id}`, and `GET /security/allowlist/check/{ip}`
+- `GET /security/tokens`, `DELETE /security/tokens/{id}`, and `POST /security/tokens/{id}/rotate`
 - `GET /network/blocklists`, `PATCH /network/blocklists`, and `GET /network/blocklists/stats`
 - `POST /network/blocklists/sources`, `PATCH /network/blocklists/sources/{name}`, and `DELETE /network/blocklists/sources/{name}`
 - `POST /network/blocklists/update`, `POST /network/blocklists/update/{name}`, and `GET /network/blocklists/check/{ip}`
