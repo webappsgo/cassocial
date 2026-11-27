@@ -83,3 +83,11 @@ definition. Cassocial does not currently expose MCP resources or prompts.
 The caller's token permissions and the normal API ownership checks apply to
 every tool call. MCP traffic uses the API rate limits and is identified as
 MCP in audit records.
+
+## Project guide
+
+Server Admins can edit the Cassocial-specific section shown on
+`/server/help/mcp` at `/server/{admin_path}/pages/help`. The guide is saved to
+`server.pages.help.mcp` in `yaml.d/pages.yml` and becomes active immediately.
+Keep the content aligned with the real tools and project data described in
+`IDEA.md`.

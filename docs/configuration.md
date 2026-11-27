@@ -171,7 +171,7 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.pages.contact.enabled`, `.captcha`, `.captcha_site_key`, `.success_message` | Public contact form availability and response behavior. Secret captcha credentials are not serialized in this file. |
 | `server.pages.contact.antispam.honeypot`, `.min_fill_seconds`, `.max_age_seconds`, `.per_ip`, `.per_email`, `.global`, `.window`, `.max_links`, `.reject_markup`, `.blocked_words`, `.blocked_email_domains`, `.strikes`, `.ban_hours`, `.review_min_seconds`, `.review_max_seconds`, `.duplicate_window_hours` | Honeypot, submission timing, IP/email/global limits, window, link and markup limits, blocked words/domains, strike and ban thresholds, review timing, and duplicate-report window. |
 | `server.pages.help.content` | Operator-authored Help page content. |
-| `server.pages.help.mcp` | Project-specific MCP usage guidance shown on `/server/help/mcp`. |
+| `server.pages.help.mcp` | Project-specific MCP usage guidance shown on `/server/help/mcp`. Stored in `yaml.d/pages.yml`; editable by Server Admins under Pages → Help and applied to the running server after saving. |
 | `server.privacy.data.sold`, `.stored_on_server`, `.sharing` | Public privacy disclosures about storage and conditional sharing. Each sharing entry has `condition`, `when`, and `data`. |
 | `server.privacy.retention.period`, `.export_available`, `.deletion_available` | Public retention, export, and deletion disclosures. |
 | `server.privacy.cookies.*` | Named cookie categories with `enabled` and `description` values. |
