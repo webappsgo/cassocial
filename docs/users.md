@@ -5,8 +5,11 @@ Regular Users manage their own profiles and API tokens; they do not receive
 Server Admin access. Multi-user mode is disabled by default. When enabled,
 public self-registration defaults to `open`; the operator can set the mode to
 `private` to disable the public registration form. Email verification applies
-when it is enabled and SMTP delivery is available. There is no admin-approval
-step in the registration flow.
+only when `server.users.registration.require_email_verification` is `true` and
+SMTP is working. If verification is disabled or SMTP is unavailable, email
+addresses are auto-verified. There is no admin-approval step in the
+registration flow. The account settings live in
+`{config_dir}/yaml.d/accounts.yml`.
 
 ## Sign in and dashboard
 
@@ -43,9 +46,18 @@ submitted values before saving changes.
 | `/users/tokens` | Create, rotate, and revoke API tokens |
 | `/users/security/sessions` | Review and revoke active browser sessions |
 
+Notification preferences are set per event and channel. Optional events have
+separate WebUI and email choices; required security events stay enabled and
+are not stored as user overrides. Email preferences apply only to events that
+have an email template, and delivery still depends on working SMTP. Session
+expiry, API token creation/revocation, and recovery-key use are WebUI events.
+Email verification messages belong to the account-verification flow.
+
 The server stores passwords using Argon2id. API tokens are displayed once at
 creation; keep the raw token private and revoke it if it is exposed. Browser
 sessions and API bearer tokens are separate authentication mechanisms.
+Date and time formats are part of `/users/settings/appearance` alongside the
+theme, font size, and reduced-motion preference.
 
 ## Guest preferences
 

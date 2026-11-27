@@ -1,8 +1,11 @@
 # Configuration
 
-Cassocial reads `{config_dir}/server.yml`. Command-line flags override
-environment variables, which override file values and defaults. The default
-API version is `v1`; the default administration path is `administration`.
+Cassocial reads `{config_dir}/server.yml` and the ordered YAML files in
+`{config_dir}/yaml.d/`. `server.yml` holds node-specific settings; shared
+application settings live in their owning area file. Command-line flags
+override environment variables, which override file values and defaults. The
+default API version is `v1`; the default administration path is
+`administration`.
 
 ## Paths
 
@@ -26,6 +29,29 @@ Keep node-specific values in `server.yml` and put other configuration areas in
 byte-wise filename order after `server.yml`; later files override earlier
 values. Nested maps merge by key, while a scalar or list replaces the earlier
 value. Environment variables and command-line flags retain higher precedence.
+
+The account area is stored in `{config_dir}/yaml.d/accounts.yml`. It owns
+`server.auth`, `server.users`, `server.session`, `server.admin`, and
+`server.admin_path`. For example, an operator can enable Regular User accounts
+and choose registration mode in this file:
+
+```yaml
+server:
+  users:
+    enabled: true
+    registration:
+      mode: open
+      require_email_verification: true
+  admin_path: administration
+  admin:
+    email: ""
+```
+
+The admin settings page can enable Regular User accounts and choose `open` or
+`private` registration. It writes settings to their owning file. When another
+configuration file overrides an account setting, the admin page shows that
+setting as read-only and identifies the overriding file; edit the owning
+configuration file instead.
 
 For example, an operator can enable I2P in
 `{config_dir}/yaml.d/50-i2p.yml`:
@@ -67,8 +93,10 @@ Hidden files, backup files, non-YAML files, and subdirectories are ignored.
 
 ## Main settings
 
-The following shows the main canonical SMTP, network-security, and web
-settings. See the complete setting reference below for every supported key.
+The following shows a merged view of canonical SMTP, network-security, and web
+settings; it is not a single-file template. Store each section in its owning
+area file as described above. See the complete setting reference below for
+every supported key.
 
 ```yaml
 server:
@@ -76,7 +104,6 @@ server:
   port: 64500
   fqdn: "YOUR_SERVER_HOSTNAME"
   mode: production
-  admin_path: administration
   api_version: v1
   baseurl: /
   healthz:
@@ -159,6 +186,11 @@ activate account and profile features. In that mode, `open` is the default
 registration mode; `private` disables public self-registration while allowing
 Server Admin invitations and direct account creation.
 
+These settings belong in `{config_dir}/yaml.d/accounts.yml` (see the
+[account area-file example](#drop-in-configuration)). The admin settings page
+can enable accounts and select either mode unless a different file owns the
+effective setting; externally overridden values are read-only in the page.
+
 ```yaml
 server:
   users:
@@ -171,26 +203,35 @@ server:
       invite_expiration_days: 7
 ```
 
-Email verification applies to open registration when SMTP is working. Without
-a working SMTP relay, new addresses are verified automatically so accounts can
-still be created. Configure SMTP in `server.notifications.email`; see the
+When open registration is active, `allowed_domains` restricts email domains;
+an empty list permits all domains. `blocked_domains` excludes specific
+domains. User invite and activation links default to seven days; configure
+`invite_expiration_days` to change that validity period.
+
+Email verification is required only when
+`server.users.registration.require_email_verification` is `true` and SMTP is
+working. If the setting is `false` or SMTP is unavailable, email addresses are
+auto-verified. Configure SMTP in `server.notifications.email`; see the
 [SMTP guide](examples/smtp.md).
 
 ## Setting reference
 
-The generated `server.yml` contains the settings below. Nested names are YAML
-paths. Omitted values use the generated defaults; unknown keys are rejected.
+The generated configuration contains the settings below. Nested names are
+YAML paths. See the owner file for each area; omitted values use the generated
+defaults and unknown keys are rejected.
 
 | YAML path | Purpose and behavior |
 |-----------|----------------------|
 | `server.address`, `server.port` | Listen address and port; the generated port is selected from 64000–64999. |
 | `server.fqdn`, `server.mode`, `server.debug` | Public hostname, `production` or `development` mode, and debug setting. `DOMAIN` and `MODE` can override the corresponding values. |
-| `server.admin_path`, `server.api_version` | URL path segment for Server Admin pages and version segment for APIs. |
-| `server.users.enabled` | Enable Regular User accounts and multi-user features; defaults to `false`. |
-| `server.users.registration.mode` | Public self-registration mode: `open` (default when multi-user mode is enabled) or `private`. |
-| `server.users.registration.require_email_verification` | Require verification for open registration when SMTP delivery is available. |
-| `server.users.registration.allowed_domains`, `.blocked_domains` | Optional email domain allow-list and block-list for open registration. |
-| `server.users.registration.invite_expiration_days` | Validity period for admin-generated invite and activation links. |
+| `server.api_version` | API version segment; stored in node-local `server.yml`. |
+| `server.admin_path` | Server Admin URL path segment; stored in `yaml.d/accounts.yml`. |
+| `server.admin.email` | Private fallback recipient for Server Admin notices; stored in `yaml.d/accounts.yml`. |
+| `server.users.enabled` | Enable Regular User accounts and multi-user features; defaults to `false`; stored in `yaml.d/accounts.yml`. |
+| `server.users.registration.mode` | Public self-registration mode: `open` (default when multi-user mode is enabled) or `private`; stored in `yaml.d/accounts.yml`. |
+| `server.users.registration.require_email_verification` | Require email verification only when enabled and SMTP is working; otherwise addresses are auto-verified. Stored in `yaml.d/accounts.yml`. |
+| `server.users.registration.allowed_domains`, `.blocked_domains` | Domain allow-list and block-list for open registration; an empty allow-list permits every domain. Stored in `yaml.d/accounts.yml`. |
+| `server.users.registration.invite_expiration_days` | Validity period for user invite and activation links; defaults to seven days. Stored in `yaml.d/accounts.yml`. |
 | `server.baseurl` | URL path prefix for the installation, such as `/myproject`; defaults to `/`. Trusted reverse-proxy prefix headers take precedence per request. |
 | `server.trusted_proxies.additional`, `server.trusted_proxies.client_ip_header` | Explicit trusted proxy addresses/CIDRs and the forwarding header policy (`auto` or a supported header name). |
 | `server.healthz.root.enabled` | Mount `/healthz` as a direct alias of `/server/healthz`; disabled by default. |
@@ -223,6 +264,7 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `scheduler.tasks.backup_daily.enabled`, `.schedule` | Daily full backup and differential task state and schedule. Retention remains under `server.backup.retention`. |
 | `scheduler.tasks.backup_hourly.enabled`, `.schedule` | Optional cumulative hourly differential task; disabled by default. |
 | `server.notifications.email.smtp.host`, `.port`, `.username`, `.password`, `.tls`, `.from.name`, `.from.email` | Canonical SMTP relay and sender configuration. A legacy YAML password is migrated to `{config_dir}/secrets.yml`; the admin UI never returns it. |
+| `server.notifications.email.events.{event}` | Server default email preference for each named notification event. User preferences can override these defaults for events with an email template; required security events remain enabled. |
 | `server.admin.email` | Default Server Admin contact address. Account credentials are stored in the database, not here. |
 | `server.i18n.default_language`, `.available_languages` | Default locale and enabled translation locales. |
 | `server.user`, `server.group` | Operating-system user and group used by service operations. |

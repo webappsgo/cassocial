@@ -26,6 +26,7 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Complete PARTS 19–25: scheduler, backup/restore, email, GeoIP, metrics, updates, audit/security, cluster, and administration workflows.
 - [ ] Complete PART 31: registry-driven i18n for every user-facing string, CLDR plural rules, locale selection and persistence, accessibility checks, and translated CLI/API/email/page content.
 - [ ] Complete active PART 34: registration modes, user account lifecycle, profile privacy, user/session/token controls, and the full account-management pages and APIs.
+- [x] Store Regular User notification channel preferences as the PART 17 per-event JSON document, generate the no-JavaScript settings form from the event catalog, lock required security events, and honor server email-event defaults.
 - [ ] Complete active PART 36: custom-domain verification, DNS safety, routing, certificates, ownership controls, and admin/user management.
 
 ## Client
@@ -40,6 +41,8 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Complete PARTS 26–28: exact Makefile targets, all 8 OS/architecture builds for server and CLI, static CGO-free binaries, Docker images/compose files, runtime configuration, and container checks.
 - [x] Cross-compile server and CLI for all eight OS/architecture combinations inside the Go container; FreeBSD/amd64 and FreeBSD/arm64 both build successfully.
 - [ ] Complete PARTS 29–30: required tests, coverage gates, linters, security checks, all provider workflows, documentation build, and generated OpenAPI/GraphQL artifacts.
+- [x] Add the required `go vet`, `staticcheck`, `govulncheck`, `shellcheck`, and `shfmt` gates to the Docker-based `make test` target, and format the test shell scripts; the full target passes with 64.5% coverage and all-platform/runtime checks.
+- [ ] Add the PART 16 CSS architecture lint test over embedded project stylesheets using the specified pure-Go parser and all selector/token/layer rules.
 - [ ] Expand the standalone E2E suite to cover every IDEA.md user-facing feature in named SSR, no-JavaScript, and full-browser scenarios; add the required full crawl, admin/user flows, theme/language checks, form validation/CSRF, error pages, and static asset checks.
 - [x] Exercise the registered user's dashboard, profile editor, and profile-link management in all three E2E tiers; verify JavaScript-free login and full-browser console/request errors.
 - [ ] Verify GitHub, GitLab, Gitea, Forgejo, and Jenkins workflows against AI.md, including their real CI runs after push and resolution of failures.

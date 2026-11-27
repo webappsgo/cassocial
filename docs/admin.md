@@ -35,7 +35,7 @@ The current browser administration interface includes these pages:
 | `/server/{admin_path}` | Server dashboard and overview (canonical path; a trailing slash redirects here) |
 | `/server/{admin_path}/{admin_username}/preferences` | Update the authenticated admin's theme, font size, motion, date, and time preferences |
 | `/server/{admin_path}/{admin_username}/notifications` | Update the authenticated admin's WebUI and email notification preferences |
-| `/server/{admin_path}/settings` | Update the settings exposed by the current form |
+| `/server/{admin_path}/settings` | Update exposed server settings, including enabling Regular User accounts and selecting `open` or `private` registration |
 | `/server/{admin_path}/pages/help` | Edit and persist the project-specific MCP connection guide |
 | `/server/{admin_path}/info` | View build version, runtime environment, database driver, and optional dependency status |
 | `/server/{admin_path}/scheduler` | View built-in task schedules and current-process run counts, update schedules, enable or disable tasks, and queue a task to run now |
@@ -56,6 +56,12 @@ The current browser administration interface includes these pages:
 The shared pages `/server/about`, `/server/privacy`, `/server/contact`,
 `/server/help`, `/server/terms`, and `/server/security` show installation-level
 information. Terms and contact details are controlled by the server operator.
+
+Account settings (`server.users`, `server.admin`, and `server.admin_path`) are
+owned by `{config_dir}/yaml.d/accounts.yml`. The Settings page writes these
+values to their owning file. If a later drop-in or another configuration file
+overrides a value, the page identifies that file and makes the control
+read-only; edit the overriding file to change it.
 
 ## Backup verification
 
