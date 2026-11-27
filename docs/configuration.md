@@ -171,10 +171,12 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.pages.contact.enabled`, `.captcha`, `.captcha_site_key`, `.success_message` | Public contact form availability and response behavior. Secret captcha credentials are not serialized in this file. |
 | `server.pages.contact.antispam.honeypot`, `.min_fill_seconds`, `.max_age_seconds`, `.per_ip`, `.per_email`, `.global`, `.window`, `.max_links`, `.reject_markup`, `.blocked_words`, `.blocked_email_domains`, `.strikes`, `.ban_hours`, `.review_min_seconds`, `.review_max_seconds`, `.duplicate_window_hours` | Honeypot, submission timing, IP/email/global limits, window, link and markup limits, blocked words/domains, strike and ban thresholds, review timing, and duplicate-report window. |
 | `server.pages.help.content` | Operator-authored Help page content. |
+| `server.pages.help.mcp` | Project-specific MCP usage guidance shown on `/server/help/mcp`. |
 | `server.privacy.data.sold`, `.stored_on_server`, `.sharing` | Public privacy disclosures about storage and conditional sharing. Each sharing entry has `condition`, `when`, and `data`. |
 | `server.privacy.retention.period`, `.export_available`, `.deletion_available` | Public retention, export, and deletion disclosures. |
 | `server.privacy.cookies.*` | Named cookie categories with `enabled` and `description` values. |
 | `server.privacy.third_party.services` | Third-party service disclosures; each item has `name`, `purpose`, and `policy_url`. |
+| `server.tracking.type`, `.id`, `.url` | Consent-gated analytics provider settings stored in `yaml.d/privacy.yml`. Supported providers are `google`, `matomo`, `piwik`, `owa`, `fathom`, `plausible`, `umami`, `simple`, and `cloudflare`; empty or `none` disables tracking. Matomo, Piwik, OWA, and Umami require a URL; Fathom and Plausible allow an optional URL. |
 | `server.security.reports.retention_days` | Retention period for security reports. |
 | `server.security.encryption_key`, `.encryption_key_version` | Managed encryption key metadata. The application provisions and rotates this key; operators should not set or copy key material manually. |
 | `server.security.allowlist` | Trusted IP/CIDR entries, each with `cidr` and a required `description`. |
@@ -204,6 +206,32 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `web.ui.theme`, `web.cors` | Default UI theme (`dark`, `light`, or `auto`) and CORS policy. |
 | `web.csrf.enabled`, `.token_length`, `.cookie_name`, `.header_name`, `.secure`, `.exempt_paths` | CSRF protection for cookie-authenticated frontend forms. API paths cannot be exempted through this setting. |
 | `cassocial.site_name`, `.site_description`, `.allow_registration`, `.max_profiles_per_user`, `.max_links_per_profile` | Product name and Regular User registration/profile limits. |
+
+## Analytics tracking and consent
+
+Analytics settings belong in `{config_dir}/yaml.d/privacy.yml`, alongside the
+privacy disclosures. The provider is disabled by default. Example for a
+self-hosted Matomo instance:
+
+```yaml
+server:
+  tracking:
+    type: matomo
+    id: "1"
+    url: "https://analytics.example.com"
+```
+
+Optional analytics scripts are included only after a visitor consents to
+analytics cookies. The provider configuration adds its required hosts to the
+Content Security Policy only for consented requests. The same-origin
+`/server/tracking.js` endpoint returns `404` without consent and on Tor or I2P
+requests, so analytics requests do not leave an overlay network.
+
+Provider identifiers and URLs are validated when configuration loads. The
+server supports Google Analytics, Matomo/Piwik, Open Web Analytics, Fathom,
+Plausible, Umami, Simple Analytics, and Cloudflare Web Analytics. Self-hosted
+providers use `url`; cloud providers use their standard endpoint when `url` is
+empty.
 
 ### CORS and trusted proxy origins
 

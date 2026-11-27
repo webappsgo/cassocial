@@ -140,6 +140,28 @@ server-rendered information pages:
 
 The account and profile endpoints are described in the [Regular User guide](users.md).
 
+## MCP server
+
+Cassocial exposes an always-on remote Streamable HTTP endpoint over JSON-RPC 2.0.
+Every request requires the same API Bearer token used by REST; there is no
+anonymous MCP access, separate MCP credential, or session. The token scope
+filters the tools available to the caller. The server builds tools from its
+OpenAPI operations and dispatches tool calls through the existing API router.
+
+| Method | Path | Authentication | Purpose |
+|--------|------|----------------|---------|
+| `POST` | `/api/{api_version}/server/mcp` | Bearer token | Canonical MCP endpoint |
+| `POST` | `/api/mcp` | Bearer token | Direct alias for the configured API version |
+| `POST` | `/mcp` | Bearer token | Root alias for the configured API version |
+| `GET` | `/server/help/mcp` | None | Server-rendered connection guide and live tool list |
+| `GET` | `/api/{api_version}/server/help/mcp` | None | JSON connection guide and tool list |
+
+The MCP endpoint accepts `POST` only. It has no initialize handshake or
+session state. Requests carry `MCP-Protocol-Version: 2026-07-28` and a
+`Mcp-Method` matching the JSON-RPC method; tool calls also carry `Mcp-Name`.
+Each alias returns the same JSON responses and never redirects. Use the
+[MCP connection guide](mcp.md) for a copyable client configuration and request.
+
 ## Guest preferences
 
 Guest preference endpoints configure cookies for the requesting browser; they

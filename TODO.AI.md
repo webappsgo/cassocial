@@ -21,6 +21,8 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 
 - [ ] Complete PARTS 16–18: all server-rendered pages and forms work with JavaScript disabled; accessibility, themes, and account/admin navigation follow the templates.
 - [ ] Implement the PART 16 guest `/server/preferences` and `/server/preferences/sync` pages and API mirrors, including consent-gated cookie writes, export/import, safe redirects, and reset behavior.
+- [ ] Complete the MCP contract: scope-correct OpenAPI tool listing and dispatch, audit source, optional progress SSE, binary responses, help-page conformance, and operator editing/reload of `server.pages.help.mcp` from `yaml.d/pages.yml`.
+- [ ] Complete PART 12 analytics tracking providers, consent and Tor/I2P suppression, same-origin tracking script generation, CSP allow-listing, validation, and the admin tracking page.
 - [ ] Complete PARTS 19–25: scheduler, backup/restore, email, GeoIP, metrics, updates, audit/security, cluster, and administration workflows.
 - [ ] Complete PART 31: registry-driven i18n for every user-facing string, CLDR plural rules, locale selection and persistence, accessibility checks, and translated CLI/API/email/page content.
 - [ ] Complete active PART 34: registration modes, user account lifecycle, profile privacy, user/session/token controls, and the full account-management pages and APIs.

@@ -86,7 +86,7 @@ startup and can verify and install operator-provisioned CLI updates over HTTPS.
 
 The server reads `{config_dir}/server.yml`; default paths and supported environment overrides are in the [configuration reference](docs/configuration.md). Server Admins manage the settings currently exposed by the application at `/server/administration`.
 
-The API is served by each Cassocial instance. See the [API reference](docs/api.md) for route families and authentication details. Use your own server address:
+The API is served by each Cassocial instance. See the [API reference](docs/api.md) for route families and authentication details, and the [MCP guide](docs/mcp.md) for connecting AI clients. Use your own server address:
 
 ```bash
 curl -q -LSsf https://YOUR_SERVER/server/healthz

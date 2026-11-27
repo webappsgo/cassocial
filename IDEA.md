@@ -40,6 +40,20 @@ maintainer_email:    casjay@yahoo.com
 - Real-time collaboration or multi-user editing of a single profile
 - Serving user-uploaded binary files (only URLs to external images are stored; avatars are external URLs)
 
+### MCP project guide
+
+Cassocial MCP tools operate on public profiles and on the authenticated user's own profiles, links, analytics, imports, exports, and short links. The live tool list is filtered by the caller's token scope.
+
+Example prompts:
+
+- Find a public profile with `getPublicProfile` and list its links with `listPublicProfileLinks`. Only public profile data is returned.
+- Review an account's profiles with `listUserProfiles`, then read an owned profile with `getUserProfile` or its links with `listProfileLinks`.
+- Create or update a profile with `createUserProfile` or `updateUserProfile`; create and reorder links with `createProfileLink` and `reorderProfileLinks`. These operations are limited to resources owned by the authenticated account.
+- Review profile traffic with `getProfileAnalytics` and `getLinkAnalytics`; use `exportProfileAnalytics` for a structured export.
+- Create a short link with `createUserShortlink` and inspect public metadata with `getShortlink`.
+
+Use a `read` token for reads and `read-write` for permitted account changes. Delete operations require the API's `global` scope. Server-admin tools require an operator token. Cassocial exposes no MCP resources or prompts.
+
 ### Roles & permissions
 
 | Role | Description | Key Permissions |
