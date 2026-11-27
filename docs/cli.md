@@ -49,6 +49,8 @@ defaults to the dark palette, mouse support, and Unicode symbols. Configure
 falls back to dark. Configure `tui.mouse` and `tui.unicode` to change the other
 preferences. A command is required when no interactive terminal is available.
 Version and help are flags (`--version`/`-v`, `--help`/`-h`), not commands.
+The version output uses the running binary name and includes the version,
+short commit, build date, Go version, and OS/architecture.
 
 The client accepts `--help`, `--version`, `--color`, `--format` (or `--output`),
 `--lang`, `--debug`, `--shell`, `--server`, `--token`, `--token-file`,
@@ -108,12 +110,22 @@ machine-readable format with `--format json`, `--format yaml`, or
 the bearer token in the platform's default token file. When a token from a
 cached source is revoked or expired, that source is cleared and the command
 exits with status `77` and directs the user to sign in again.
-When `server.cluster` contains URLs learned from a server health response, the
-client retries connection failures and server errors against those nodes and
-uses the first working node for the current process. The server health
-response does not publish cluster URLs because the AI.md health requirements
-conflict on whether addresses may be exposed. Native GUI and self-update
-remain pending.
+At startup the client reads `/api/autodiscover`, saves the server's current API
+version to `server.api_version`, and checks the release for its OS and
+architecture. An interactive terminal prompts before installing an available
+update. A non-interactive invocation installs automatically only when
+`update.auto: true`; `cassocial-cli --update check` reports availability and
+`cassocial-cli --update yes` installs it explicitly. Downloads require HTTPS
+and a matching SHA-256 checksum. The server publishes a release only when the
+operator has provisioned the binary and matching `version.txt` and
+`sha256.txt` files in its CLI distribution directory.
+
+When `server.cluster` contains URLs, the client retries connection failures
+and server errors against those nodes, including replayable mutations. It does
+not fail over on authentication or other client errors. The current server
+health response does not publish cluster URLs, so the client cannot discover
+them automatically yet. Native GUI is unavailable in the default static
+client build.
 
 Authentication and permission errors exit with status `77`, connection errors
 with `69`, missing resources with `66`, invalid server input with `65`, and
@@ -131,5 +143,5 @@ cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" --token-file "$HOME/.config/c
 cassocial-cli --server "$CASSOCIAL_SERVER_PRIMARY" --token-file "$HOME/.config/casapps/cassocial/token" shortlink create --profile PROFILE_ID --url https://your-site.invalid
 ```
 
-The client API version defaults to `v1` and can be set with `server.api_version`
-in `cli.yml`.
+The client API version defaults to `v1`, is discovered from the server on each
+invocation, and is saved as `server.api_version` in `cli.yml`.

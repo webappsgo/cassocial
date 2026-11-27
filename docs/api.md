@@ -37,6 +37,16 @@ Health output never includes credentials, private addresses, filesystem paths,
 or provider error details. The optional root alias is enabled with
 `server.healthz.root.enabled: true`.
 
+## Autodiscovery and CLI downloads
+
+| Method | Path | Authentication | Description |
+|--------|------|----------------|-------------|
+| `GET` | `/api/autodiscover` | None | Returns the current API version, public origins, exposed overlay addresses, CLI release versions, and configured minimum client versions in the standard `ok`/`data` envelope. |
+| `GET` | `/cli/binaries/{filename}` | None by default; optional bearer token | Streams a platform CLI binary only when its SHA-256 matches the operator-provisioned release manifest. |
+
+CLI files are read from `{data_dir}/cli` by default. See
+[Configuration](configuration.md) for the `yaml.d/maintenance.yml` settings.
+
 ## Authentication
 
 Browser sign-in and account forms are under `/server/auth/`. API sign-in is

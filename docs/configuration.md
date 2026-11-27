@@ -36,6 +36,31 @@ server:
     enabled: true
 ```
 
+CLI release distribution and minimum-version settings belong in
+`{config_dir}/yaml.d/maintenance.yml`. The server reads CLI release files from
+`{data_dir}/cli` by default; operators provision `version.txt`, `sha256.txt`,
+and the platform-named binaries from a release. Downloads are public by
+default. Set `require_auth: true` to require a bearer token.
+
+```yaml
+cli:
+  binary_download:
+    dir: "{data_dir}/cli"
+    require_auth: false
+server:
+  update:
+    cli_min_version: ""
+```
+
+The onion address exposure policy belongs in `{config_dir}/yaml.d/tor.yml`:
+
+```yaml
+server:
+  tor:
+    expose: false
+    contact_email: ""
+```
+
 The `yaml.d` directory must be mode `0700`; `server.yml`, `secrets.yml`, and
 each drop-in must be mode `0600`. The server corrects these modes at startup.
 Hidden files, backup files, non-YAML files, and subdirectories are ignored.
@@ -157,6 +182,9 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `server.security.blocklists.extra_sources` | Additional HTTPS sources with `id`, `type` (`ip` or `domain`), `url`, and optional `enabled`. |
 | `server.geoip.enabled`, `.deny_countries`, `.allow_countries`, `.presets` | Local GeoIP lookups and ISO 3166-1 alpha-2 country filtering. An allow-list takes precedence over a deny-list. |
 | `server.i2p.enabled`, `.expose`, `.binary`, `.sam_address`, `.virtual_port`, `.inbound_length`, `.outbound_length`, `.inbound_quantity`, `.outbound_quantity`, `.signature_type`, `.bootstrap_timeout` | I2P provider, SAM bridge, tunnel, and bootstrap settings. The generated container default enables I2P; bare-metal defaults disable it. |
+| `server.tor.expose`, `.contact_email` | Opt in to publishing the running onion address through autodiscovery; Tor contact email is shown only on Tor responses. Both default to empty/false. |
+| `server.update.cli_min_version`, `.agent_min_version` | Minimum client versions included in autodiscovery responses when configured. |
+| `cli.binary_download.dir`, `.require_auth` | Operator-provisioned CLI release directory and whether downloads require a bearer token; default directory is `{data_dir}/cli`, downloads are public by default. |
 | `server.backup.encryption.enabled` | Backup encryption state. The password is held in the protected secret store and is not a YAML value. |
 | `server.notifications.email.smtp.host`, `.port`, `.username`, `.password`, `.tls`, `.from.name`, `.from.email` | Canonical SMTP relay and sender configuration. A legacy YAML password is migrated to `{config_dir}/secrets.yml`; the admin UI never returns it. |
 | `server.admin.email` | Default Server Admin contact address. Account credentials are stored in the database, not here. |

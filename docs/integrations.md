@@ -27,6 +27,8 @@ autodetection, TLS modes, and environment variables, see the
 
 | Path | Status |
 |------|--------|
+| `GET /api/autodiscover` | Available — API version, public origins, exposed overlay addresses, and checksum-verified CLI release metadata |
+| `GET /cli/binaries/{filename}` | Available — serves a provisioned CLI binary after SHA-256 verification; public by default, optionally bearer-protected |
 | `GET /robots.txt` | Available |
 | `GET /sitemap.xml` | Available |
 | `GET /manifest.json` | Available — PWA manifest |
@@ -45,7 +47,8 @@ There is no GraphQL or GraphiQL route in the current server.
 - **Android App Links and Apple Universal Links:** not implemented.
 - **Federation and ActivityPub:** not implemented.
 - **Tor:** the server checks for Tor at startup and attempts to start its
-  managed hidden service when available.
+  managed hidden service when available. The onion address is published only
+  when `server.tor.expose` is enabled.
 - **I2P:** when enabled, the server prefers a dedicated `i2pd` process and
   falls back to an existing SAM bridge. The server persists its own destination
   key and serves the eepsite through a separate loopback listener. The optional
