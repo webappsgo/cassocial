@@ -201,6 +201,25 @@ paths. Omitted values use the generated defaults; unknown keys are rejected.
 | `web.csrf.enabled`, `.token_length`, `.cookie_name`, `.header_name`, `.secure`, `.exempt_paths` | CSRF protection for cookie-authenticated frontend forms. API paths cannot be exempted through this setting. |
 | `cassocial.site_name`, `.site_description`, `.allow_registration`, `.max_profiles_per_user`, `.max_links_per_profile` | Product name and Regular User registration/profile limits. |
 
+### CORS and trusted proxy origins
+
+An empty `web.cors` disables cross-origin access. The generated `*` value is
+treated as unset: Cassocial combines explicit configured origins, HTTPS origins
+from `DOMAIN`, and HTTPS hosts observed in `X-Forwarded-Host` from trusted
+proxies. If those sources provide no origins, the policy falls back to `*` and
+does not allow credentials. A resolved origin list allows credentials and is
+also used for the CSP `connect-src` directive.
+
+CORS preflights return `204` and allow `GET`, `POST`, `PUT`, `PATCH`, `DELETE`,
+and `OPTIONS`. Allowed request headers are `Content-Type`, `Accept`,
+`X-Requested-With`, `Authorization`, `X-CSRF-Token`, `X-XSRF-Token`,
+`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name`; preflight results are
+cached for 24 hours.
+
+Learned hosts are lowercased RFC 1123 domain names; IP literals and invalid
+hosts are ignored. A host is refreshed at most once per minute, expires after
+30 days without observation, and the table retains at most 1,000 hosts.
+
 The built-in scheduler currently provides `geoip_update`, `blocklist_update`,
 `cve_update`, `log_rotation`, `session_cleanup`, `backup`, `ssl_renewal`,
 `health_check`, and `tor_health`. Each task can be enabled, disabled, or
