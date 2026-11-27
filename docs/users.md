@@ -40,3 +40,18 @@ submitted values before saving changes.
 The server stores passwords using Argon2id. API tokens are displayed once at
 creation; keep the raw token private and revoke it if it is exposed. Browser
 sessions and API bearer tokens are separate authentication mechanisms.
+
+## Guest preferences
+
+Use `/server/preferences` to set the browser's theme and language, manage
+cookie-consent choices, and opt out of sale or sharing where applicable. These
+preferences are stored in cookies on this device and are independent of a
+Regular User account. Preference cookies are written only after the browser
+accepts the Preferences cookie category.
+
+The page at `/server/preferences/sync` shows a shareable URL and short code
+for transferring theme, language, and documented application preferences to
+another device. Open the shared link or paste its URL, query string, or code
+into the import form. Import applies valid values additively and respects the
+destination device's consent choice. Reset removes this site's noncredential
+browser storage while leaving authentication cookies alone.

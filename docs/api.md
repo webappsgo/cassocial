@@ -140,6 +140,27 @@ server-rendered information pages:
 
 The account and profile endpoints are described in the [Regular User guide](users.md).
 
+## Guest preferences
+
+Guest preference endpoints configure cookies for the requesting browser; they
+do not require an account or bearer token. API responses use the standard
+`ok`/`data` envelope. Preference writes are gated by the browser's accepted
+Preferences cookie category. The API mirror does not use CSRF tokens because
+it accepts only UI preference cookies and has no ambient authentication.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/{api_version}/server/preferences` | Read effective theme, language, and documented guest preferences |
+| `POST` | `/api/{api_version}/server/preferences` | Apply a partial preference update from JSON or form data |
+| `GET` | `/api/{api_version}/server/preferences/sync` | Read effective preferences and their shareable URL and short code |
+| `GET` | `/api/{api_version}/server/preferences/sync/import` | Import valid preferences from query values or a shared code |
+
+Import accepts a shared URL, query string, or padded or unpadded base64url
+code. It is additive: omitted settings keep their existing cookies. Invalid
+values are ignored, and preference-cookie writes still require local consent.
+The import endpoint is intentionally a `GET` so shared links can be opened
+directly; it can change only these guest-scoped UI cookies.
+
 ## Server Admin API
 
 Server Admin endpoints use
