@@ -14,8 +14,45 @@ curl -q -LSsf https://YOUR_SERVER/api/v1/server/healthz
 
 The OpenAPI UI is available at `/server/docs/swagger`. The machine-readable
 OpenAPI document is served at `/api/{api_version}/server/swagger`; the direct
-alias `/api/swagger` serves the configured version. Cassocial does not provide
-a GraphQL endpoint or GraphiQL page.
+alias `/api/swagger` serves the configured version. Both OpenAPI routes mount
+the same handler; the served document uses the request's public origin and
+the configured API-version path. Swagger UI and GraphiQL assets are pinned,
+vendored, and served from this application.
+
+The GraphiQL page is `/server/docs/graphql`. The public, read-only GraphQL
+endpoint is `/api/{api_version}/server/graphql` and accepts POST JSON or GET
+queries; `/api/graphql` is its direct alias. GraphQL exposes anonymous public
+reads only and does not forward cookies or bearer credentials. A GET without a
+`query` parameter returns a short usage message. Binary reads remain available
+through their documented REST URL and are excluded from GraphQL fields.
+
+Public profile and public profile-link responses have selectable GraphQL
+fields. For example:
+
+```graphql
+query PublicProfile($slug: String!) {
+  getPublicProfile(slug: $slug) {
+    slug
+    displayName
+    bio
+  }
+}
+```
+
+```graphql
+query PublicLinks($slug: String!) {
+  listPublicProfileLinks(slug: $slug) {
+    title
+    url
+    username
+  }
+}
+```
+
+The GraphQL profile types expose only public display data; owner identifiers,
+profile ownership, and analytics counters stay private. Other public read
+operations still return a JSON scalar and do not yet support nested field
+selection.
 
 ## Health
 
@@ -86,6 +123,8 @@ cookie does not authorize API requests.
 | `GET`, `POST` | `/api/{api_version}/users/profiles` | Regular User | List or create profiles owned by the caller |
 | `GET`, `PATCH`, `DELETE` | `/api/{api_version}/users/profiles/{profile_id}` | Regular User | Read or update an owned profile; DELETE returns `204` |
 | `POST` | `/api/{api_version}/users/profiles/{id}/duplicate` | Regular User | Duplicate an owned profile |
+| `GET` | `/api/{api_version}/users/profiles/{id}/qr` | Regular User | Generate a QR image for an owned profile; accepts the documented `format` and `size` options |
+| `POST` | `/api/{api_version}/users/profiles/{id}/verify-domain` | Regular User | Verify ownership of a custom domain for an owned profile |
 | `GET`, `POST` | `/api/{api_version}/users/profiles/{profile_id}/links` | Regular User | List or add links to an owned profile |
 | `POST` | `/api/{api_version}/users/profiles/{profile_id}/links/order` | Regular User | Reorder links for an owned profile |
 | `POST` | `/api/{api_version}/users/profiles/import` | Regular User | Start an import for the caller |
@@ -105,8 +144,8 @@ cookie does not authorize API requests.
 | `POST` | `/api/{api_version}/users/tokens/{token_id}/rotate` | Regular User | Rotate an owned token |
 | `GET` | `/api/{api_version}/users/{username}` | Optional | Read a public account profile; private accounts return 404 to other callers |
 | `GET` | `/api/{api_version}/users/{username}.txt` | Optional | Read the same public account profile as plain text |
-| `GET` | `/api/{api_version}/profiles/{slug}` | Optional | Read a public profile; private profiles return 404 to other users |
-| `GET` | `/api/{api_version}/profiles/{slug}/links` | Optional | Read public profile links |
+| `GET` | `/api/{api_version}/profiles/{slug}` | Optional | Read public display fields (`slug`, `display_name`, `bio`, `avatar_url`, `header_image_url`, and `show_usernames`); private profiles return 404 to other users |
+| `GET` | `/api/{api_version}/profiles/{slug}/links` | Optional | Read active public card fields (`title`, `username`, `url`, icon/colors, and display order); owner IDs, service IDs, and analytics counters are omitted |
 | `GET` | `/api/{api_version}/profiles/{slug}/qr` | Optional | Generate a profile QR image; accepts `format=png` (default) or `format=svg`, and `size=128`, `256` (default), `512`, or `1024` |
 | `GET` | `/api/{api_version}/services` | None | List the service catalog |
 | `GET` | `/api/{api_version}/services/search` | None | Search the service catalog |
@@ -197,6 +236,7 @@ token. The currently mounted API includes:
 - `GET /stats`
 - `GET /settings` and `PUT /settings`
 - `GET /backup`, `POST /backup`, `GET /backup/{id}`, `DELETE /backup/{id}`, and `GET /backup/{id}/download`
+- `POST /backup/restore` accepts `backup_file`, `confirm` (`RESTORE`), and an optional `password`; it verifies the archive before queueing a live restore and returns `202 Accepted`. Encrypted archives require `password`. The server enters maintenance mode, drains requests, restores the backup, and exits with the restart-required status so its supervisor can start it again.
 - `POST /services/import` and `POST /cache/clear`
 - `GET /email/config`, `PUT /email/config`, and `POST /email/test`
 - `GET /{admin_username}/notifications` to list history (`?unread=true` filters unread items)

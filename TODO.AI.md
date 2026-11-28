@@ -14,13 +14,15 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Split SQLite persistence into `server.db` and `users.db` per PART 10, and apply the required `srv_`/`usr_` table prefixes in cluster databases.
 - [x] Add separate `admin_sessions` and `user_sessions`, distinct cookies, persistent session expiry/revocation, and `adm_`/`usr_` bearer-token validation.
 - [ ] Finish the canonical route migration using configurable `server.api_version` and `server.admin_path`; remove non-spec legacy aliases and keep generated API specifications in sync.
+- [ ] Complete PART 6 debug diagnostics: protect every `/debug/*` path with the generated `server.token`, redact command-line arguments, render themed error output, and verify diagnostics in debug and non-debug modes.
 - [x] Add the IDEA.md API-route contract test that compares project routes with the router and generated OpenAPI output; generate OpenAPI with the configured API version.
-- [x] Remove write mutation declarations from the legacy GraphQL schema; the GraphQL runtime, query resolvers, mounted routes, and route/API synchronization remain part of the open API alignment work.
+- [ ] Complete GraphQL route/API synchronization, typed selectable read-result fields with reduced over-fetching, the themed same-origin GraphiQL assets and startup code, documentation, and end-to-end checks.
 - [x] Match IDEA.md delete contracts: use path parameters for shortlinks, return `204` without bodies for profile/link/shortlink deletion, and let the CLI accept an empty `204` response.
 
 ## Pages and product features
 
 - [ ] Complete PARTS 16–18: all server-rendered pages and forms work with JavaScript disabled; accessibility, themes, and account/admin navigation follow the templates.
+- [ ] Implement the debug-only, operator-token-protected `/debug/components` gallery with every shared and project component state, both themes, both text directions, and browser layout coverage.
 - [x] Implement the PART 16 guest `/server/preferences` and `/server/preferences/sync` pages and API mirrors, including consent-gated cookie writes, export/import, safe redirects, and reset behavior.
 - [ ] Complete the MCP contract: scope-correct OpenAPI tool listing and dispatch, audit source, optional progress SSE, binary responses, help-page conformance, and operator editing/reload of `server.pages.help.mcp` from `yaml.d/pages.yml`.
 - [x] Complete PART 12 analytics tracking providers, consent and Tor/I2P suppression, same-origin tracking script generation, CSP allow-listing, validation, and the admin tracking page.
@@ -44,7 +46,7 @@ AI.md template itself belong only in the parent `TODO.SERVER.md`.
 - [ ] Complete PARTS 26–28: exact Makefile targets, all 8 OS/architecture builds for server and CLI, static CGO-free binaries, Docker images/compose files, runtime configuration, and container checks.
 - [x] Cross-compile server and CLI for all eight OS/architecture combinations inside the Go container; FreeBSD/amd64 and FreeBSD/arm64 both build successfully.
 - [ ] Complete PARTS 29–30: required tests, coverage gates, linters, security checks, all provider workflows, documentation build, and generated OpenAPI/GraphQL artifacts.
-- [x] Add the required `go vet`, `staticcheck`, `govulncheck`, `shellcheck`, and `shfmt` gates to the Docker-based `make test` target, and format the test shell scripts; the full target passes with 64.5% coverage and all-platform/runtime checks.
+- [x] Add the required `go vet`, `staticcheck`, `govulncheck`, `shellcheck`, and `shfmt` gates to the Docker-based `make test` target, and format the test shell scripts; the latest full target passes with 64.7% coverage and all-platform/runtime checks.
 - [ ] Add the PART 16 CSS architecture lint test over embedded project stylesheets using the specified pure-Go parser and all selector/token/layer rules.
 - [x] Add the pure-Go parser dependency and verify every embedded project stylesheet parses as CSS; the full selector, token, and cascade-layer lint contract remains open above.
 - [ ] Expand the standalone E2E suite to cover every IDEA.md user-facing feature in named SSR, no-JavaScript, and full-browser scenarios; add the required full crawl, admin/user flows, theme/language checks, form validation/CSRF, error pages, and static asset checks.

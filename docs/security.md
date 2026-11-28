@@ -91,11 +91,20 @@ return credentials, private addresses, filesystem paths, or provider error
 details. Do not include administration, authentication, or account pages in
 public sitemaps.
 
+## Well-Known Namespace
+
+Cassocial currently defines only `GET /.well-known/security.txt` in the
+`/.well-known/` namespace. Other `/.well-known/*` paths return `404`; no
+WebFinger, OpenID Provider Metadata, app association, or MTA-STS endpoints are
+enabled. The security.txt document links to `/server/security/policy`.
+
 ## Report a vulnerability
 
 Use `/server/security` to review the coordinated disclosure policy and submit
 a report through `/server/contact`. Researchers can use the one-time status
-link in the acknowledgment email to check triage updates. Administrators review
+link in the acknowledgment email to check triage updates at
+`GET /server/security/report/{tracking_id}`; the URL includes a one-time token
+that must be kept private. Administrators review
 reports at `/server/{admin_path}/security/reports`; closed reports are retained
 for the configured `server.security.reports.retention_days` period (365 days
 by default).

@@ -83,6 +83,15 @@ full backup, or name a full or incremental archive with
 `cassocial --maintenance backup test <file>`. Encrypted archives prompt for the
 backup password; use `--password <value>` for non-interactive operation.
 
+To restore while the server is running, use the **Restore backup** form on
+`/server/{admin_path}/backup`. Select an archive, enter its password when it is
+encrypted, and type `RESTORE` exactly. The server verifies the archive first,
+returns `202 Accepted`, enters read-only maintenance mode, drains requests,
+installs the backup, and restarts through the service supervisor. For offline
+recovery, stop the server and run `cassocial --maintenance restore <file>`;
+encrypted archives use the interactive password prompt or
+`CASSOCIAL_BACKUP_PASSWORD`.
+
 ## API access
 
 The administration API is under
@@ -95,6 +104,12 @@ clearing, SMTP, notification preferences, rate limits, API-token inventory and
 rotation, I2P, blocklists, and allowlists. GeoIP is currently managed through its
 browser page; no GeoIP admin API is mounted. See the
 [API reference](api.md#server-admin-api) for the route list.
+
+The backup restore API accepts `backup_file`, `confirm: "RESTORE"`, and a
+`password` for encrypted archives. It verifies before queueing the restore and
+returns `202 Accepted`; the server then enters read-only maintenance mode,
+restores the archive after draining requests, and restarts through its
+supervisor.
 
 The I2P API supports `GET` and `PATCH` on
 `/api/{api_version}/server/{admin_path}/network/i2p`, plus `POST` operations at

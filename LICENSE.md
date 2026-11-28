@@ -39,6 +39,17 @@ The ASN and country databases are provided by iptoasn.com under PDDL.
 
 This software includes the following third-party libraries:
 
+The interactive API documentation pages include the following unmodified,
+vendored browser distributions. Their license texts and notices are retained
+beside their files under `src/server/static/vendor/`.
+
+| Library | Version | License | License file |
+|---------|---------|---------|--------------|
+| GraphiQL | 1.4.7 | MIT | `src/server/static/vendor/graphiql/LICENSE` |
+| React | 17.0.2 | MIT | `src/server/static/vendor/react/LICENSE` |
+| ReactDOM | 17.0.2 | MIT | `src/server/static/vendor/react-dom/LICENSE` |
+| Swagger UI Dist | 5.17.14 | Apache-2.0 | `src/server/static/vendor/swagger/LICENSE`, `NOTICE` |
+
 ---
 
 ### modernc.org/sqlite v1.34.5

@@ -19,6 +19,7 @@ Cassocial is a self-hosted link aggregator and social profile platform. It lets 
 - Separate Regular User and Server Admin accounts
 - Optional custom profile domains
 - Server-rendered pages with progressive enhancement
+- REST API with OpenAPI/Swagger and an anonymous, read-only GraphQL API with GraphiQL
 - Companion `cassocial-cli` client
 - Eight interface languages: Arabic, German, English, Spanish, French, Italian, Japanese, and Chinese
 
@@ -87,7 +88,12 @@ startup and can verify and install operator-provisioned CLI updates over HTTPS.
 
 The server reads `{config_dir}/server.yml`; default paths and supported environment overrides are in the [configuration reference](docs/configuration.md). Server Admins manage the settings currently exposed by the application at `/server/administration`.
 
-The API is served by each Cassocial instance. See the [API reference](docs/api.md) for route families and authentication details, and the [MCP guide](docs/mcp.md) for connecting AI clients. Use your own server address:
+The API is served by each Cassocial instance. Explore REST with Swagger at
+`/server/docs/swagger`, the OpenAPI document at
+`/api/{api_version}/server/swagger`, and public read-only GraphQL at
+`/server/docs/graphql` or `/api/{api_version}/server/graphql`. See the
+[API reference](docs/api.md) for route families and authentication details,
+and the [MCP guide](docs/mcp.md) for connecting AI clients. Use your own server address:
 
 ```bash
 curl -q -LSsf https://YOUR_SERVER/server/healthz

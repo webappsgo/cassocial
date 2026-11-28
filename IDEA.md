@@ -40,6 +40,14 @@ maintainer_email:    casjay@yahoo.com
 - Real-time collaboration or multi-user editing of a single profile
 - Serving user-uploaded binary files (only URLs to external images are stored; avatars are external URLs)
 
+### Authentication dependency decision
+
+SAML Service Provider support uses `github.com/supatype/saml` rather than the
+upstream `github.com/crewjam/saml` module. This maintained fork originates
+from crewjam/saml and includes the namespace-binding fixes for GO-2026-6909,
+which affects every upstream crewjam/saml release. Keep the fork pinned and
+require the PART 28 `govulncheck` gate to pass before release.
+
 ### MCP project guide
 
 Cassocial MCP tools operate on public profiles and on the authenticated user's own profiles, links, analytics, imports, exports, and short links. The live tool list is filtered by the caller's token scope.
@@ -83,14 +91,43 @@ System settings may contain SMTP credentials and other secrets. These values are
 
 **shortlinks** — short codes that redirect to a target URL. Target URL is validated the same as link URLs. Optional expiry.
 
+**Project-owned table placement:** user-owned records live in `users.db` in
+SQLite and use the `usr_` prefix in a remote database. Server-owned records
+live in `server.db` and use the `srv_` prefix remotely. The schema names below
+are the unprefixed SQLite names; remote names use the corresponding prefix.
+
+| SQLite database | Tables | Ownership |
+|-----------------|--------|-----------|
+| `users.db` | `admins`, `users`, `profiles`, `links`, `profile_themes`, `qr_code_settings`, `footer_items`, `profile_tags`, `profile_maintenance`, `profile_verification`, `featured_profiles`, `import_jobs`, `data_exports`, `user_consent`, `api_keys`, `api_webhooks`, `analytics`, `analytics_sessions`, `analytics_hourly`, `profile_views`, `link_clicks`, `shortlinks`, `user_preferences`, `tokens`, `two_factor_backup_codes`, `email_verification_tokens`, `password_reset_tokens`, `user_notifications`, `user_sessions`, `custom_domains`, `custom_domain_audit`, `server_admin_backup_codes`, `admin_preferences`, `admin_notifications`, `totp_secrets`, `passkeys`, `trusted_devices` | Regular User or Server Admin owned credentials, content, preferences, activity, or account records |
+| `server.db` | `services`, `themes`, `settings`, `audit_log`, `learned_origins`, `cluster_nodes`, `health_statistics`, `health_request_hours`, `app_secrets`, `captcha_challenges`, `security_reports`, `security_thanks`, `ip_allowlist`, `blocked_patterns`, `reported_content`, `admin_sessions`, `rate_limits`, `scheduler_tasks`, `scheduler_history`, `backups`, `srv_config`, `srv_config_meta`, `app_secret_revocations` | Shared catalogs, server configuration, security, operational state, and system history |
+
+The legacy SQLite schema uses `server_admins` and a mixed `sessions` table.
+Startup migration preserves all existing account and session data while
+moving accounts to `admins` and separating admin sessions from `user_sessions`.
+
 **Classification:**
 
 | Sensitivity | Fields |
 |-------------|--------|
 | Secret | `password_hash`, `two_factor_secret`, `password_reset_token`, `smtp_password`, `bypass_token` |
 | Private | `email`, `last_login`, `two_factor_enabled` |
-| Internal | `role`, `status`, `created_at`, settings keys |
-| Public | `username`, `slug`, `display_name`, `bio`, `avatar_url`, `links` (for public profiles) |
+| Internal | `role`, `status`, `created_at`, settings keys, profile and link owner IDs, link and profile IDs, service IDs, profile visibility/domain-verification settings, and view/click counters |
+| Public | `username`, `slug`, `display_name`, `bio`, `avatar_url`, `header_image_url`, `show_usernames`, and public link-card title, destination, displayed username, icon, colors, and order |
+
+### UI components
+
+Project-specific feature components extend the shared UI catalog. They use the
+listed block and element classes, shared tokens, and the dark/light/auto site
+themes. The `/debug/components` gallery renders each component and its states.
+
+| Component | Block and elements | Variants | States |
+|-----------|-------------------|----------|--------|
+| Public profile card | `.profile-card`, `.profile-header-image`, `.profile-avatar`, `.profile-avatar-placeholder`, `.profile-display-name`, `.profile-bio`, `.profile-links` | Per-profile visual settings are applied through validated component properties | `:focus-visible` on links |
+| Profile link card | `.profile-link`, `.profile-link-icon`, `.profile-link-content`, `.profile-link-title`, `.profile-link-username` | `.profile-link--custom` for validated per-link colors; `.profile-link--lift` when the configured button style enables lift | `:hover`, `:focus-visible` |
+| Public user profile | `.public-user-profile`, `.public-user-avatar` | None | None |
+| Profile QR display | `.qr-container`, `.qr-code` | `.qr-style-square`, `.qr-style-dots`, `.qr-style-rounded` | None |
+| Notification center | `.notification-center`, `.notification-history`, `.notification-history-item` | None | `.notification-unread` |
+| Debug component gallery frame | `.component-gallery-frame` | Theme and text direction are rendered in isolated same-origin frames | Responsive width, scrollable component matrix |
 
 ### API routes
 
