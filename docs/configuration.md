@@ -263,6 +263,8 @@ defaults and unknown keys are rejected.
 | `server.restore.max_archive_size`, `.max_expanded_size`, `.max_files`, `.max_file_size`, `.max_ratio` | Limits checked before and during backup archive extraction. |
 | `scheduler.tasks.backup_daily.enabled`, `.schedule` | Daily full backup and differential task state and schedule. Retention remains under `server.backup.retention`. |
 | `scheduler.tasks.backup_hourly.enabled`, `.schedule` | Optional cumulative hourly differential task; disabled by default. |
+| `server.notifications.webui.position` | Toast placement: `top-right`, `top-left`, `bottom-right`, or `bottom-left`. |
+| `server.notifications.webui.duration`, `.warning_duration` | Success/info and warning toast lifetime in seconds; `0` means manual dismissal. Error toasts always require manual dismissal. |
 | `server.notifications.email.smtp.host`, `.port`, `.username`, `.password`, `.tls`, `.from.name`, `.from.email` | Canonical SMTP relay and sender configuration. A legacy YAML password is migrated to `{config_dir}/secrets.yml`; the admin UI never returns it. |
 | `server.notifications.email.events.{event}` | Server default email preference for each named notification event. User preferences can override these defaults for events with an email template; required security events remain enabled. |
 | `server.admin.email` | Default Server Admin contact address. Account credentials are stored in the database, not here. |
@@ -335,8 +337,10 @@ stored in `{config_dir}/secrets.yml` with restricted permissions. The web
 administration page redacts the password and indicates whether one is
 configured. See [SMTP](examples/smtp.md) for relay behavior.
 
-GeoIP downloads checksum-verified ASN, country, and city MMDB files from
-ip-location-db on first run and refreshes them weekly. Country codes are
+GeoIP downloads ASN, country, and city MMDB files from ip-location-db on first
+run and refreshes them weekly. Before installation, each file is opened and
+validated against its expected database type, metadata, and a known public-IP
+lookup; upstream checksums are not used. Country codes are
 ISO 3166-1 alpha-2 values. `allow_countries` takes precedence over
 `deny_countries`; leaving both empty allows all countries. Lookup failures,
 missing datasets, and stale datasets fail open, while authentication and

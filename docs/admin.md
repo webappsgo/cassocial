@@ -34,8 +34,9 @@ The current browser administration interface includes these pages:
 |------|---------|
 | `/server/{admin_path}` | Server dashboard and overview (canonical path; a trailing slash redirects here) |
 | `/server/{admin_path}/{admin_username}/preferences` | Update the authenticated admin's theme, font size, motion, date, and time preferences |
-| `/server/{admin_path}/{admin_username}/notifications` | Update the authenticated admin's WebUI and email notification preferences |
-| `/server/{admin_path}/settings` | Update exposed server settings, including enabling Regular User accounts and selecting `open` or `private` registration |
+| `/server/{admin_path}/{admin_username}/notifications` | Review the authenticated admin's stored notification history and mark entries read |
+| `/server/{admin_path}/{admin_username}/notifications/preferences` | Update the authenticated admin's WebUI and email notification preferences |
+| `/server/{admin_path}/settings` | Update exposed server settings, including WebUI toast placement and durations, enabling Regular User accounts, and selecting `open` or `private` registration |
 | `/server/{admin_path}/pages/help` | Edit and persist the project-specific MCP connection guide |
 | `/server/{admin_path}/info` | View build version, runtime environment, database driver, and optional dependency status |
 | `/server/{admin_path}/scheduler` | View built-in task schedules and current-process run counts, update schedules, enable or disable tasks, and queue a task to run now |
@@ -127,6 +128,7 @@ area provides:
 | `/users/settings` | Account settings |
 | `/users/settings/privacy` | Public profile and privacy preferences |
 | `/users/settings/notifications` | Notification preferences |
+| `/users/notifications` | Review stored notification history and mark entries read |
 | `/users/settings/appearance` | Theme and appearance preferences |
 | `/users/tokens` | Create, rotate, and revoke API tokens |
 | `/users/security/sessions` | Review and revoke browser sessions |

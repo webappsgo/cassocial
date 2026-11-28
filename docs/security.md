@@ -51,9 +51,11 @@ must be verified before they route to a profile.
 ## Data and operations
 
 Analytics avoid retaining raw visitor IP addresses. GeoIP uses locally stored,
-checksum-verified ASN, country, and DB-IP city datasets from ip-location-db.
-Country filtering is an optional fail-open risk signal; authentication and
-authorization remain required. The IP allowlist bypasses country filtering,
+MMDB-validated ASN, country, and DB-IP city datasets from ip-location-db.
+Downloads are checked for the expected database type and metadata and must
+answer a known public-address lookup before installation. Country filtering is
+an optional fail-open risk signal; authentication and authorization remain
+required. The IP allowlist bypasses country filtering,
 and private/internal or loopback addresses are never looked up. For Tor
 requests, only the observed exit address may be evaluated; the visitor's real
 IP is never inferred or logged. Configure countries and operator-owned presets

@@ -29,6 +29,9 @@ Create a profile at `/users/profiles/new`, edit it at
 its visibility setting. Private profiles return 404 to other visitors. Public
 profiles are available at `/{slug}`; the account profile page is
 `/users/{username}`. Public account pages also provide `/users/{username}.txt`.
+Profile and link analytics include view and click totals, device and referrer
+aggregates, and optional country attribution when a GeoIP database is
+available. Raw visitor addresses are not retained.
 
 The profile form controls its title, slug, description, visibility, and theme
 where available. Link forms accept a destination URL and display information,
@@ -43,6 +46,7 @@ submitted values before saving changes.
 | `/users/settings/privacy` | Profile visibility and privacy choices |
 | `/users/settings/notifications` | Notification preferences |
 | `/users/settings/appearance` | Appearance preferences |
+| `/users/notifications` | Notification history and read actions |
 | `/users/tokens` | Create, rotate, and revoke API tokens |
 | `/users/security/sessions` | Review and revoke active browser sessions |
 
@@ -52,6 +56,10 @@ are not stored as user overrides. Email preferences apply only to events that
 have an email template, and delivery still depends on working SMTP. Session
 expiry, API token creation/revocation, and recovery-key use are WebUI events.
 Email verification messages belong to the account-verification flow.
+
+Notification history is retained for 30 days and capped at 100 entries per
+account. The header bell and `/users/notifications` page show the stored
+history; read actions work through ordinary POST forms without JavaScript.
 
 The server stores passwords using Argon2id. API tokens are displayed once at
 creation; keep the raw token private and revoke it if it is exposed. Browser

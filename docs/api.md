@@ -91,12 +91,15 @@ cookie does not authorize API requests.
 | `POST` | `/api/{api_version}/users/profiles/import` | Regular User | Start an import for the caller |
 | `GET` | `/api/{api_version}/users/profiles/import/{job_id}` | Regular User | Read import job status |
 | `GET` | `/api/{api_version}/users/profiles/export/{profile_id}` | Regular User | Export an owned profile |
-| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics` | Regular User | Read profile analytics |
-| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/links` | Regular User | Read link analytics |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics` | Regular User | Read view and click totals, optional country breakdown, device type, and referrer aggregates |
+| `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/links` | Regular User | Read click counts by link |
 | `GET` | `/api/{api_version}/users/profiles/{profile_id}/analytics/export` | Regular User | Export analytics |
 | `PUT`, `DELETE` | `/api/{api_version}/users/links/{link_id}` | Regular User | Update an owned link; DELETE returns `204` |
 | `POST` | `/api/{api_version}/users/links/{id}/toggle` | Regular User | Toggle an owned link's enabled state |
 | `GET`, `PATCH` | `/api/{api_version}/users/settings` | Regular User | Read or update account settings |
+| `GET` | `/api/{api_version}/users/notifications` | Regular User | List stored notifications; add `?unread=true` to filter unread entries |
+| `POST` | `/api/{api_version}/users/notifications/{id}/read` | Regular User | Mark an owned notification as read |
+| `POST` | `/api/{api_version}/users/notifications/read-all` | Regular User | Mark all of the caller's notifications as read |
 | `GET`, `POST` | `/api/{api_version}/users/tokens` | Regular User | List or create API tokens |
 | `GET`, `DELETE` | `/api/{api_version}/users/tokens/{token_id}` | Regular User | Read or revoke an owned token |
 | `POST` | `/api/{api_version}/users/tokens/{token_id}/rotate` | Regular User | Rotate an owned token |
@@ -196,9 +199,10 @@ token. The currently mounted API includes:
 - `GET /backup`, `POST /backup`, `GET /backup/{id}`, `DELETE /backup/{id}`, and `GET /backup/{id}/download`
 - `POST /services/import` and `POST /cache/clear`
 - `GET /email/config`, `PUT /email/config`, and `POST /email/test`
-- `GET /notifications/preferences` and `PUT /notifications/preferences`
+- `GET /{admin_username}/notifications` to list history (`?unread=true` filters unread items)
+- `POST /{admin_username}/notifications/{id}/read` and `POST /{admin_username}/notifications/read-all` to mark entries read
 - `GET` and `PATCH /{admin_username}/preferences` for the authenticated admin's appearance settings
-- `GET` and `PATCH /{admin_username}/notifications` for the authenticated admin's notification settings
+- `GET` and `PATCH /{admin_username}/notifications/preferences` for the authenticated admin's notification settings
 - `GET /security/allowlist`, `POST /security/allowlist`, `DELETE /security/allowlist/{id}`, and `GET /security/allowlist/check/{ip}`
 - `GET /security/ratelimit` and `PATCH /security/ratelimit`
 - `GET /security/tokens`, `DELETE /security/tokens/{id}`, and `POST /security/tokens/{id}/rotate`
